@@ -17,6 +17,7 @@ from app.db import connect, now
 from app.member_imports import ensure_schema as import_schema
 from app.notifications import Notifications
 from app.password_auth import PasswordAuth
+from app.profile_changes import ProfileChanges
 from app.registration import schema as registration_schema
 from app.security import Platform
 from app.table_images import ensure_schema as table_schema
@@ -73,6 +74,7 @@ class ResetBusinessDataTests(unittest.TestCase):
         TournamentService(self.business)
         Notifications(self.platform)
         PasswordAuth(self.platform)
+        ProfileChanges(self.ctx)
         # Real v2.7 plans retain a token pointer and ordered receipts. Seed both
         # stores through the public API so reset covers their foreign keys and
         # private result text, rather than only synthetic independent rows.

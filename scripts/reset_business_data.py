@@ -36,7 +36,7 @@ BUSINESS_PRESERVE = frozenset({
 })
 BUSINESS_DELETE = frozenset({
     'venue_reservations', 'availability_notices',
-    'profiles', 'member_records', 'membership_applications', 'identity_observations',
+    'profiles', 'member_records', 'membership_applications', 'member_profile_requests', 'identity_observations',
     'membership_terms', 'membership_term_audit',
     'identity_notification_events', 'identity_notification_deliveries',
     'user_roles', 'member_group_links', 'sessions', 'registrations', 'imports',
