@@ -100,6 +100,10 @@ proxy_names=[f'赛事同行{width}' for width in proxy_widths]+['保留同行']
 Tournaments(owner,clock).enroll(proxy_event['id'],users[0],'张三',len(proxy_names),guest_names=proxy_names)
 proxy_targets={str(width):{'id':users[0]+':'+str(index+1),'name':proxy_names[index]} for index,width in enumerate(proxy_widths)}
 forms={str(width):create_form(replace(ctx,actor='mobile-registration-'+str(width),source='callback',is_admin=False),clock) for width in (320,360,390,768,844,1280)}
+profile_forms={}
+if os.environ.get('ROBORT_MOBILE_SUITE')=='profile':
+    for i,width in enumerate((320,390,844,1280)):
+        profile_forms[str(width)]=create_form(replace(ctx,actor=users[i+3],source='callback',is_admin=False),clock,purpose='profile')
 activity_second=None
 if os.environ.get('ROBORT_MOBILE_SUITE')=='activity':
     operations=Service(admin,clock)
@@ -117,7 +121,7 @@ if os.environ.get('ROBORT_MOBILE_SUITE') in ('activity','availability','schedule
     with connect(admin.db_path,True) as db:
         db.execute('INSERT INTO holiday_calendars VALUES(?,?,?,?)',(2027,dumps(payload),'fixture://synthetic',clock().isoformat()))
 (base/'fixture.json').write_text(json.dumps({'run_id':run_id,'origin':origin,'clock':clock().isoformat(),'state':str(state),'password':password,'forms':forms,'event_id':event['id'],'users':users,'bot_ids':[b['id'] for b in bots],
-    'activity_second':activity_second,'proxy_event_id':proxy_event['id'],'proxy_targets':proxy_targets,'proxy_owner_id':users[0]+':0','proxy_keep_id':users[0]+':7'},ensure_ascii=False),encoding='utf-8')
+    'activity_second':activity_second,'profile_forms':profile_forms,'proxy_event_id':proxy_event['id'],'proxy_targets':proxy_targets,'proxy_owner_id':users[0]+':0','proxy_keep_id':users[0]+':7'},ensure_ascii=False),encoding='utf-8')
 
 @app.get('/__mobile_fixture_ready')
 def fixture_ready():

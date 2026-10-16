@@ -2,6 +2,28 @@
 
 [English](INTEGRATION.md) | 简体中文 · [README](../README.zh-CN.md)
 
+## 通用 JSON Webhook
+
+符合通用 JSON 契约的端点可以直接接入，其他平台通过消息适配器转换。在 `.env.local` 配置 `ROBORT_WEBHOOK_JSON_ENDPOINTS=https://adapter.example.org/messages` 后重启，再在机器人连接编辑页填写完整发送 URL（可携带适配器需要的查询凭据）。生成的回调为 `/webhooks/{bot_id}/{token}`，其中随机令牌属于连接凭据，请保密。
+
+适配器应验证平台事件签名，从可信的平台事件提取用户和群 ID，不能采用用户文字中自称的身份；将 @ 后的内容转换为纯指令。回调令牌授权该适配器代表本机器人的群。一个机器人仍只绑定一个群，回调不能把既有连接自动切换到其他群。
+
+向回调发送 POST JSON：
+
+```json
+{"event_id":"unique-message-123","group_id":"example-group","user_id":"example-user","text":"帮助","display_name":"示例会员"}
+```
+
+`event_id` 是稳定且唯一的消息编号，允许 1–128 位英文字母、数字和 `_ . : -`；重试同一消息时使用同一个编号。`display_name` 选填。用户和群 ID 为 1–100 位英文字母、数字及 `_ @ . : -`，`text` 为 1–4000 字。不要传入角色、权限或发送目的地声明。返回 `{"result":"ok"}` 表示已处理，业务回复另外通过发送端点投递。
+
+后台发送的 JSON：
+
+```json
+{"type":"markdown","content":{"text":"**活动提醒**"},"event_id":"42","group_id":"example-group"}
+```
+
+类型包含 `text`、`markdown`、`image`、`file`。`content` 对象保留消息字段：纯文本为 `content`，Markdown 为 `text`，媒体按附件字段处理。`event_id` 标识出站消息。端点返回任意 2xx（包括 204）即表示已接收，拒绝时返回非 2xx；5xx、超时或结果不明保留待核实，不自动重放。各平台的 Markdown、@ 与文件上传格式仍需在适配层转换。
+
 ## 金山协作 / WPS 接入
 
 需要区分两个地址：
@@ -108,7 +130,7 @@ CSV 流程为下载模板 → 上传预览 → 管理员核对 → 提交。支�
 
 ## AI 接入流程
 
-后台配置 SiliconFlow，再为对应机器人开启 AI。当前只支持 `https://api.siliconflow.cn/v1`，默认模型为 `deepseek-ai/DeepSeek-V3.2`。其他提供商需要代码适配，不能只填写任意 URL。参见[模型接口文档](https://api-docs.siliconflow.cn/docs/api/chat-completions-post)。
+接入支持 OpenAI 兼容 Chat Completions 和工具调用的模型服务。在本地 `ROBORT_AI_ENDPOINTS` 配置完整 HTTPS 基础地址并重启，然后在后台设置接口地址、模型和密钥，为对应机器人开启 AI。地址依据本地名单验证，群消息不能修改。标准工具调用使用 [LangChain ChatOpenAI](https://docs.langchain.com/oss/python/integrations/chat/openai)，非标准扩展需要适配器。
 
 ```text
 AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有序计划
@@ -119,7 +141,7 @@ AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有
 
 `ai_catalog.py` 定义业务目录，`ai_planner.py` 和 `ai_operations.py` 定义计划与操作，`ai_plan_store.py` / `ai_plan_flow.py` 保存确认和执行状态。模型不执行 SQL、Shell 或任意代码，不能通过生成文字给用户授予权限。
 
-每人一份当前计划；新 AI 修改意见覆盖旧计划。确认有效期默认五分钟，可配置；每次最多八步，失败停止后续执行并保留已完成结果。开启 AI 会把请求及必要的业务上下文发送到 SiliconFlow。
+每人一份当前计划；新 AI 修改意见覆盖旧计划。确认有效期默认五分钟，可配置；每次最多八步，失败停止后续执行并保留已完成结果。开启 AI 会把请求及必要的业务上下文发送到所配置的模型服务。
 
 ## 常见接入问题
 

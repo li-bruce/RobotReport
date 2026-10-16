@@ -31,6 +31,6 @@ run("state.epoch=3;state.viewEpoch=4;state.authed=true;state.platformAdmin=true;
   const table=run('identityNoticeTable(notices)');assert.match(table,/<table>/);assert.match(table,/管理角色变更/);assert.match(table,/待发送/);assert.match(table,/已送达/);assert.match(table,/等待群配置/);assert.match(table,/结果待核实/);assert.equal((table.match(/data-action="identity-notice-retry"/g)||[]).length,1);assert.ok(!table.includes('<img'));assert.ok(!table.includes('secret-id'));assert.ok(!table.includes('private'));assert.match(table,/2026-10-13 10:00/);
   run("api=async(path,options={})=>{sent.push({path,...options});return {notices}};sent.length=0");await run('identityNoticesDialog()');assert.match(ctx.modal,/待发送表示已入队/);assert.equal(ctx.sent[0].path,'/api/identity-notices?limit=50');await run('retryIdentityNotice(2)');assert.equal(ctx.sent.find(row=>row.method==='POST').path,'/api/identity-notices/2/retry');
   run("globalThis.modal='unchanged';api=async()=>{state.viewEpoch++;return {notices}}");await run('identityNoticesDialog()');assert.equal(ctx.modal,'unchanged');
-  assert.match(read('index.html'),/workspace.js\?v=2\.19/);
+  assert.match(read('index.html'),/workspace.js\?v=1\.0/);
   console.log('v2.8 UI checks passed: directory-based roles, inherited full access, preserving subroles, allocation gate, group review help, private-safe notices, retries and stale-response guard.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

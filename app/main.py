@@ -60,7 +60,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             except asyncio.CancelledError:
                 pass
 
-    app = FastAPI(title='羽协多机器人平台', version='2.19.1', lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title='Robort · 场地与活动管理', version='1.0.0', lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.platform = platform
     app.state.scheduler = scheduler
     app.state.live = live
@@ -210,7 +210,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         if hashlib.sha256(token.encode()).hexdigest() != bot['callback_hash']:
             raise ValueError('回调记录已变更，请重新生成回调地址')
         origin = env_settings.runtime_value(platform.root, 'ROBORT_PUBLIC_BASE_URL').rstrip('/') or str(request.base_url).rstrip('/')
-        return {'callback_url': f'{origin}/kingsoft/callback/{bot_id}/{token}'}
+        from .integrations import callback_path
+        return {'callback_url': origin + callback_path(platform, bot_id, token)}
 
     @app.get('/api/bots/{bot_id}/connection')
     def bot_connection(bot_id:str,request:Request,channel_id:str=None,user=Depends(principal)):
@@ -252,7 +253,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         token = secrets.token_urlsafe(36)
         result = platform.update(user, bot_id, {'callback_token': token})
         origin = env_settings.runtime_value(platform.root, 'ROBORT_PUBLIC_BASE_URL').rstrip('/') or str(request.base_url).rstrip('/')
-        return result | {'callback_url': f'{origin}/kingsoft/callback/{bot_id}/{token}'}
+        from .integrations import callback_path
+        return result | {'callback_url': origin + callback_path(platform, bot_id, token)}
 
     @app.post('/api/grants')
     def create_grant(data: dict, user=Depends(principal)):
@@ -280,6 +282,18 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     @app.patch('/api/config')
     def save_config(data: dict, ctx=Depends(context)):
         return svc(ctx).update_config(data)
+
+    @app.get('/api/profile-requests')
+    def profile_requests(status: str = None, ctx=Depends(context)):
+        from .profile_changes import ProfileChanges
+        return ProfileChanges(ctx, clock).list(all_users=True, status=status)
+
+    @app.post('/api/profile-requests/{request_id}/review')
+    def profile_request_review(request_id: int, data: dict, ctx=Depends(context)):
+        from .profile_changes import ProfileChanges
+        if set(data) - {'approved', 'note'}:
+            raise ValueError('资料审核字段无效')
+        return ProfileChanges(ctx, clock).review(request_id, data.get('approved'), data.get('note', ''))
 
     @app.get('/api/members')
     def members(status: str = None, group_id: int = None, q: str = None, ctx=Depends(context)):
@@ -804,8 +818,11 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     def audits(ctx=Depends(context)):
         return svc(ctx).audit()
 
-    async def receive(bot_id, token, request):
+    async def receive(bot_id, token, request, generic=False):
         body = await request.json()
+        if generic:
+            from .integrations import incoming_json
+            body = incoming_json(platform, bot_id, token, body)
         if not isinstance(body, dict):
             raise ValueError('回调正文须为JSON对象')
         content = body.get('content')
@@ -817,6 +834,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         record_callback(platform,bot_id,token,ctx.channel_id,body)
         # Identical to the old service hash, enabling imported dedupe continuity.
         event_id = hashlib.sha256(json.dumps([ctx.chat_id, ctx.actor, ctime, content], ensure_ascii=False).encode()).hexdigest()
+        if generic:
+            event_id = hashlib.sha256(('json:' + ctx.id + ':' + body['_event_id']).encode()).hexdigest()
         with connect(ctx.transport_db_path, True) as db:
             if not db.execute("INSERT OR IGNORE INTO inbox(event_id,status,created_at,channel_id) VALUES(?,'processing',?,?)", (event_id, stamp(clock()),ctx.channel_id)).rowcount:
                 return {'result': 'ok'}
@@ -836,6 +855,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             db.execute("UPDATE inbox SET status='completed',reply=? WHERE event_id=?", (reply, event_id))
         return {'result': 'ok'}
 
+    @app.get('/webhooks/{bot_id}/{token}')
     @app.get('/kingsoft/callback/{bot_id}/{token}')
     def callback_check(bot_id: str, token: str):
         platform.callback_context(bot_id, token)
@@ -846,6 +866,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     @app.post('/kingsoft/callback/{bot_id}/{token}')
     async def callback(bot_id: str, token: str, request: Request):
         return await receive(bot_id, token, request)
+
+    @app.post('/webhooks/{bot_id}/{token}')
+    async def json_callback(bot_id: str, token: str, request: Request):
+        return await receive(bot_id, token, request, generic=True)
 
     @app.get('/kingsoft/callback/{token}')
     def legacy_check(token: str):

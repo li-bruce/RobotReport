@@ -83,7 +83,7 @@ def wait_ready(process: subprocess.Popen, origin: str, run_id: str, output: Path
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=9888, help='Loopback port (default: 9888).')
-    parser.add_argument('--suite', choices=('all', 'proxy', 'bots', 'availability', 'activity', 'schedule'), default='all', help='Full mobile checks or focused business workflows.')
+    parser.add_argument('--suite', choices=('all', 'proxy', 'bots', 'availability', 'activity', 'schedule', 'profile'), default='all', help='Full mobile checks or focused business workflows.')
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error('--port must be between 1024 and 65535')
@@ -99,7 +99,9 @@ def main() -> int:
     output.mkdir(parents=True)
     temporary = output / 'tmp'
     temporary.mkdir()
-    env = dict(os.environ, ROBORT_MOBILE_RUN_ID=run_id, ROBORT_MOBILE_RUN_DIR=str(output),
+    inherited = {key:value for key,value in os.environ.items()
+                 if not key.startswith('ROBORT_') or key == 'ROBORT_BROWSER_EXECUTABLE'}
+    env = dict(inherited, ROBORT_ENV_FILE='-', ROBORT_MOBILE_RUN_ID=run_id, ROBORT_MOBILE_RUN_DIR=str(output),
                ROBORT_MOBILE_SUITE=args.suite, ROBORT_MOBILE_PORT=str(args.port), ROBORT_STATE_DIR=str(output / 'state'),
                ROBORT_LIVE_SEND='0', PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1',
                TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
@@ -110,7 +112,7 @@ def main() -> int:
             server = start('fixture.py', env, stdout=log, stderr=log)
             # Wait for the new service before reading this run's fixture metadata.
             wait_ready(server, f'http://127.0.0.1:{args.port}', run_id, output)
-            browser = start({'all':'check.py','proxy':'check_proxy.py','bots':'check_bot_onboarding.py','availability':'check_availability.py','activity':'check_activity.py','schedule':'check_schedule.py'}[args.suite], env)
+            browser = start({'all':'check.py','proxy':'check_proxy.py','bots':'check_bot_onboarding.py','availability':'check_availability.py','activity':'check_activity.py','schedule':'check_schedule.py','profile':'check_profile.py'}[args.suite], env)
             return browser.wait()
         finally:
             stop_tree(browser)

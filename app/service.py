@@ -77,6 +77,9 @@ class Service:
         with connect(self.path) as db:
             result = {r['key']: json.loads(r['value']) for r in db.execute('SELECT * FROM config')}
         result['ai'].setdefault('confirmation_minutes', 5)
+        if secret:
+            from .integrations import ai_endpoints
+            result['ai']['_allowed_base_urls'] = sorted(ai_endpoints(self.ctx.platform_root))
         if not secret:
             result['ai']['configured'] = bool(result['ai'].get('api_key'))
             result['ai'].pop('api_key', None)
@@ -93,6 +96,7 @@ class Service:
         if 'admin_user_ids' in data:
             raise ValueError('管理员角色请在人员中心单独配置')
         original = self.config(True)
+        original['ai'].pop('_allowed_base_urls', None)
         if not isinstance(data, dict) or set(data) - set(original):
             raise ValueError('配置字段不支持')
         updated = copy.deepcopy(original)
@@ -116,8 +120,8 @@ class Service:
         integer(updated['ai']['confirmation_minutes'], 1, 1440, 'AI确认有效期（分钟）')
         for value in updated['reminders'].values():
             time_value(value)
-        if updated['ai']['base_url'] != 'https://api.siliconflow.cn/v1':
-            raise ValueError('AI 仅允许 SiliconFlow 官方端点')
+        from .integrations import ai_endpoints, validate_ai_url
+        updated['ai']['base_url'] = validate_ai_url(updated['ai']['base_url'], ai_endpoints(self.ctx.platform_root))
         if not re.fullmatch(r'[\w./:-]{1,160}', str(updated['ai']['model'])):
             raise ValueError('模型名称无效')
         if not isinstance(updated['ai']['api_key'], str) or len(updated['ai']['api_key']) > 500:

@@ -1,10 +1,12 @@
-# Robort · Badminton Club Platform
+# Robort · Venue & Activity Management
 
 English | [简体中文](README.zh-CN.md)
 
-A self-hosted badminton club platform built with **FastAPI, SQLite and a responsive web interface**. Manage members, venues, registrations, competitions and messages in one backend, with multiple **Kingsoft Collaboration / WPS webhook bots** as chat entry points.
+A self-hosted platform built with **FastAPI, SQLite and a responsive web interface**. Manage members, venue bookings, activities, permissions and messages in one backend, with multiple **Webhook-connected bots** as chat entry points.
 
-Current application version: **2.19.1**. The interface and bot commands are currently in Chinese; the README, deployment guide and integration guide are available in both languages.
+**Currently used for badminton association management, and extensible to other venue reservation and activity organization scenarios.** Members, venues, schedules, registrations and notifications are general-purpose modules; badminton formats and scoring are provided as dedicated modules that can be adapted to other activities.
+
+Current application version: **v1.0**. The interface and bot commands are currently in Chinese; the README, deployment guide and integration guide are available in both languages.
 
 [Quick start](#quick-start) · [Bot integration](#connect-a-bot) · [Deployment](docs/DEPLOYMENT.md) · [Integration reference](docs/INTEGRATION.md) · [MIT license](LICENSE)
 
@@ -13,6 +15,7 @@ Current application version: **2.19.1**. The interface and bot commands are curr
 | Area | Capabilities |
 | --- | --- |
 | Members | Personal registration links, application review, CSV pre-registration, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
+| Profile changes | Request changes to name, gender, phone, level or groups through a bot or personal form; review in the admin page or chat, retain history and notify the member. |
 | Registration | Book today's or future sessions; add named guests or `+N` guests; cancel yourself or selected guests; configure regular, substitute and waiting places. |
 | Venues and schedules | Multiple venues, recurring rules, date-specific plans, individual holiday plans, event reservations and other occupancy. |
 | Activity calendar | Registration counts, capacity bars, venues and sessions, with holiday, weekend, makeup workday, event and occupancy markers; drill down by day and session. |
@@ -58,7 +61,7 @@ flowchart LR
     G2[Group B: bot 3] --> API
     API --> B[Shared members, venues, registrations and events]
     API --> T[Per-bot callbacks and message queues]
-    API --> AI[Optional LangChain + SiliconFlow]
+    API --> AI[Optional compatible AI provider]
     T --> G1
     T --> G2
 ```
@@ -69,7 +72,7 @@ Run **one Uvicorn worker**, including the scheduler and durable outbox. SQLite i
 
 ## Quick start
 
-Requirements: Python **3.10** (the verified runtime), `pip` and Git. The bundled HTML/CSS/JavaScript frontend needs no Node.js build. Node.js is used for frontend tests; browser tests additionally require Playwright and a browser.
+Requirements: Python **3.10**, `pip` and Git. The bundled HTML/CSS/JavaScript frontend needs no Node.js build. Node.js is used for frontend tests; browser tests additionally require Playwright and a browser.
 
 Clone [li-bruce/RobotReport](https://github.com/li-bruce/RobotReport) or unpack its source, then open a terminal in the project directory. The repository name is RobotReport; the application package remains Robort.
 
@@ -99,8 +102,6 @@ $RobortPython = Join-Path (Get-Location) '.venv\Scripts\python.exe'
 
 The export creates a private `.env.local` that is loaded automatically. The public [`.env.example`](.env.example) contains empty values only; see [local configuration](docs/ENVIRONMENT.md) for manual setup and existing installations.
 
-The export creates a private `.env.local` that is loaded automatically. The public [`.env.example`](.env.example) contains empty values only; see [local configuration](docs/ENVIRONMENT.md) for manual setup and existing installations.
-
 Set your own password at the hidden prompt; there is **no published default administrator password**. You can change it later in system settings.
 
 | Page | Local address |
@@ -116,15 +117,13 @@ Set your own password at the hidden prompt; there is **no published default admi
 
 ## Connect a bot
 
-1. Create a webhook bot in a Kingsoft/WPS group and copy its **outgoing webhook URL**.
-2. Open **机器人与群**, create/select the group, add a bot, paste the outgoing URL and choose capabilities and activity scope.
-3. Copy this backend's generated **callback URL** into the group bot's callback setting. Both URLs can be configured together.
-4. Configure the public origin and enable actual delivery with `ROBORT_LIVE_SEND=1`.
-5. Mention the bot in the group and send `帮助` or `连接`. A validated incoming message discovers the group ID; a successful reply completes connection verification. An outgoing test is also available in the admin page.
+1. Prepare a Webhook integration: a platform or adapter sends trusted user/group events and accepts outgoing messages.
+2. Add its exact HTTPS sending endpoint to `ROBORT_WEBHOOK_JSON_ENDPOINTS` in the local env file and restart.
+3. In **机器人与群**, create/select a group, add a bot, paste its sending URL and select businesses, venues and sessions.
+4. Copy the generated callback URL into the platform or adapter. Configure a public HTTPS origin and enable delivery with `ROBORT_LIVE_SEND=1`.
+5. Mention the bot and send `连接` or `帮助`. An authenticated event identifies the group and a successful reply verifies the connection. The connection editor also offers a sending test.
 
-Use a reachable HTTPS origin for callbacks, registration pages, images and attachments. Set `ROBORT_PUBLIC_BASE_URL` in the local file or edit the public URL in the admin page; the application synchronizes the two. Each bot needs its own credentials and callback, even when bots share a group.
-
-The sender accepts the public WPS endpoint by default. Private deployments configure their exact HTTPS host/path in local `ROBORT_WEBHOOK_ENDPOINTS`; no deployment-specific host or key is embedded in source. See [Integration](docs/INTEGRATION.md) and the [official WPS webhook documentation](https://open.wps.cn/documents/app-integration-dev/guide/robot/webhook).
+Webhook platforms differ in payloads, signatures, mentions and attachment APIs. Platforms matching the generic JSON contract can connect directly; others need an adapter. See the [message contract](docs/INTEGRATION.md). Existing compatible integrations remain available.
 
 ## Chat examples
 
@@ -133,6 +132,9 @@ Mention the intended bot, then send one of these Chinese commands. `帮助` show
 | Task | Message |
 | --- | --- |
 | Register / check application | `注册` / `注册资料` |
+| Request profile changes | `修改资料` / `申请分组 提高组` / `申请等级 5级` |
+| Track / withdraw profile requests | `我的资料申请` / `取消资料申请` |
+| Member-manager profile review | `资料待审核` → `资料查看 申请12` → `资料通过 申请12` |
 | Join / view registrations | `报名` / `名单` |
 | Add guests | `报名，张三，李四` or `报名+2` |
 | Cancel yourself / your guests | `取消报名` / `取消张三，李四` |
@@ -151,7 +153,7 @@ Each `报名+N` adds **N more guests**, preserving earlier guests. Cancelling yo
 
 ## Optional AI
 
-In **系统设置 → AI**, configure the key, model, enable switch and confirmation expiry, then enable **AI** for each intended bot. The default model is `deepseek-ai/DeepSeek-V3.2` through `https://api.siliconflow.cn/v1`; see [SiliconFlow's API reference](https://api-docs.siliconflow.cn/docs/api/chat-completions-post).
+Use an **OpenAI-compatible Chat Completions endpoint with tool calling**. Add the base URL to local `ROBORT_AI_ENDPOINTS`, then configure the URL, model, API key, enable switch and confirmation expiry under **系统设置 → AI**. Enable AI for the intended bots. Providers and models are configurable; non-standard extensions may require an adapter.
 
 Ordinary commands run directly. Requests starting with `AI`, `AI:`, `AI：` or `/ai` use the AI workflow. Queries may return immediately; changes produce numbered steps. The same user replies **`确认` in the original bot/group**. `AI + changes` replaces the pending plan; `AI进度` checks progress; `取消计划` discards it.
 
@@ -165,7 +167,6 @@ python -m pytest -q
 for file in tests/*.cjs tests/*.js; do node "$file" || exit 1; done
 ```
 
-See [browser test setup](scripts/mobile_browser/README.md) for isolated mobile/desktop checks. The v2.19.1 Windows release checks passed **908 Python tests** (one permission-dependent skip), **1,313 subtests**, all 10 frontend scripts and 24 HTTP smoke checks. These are release results, not verification of every installation environment.
 
 ```text
 app/                 FastAPI, domain services, bot transport and AI workflows

@@ -683,8 +683,8 @@ def _make_runnable(config: dict[str, Any], schemas: list[type[_StrictIntent]]) -
 
     model = config.get("model") or DEFAULT_MODEL
     base_url = (config.get("base_url") or DEFAULT_BASE_URL).rstrip("/")
-    if base_url != DEFAULT_BASE_URL:
-        raise ValueError("Unapproved provider URL.")
+    from .integrations import validate_ai_url
+    validate_ai_url(base_url, config.get('_allowed_base_urls', [DEFAULT_BASE_URL, 'https://api.openai.com/v1']))
     if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}", model):
         raise ValueError("Invalid model name.")
     key = config.get("api_key")
@@ -699,7 +699,7 @@ def _make_runnable(config: dict[str, Any], schemas: list[type[_StrictIntent]]) -
         http_async_client=httpx.AsyncClient(timeout=35, follow_redirects=False, trust_env=False),
         # SiliconFlow documents max_tokens. New LangChain rewrites its own
         # max_tokens argument, so use extra_body for the provider-native name.
-        extra_body={"max_tokens": 2500, "enable_thinking": False},
+        extra_body={"max_tokens": 2500, **({"enable_thinking": False} if base_url == DEFAULT_BASE_URL else {})},
     )
     # A complete plan also represents clarification. Requiring that envelope
     # avoids a prose-only provider response silently losing business actions.

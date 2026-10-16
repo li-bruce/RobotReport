@@ -27,3 +27,5 @@ input:focus,select:focus,button:focus-visible,a:focus-visible{outline:3px solid 
 .privacy-note{font-size:12px;margin:12px 0 0;color:#708476}
 @media(min-width:600px){body{padding:28px 18px}main{margin:5vh auto;padding:32px}}
 @media(max-height:500px) and (orientation:landscape){body{padding-top:12px;padding-bottom:12px}main{margin:0 auto}h1{margin-top:12px}form{margin-top:20px}}
+
+#profile-groups {border:1px solid #d6e4df;border-radius:12px;padding:16px;margin:16px 0;min-width:0} #profile-groups label {display:flex;align-items:center;gap:8px;margin:8px 0;overflow-wrap:anywhere} #profile-groups input {width:20px;height:20px;flex:0 0 auto}

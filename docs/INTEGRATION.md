@@ -2,6 +2,28 @@
 
 English | [简体中文](INTEGRATION.zh-CN.md) · [README](../README.md)
 
+## Generic JSON Webhook
+
+Robort can connect directly to a compatible JSON endpoint or through a platform adapter. Configure `ROBORT_WEBHOOK_JSON_ENDPOINTS=https://adapter.example.org/messages` in `.env.local` and restart, then paste the full sending URL (including any adapter-specific query credential) in the bot connection editor. The generated callback is `/webhooks/{bot_id}/{token}`. Keep this unguessable credential private.
+
+The adapter must validate the chat platform's event signature and obtain user/group IDs from authenticated platform events, never from user-written text. Map mentions to plain commands. The callback token authorizes this adapter to represent the bot's group. A bot remains bound to one group; a different group cannot replace an established binding through a callback.
+
+Send POST JSON to the callback:
+
+```json
+{"event_id":"unique-message-123","group_id":"example-group","user_id":"example-user","text":"帮助","display_name":"示例会员"}
+```
+
+`event_id` is a stable unique string (1–128 ASCII letters, digits, `_ . : -`) for deduplication; reuse it when retrying an event. `display_name` is optional. `group_id` and `user_id` must be 1–100 ASCII letters, digits or `_ @ . : -`. `text` is 1–4000 characters. Do not send role, permission or destination claims. The response `{"result":"ok"}` acknowledges processing; replies arrive separately at the sending endpoint.
+
+Outgoing JSON:
+
+```json
+{"type":"markdown","content":{"text":"**Activity reminder**"},"event_id":"42","group_id":"example-group"}
+```
+
+Types are `text`, `markdown`, `image` and `file`. The content object retains the message fields (`content` for plain text, `text` for Markdown; media fields depend on the attachment). `event_id` identifies an outbox delivery. Treat any 2xx response, including 204, as accepted; return a non-2xx response on refusal. A 5xx, timeout or uncertain response is held for inspection without automatic replay. This contract does not automatically translate every platform's Markdown, mention or file-upload protocol; adapt these at the integration boundary.
+
 ## Kingsoft Collaboration / WPS
 
 There are **two different URLs**:
@@ -108,7 +130,7 @@ CSV import is preview → administrator review → commit. Use the downloadable 
 
 ## AI business workflow
 
-Configure SiliconFlow in the admin page and enable AI on each relevant bot. The supported endpoint is fixed to `https://api.siliconflow.cn/v1`; default model: `deepseek-ai/DeepSeek-V3.2`. A different provider is a code integration, not an arbitrary URL setting. [Provider documentation](https://api-docs.siliconflow.cn/docs/api/chat-completions-post).
+Configure an OpenAI-compatible Chat Completions provider that supports tool calling. Add its exact HTTPS base URL to local `ROBORT_AI_ENDPOINTS`, restart, and set the URL, model and key in the admin page. Enable AI on each intended bot. The backend validates the endpoint against this local list; incoming messages cannot change it. Standard tool calls use [LangChain ChatOpenAI](https://docs.langchain.com/oss/python/integrations/chat/openai); non-standard provider extensions need an adapter.
 
 ```text
 AI-prefixed request → trusted identity + permitted feature context
@@ -120,7 +142,7 @@ AI-prefixed request → trusted identity + permitted feature context
 
 `ai_catalog.py` describes business features; `ai_planner.py` and `ai_operations.py` define permitted plans and operations; `ai_plan_store.py` / `ai_plan_flow.py` persist confirmation and execution state. The model does not execute SQL, shell commands or arbitrary code. An AI-generated role claim cannot grant permission.
 
-Each user has one current plan. A revised AI message replaces it. The confirmation timeout is configurable (default five minutes). At most eight steps are planned; execution stops on failure and reports completed steps. The model receives the request and selected business context needed for supported operations; enabling it sends that information to SiliconFlow.
+Each user has one current plan. A revised AI message replaces it. The confirmation timeout is configurable (default five minutes). At most eight steps are planned; execution stops on failure and reports completed steps. The configured model provider receives the request and the selected business context needed for supported operations.
 
 ## Troubleshooting
 

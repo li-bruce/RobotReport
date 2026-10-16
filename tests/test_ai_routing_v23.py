@@ -152,10 +152,10 @@ class AIRoutingV23Tests(CoreFixture):
                     'stats.personal', 'stats.club', 'stats.dashboard', 'system.ai', 'system.password',
                     'system.credentials', 'system.audit', 'help.commands', 'help.simulator')
         self.assertFalse(set(required) - set(by_id))
-        routes = {'dashboard', 'calendar', 'members', 'applications', 'member-imports', 'guests',
+        routes = {'dashboard', 'calendar', 'members', 'applications', 'profile-requests', 'member-imports', 'guests',
                   'roles', 'daily', 'tournaments', 'sessions', 'messages', 'stats', 'venues',
                   'settings', 'ai', 'reminders', 'simulator', 'guide', 'audit', 'bots', 'casual', 'occupancies', 'holidays'}
-        safe_commands = {'注册', '注册资料', '身份', '名单', '我的统计', '统计', '帮助', 'AI帮助', 'AI状态', '性别', '我的对战历史', '我的对战统计', '待审核', '我的会籍'}
+        safe_commands = {'修改资料', '注册', '注册资料', '身份', '名单', '我的统计', '统计', '帮助', 'AI帮助', 'AI状态', '性别', '我的对战历史', '我的对战统计', '待审核', '我的会籍'}
         for item in catalog:
             with self.subTest(feature=item['feature_id']):
                 self.assertTrue(item['name'] and item['description'] and item['steps'])

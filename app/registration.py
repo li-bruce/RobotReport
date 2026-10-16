@@ -16,6 +16,8 @@ def schema(db):
         payload TEXT,code TEXT,channel_id TEXT NOT NULL DEFAULT '')''')
     if 'channel_id' not in {row[1] for row in db.execute('PRAGMA table_info(registration_forms)')}:
         db.execute("ALTER TABLE registration_forms ADD COLUMN channel_id TEXT NOT NULL DEFAULT ''")
+    if 'purpose' not in {row[1] for row in db.execute('PRAGMA table_info(registration_forms)')}:
+        db.execute("ALTER TABLE registration_forms ADD COLUMN purpose TEXT NOT NULL DEFAULT 'registration'")
 
 
 def _platform(ctx):
@@ -94,13 +96,17 @@ def _active_member(members, db=None):
     return member
 
 
-def create_form(ctx, clock=now):
+def create_form(ctx, clock=now, *, purpose='registration'):
+    if purpose not in ('registration', 'profile'):
+        raise ValueError('资料表用途无效')
     if ctx.platform_root and ctx.channel_id:
         fresh = _platform(ctx).context_for_channel(ctx.channel_id, ctx.actor, False, 'registration_form')
         if (fresh.id, fresh.chat_id) != (ctx.id, ctx.chat_id) or not fresh.receive_commands:
             raise PermissionError('原注册群通道已变更，请重新发送 注册')
         ctx = fresh
     require_capability(ctx, 'registration')
+    if purpose == 'profile':
+        Members(ctx, clock).require_approved(allow_admin=False, bot_access=False)
     with connect(ctx.db_path) as business:
         base = json.loads(business.execute("SELECT value FROM config WHERE key='public_base_url'").fetchone()[0])
     if not base:
@@ -110,8 +116,8 @@ def create_form(ctx, clock=now):
         db.execute('DELETE FROM registration_forms WHERE expires_at<=?', (stamp(clock()),))
         db.execute("UPDATE registration_forms SET status='superseded',payload=NULL,code=NULL WHERE chat_id=? AND user_id=? AND status IN ('draft','submitted')", (ctx.chat_id, ctx.actor))
         token = secrets.token_urlsafe(32)
-        db.execute('INSERT INTO registration_forms(token_hash,chat_id,user_id,expires_at,channel_id) VALUES(?,?,?,?,?)',
-                   (digest(token), ctx.chat_id, ctx.actor, stamp(clock() + timedelta(minutes=20)), ctx.channel_id))
+        db.execute('INSERT INTO registration_forms(token_hash,chat_id,user_id,expires_at,channel_id,purpose) VALUES(?,?,?,?,?,?)',
+                   (digest(token), ctx.chat_id, ctx.actor, stamp(clock() + timedelta(minutes=20)), ctx.channel_id, purpose))
     return f'{base}/register#{ctx.id}.{token}'
 
 
@@ -129,6 +135,15 @@ def form_status(ctx, token, clock=now):
         result = _receipt(business, bound, row)
     if result:
         return result
+    if row['purpose'] == 'profile':
+        from .profile_changes import ProfileChanges
+        changes = ProfileChanges(bound, clock)
+        member = members.require_approved(allow_admin=False, bot_access=False)
+        pending = changes.list(status='pending')
+        values = {key: member.get(key) for key in ('name','gender','level','group_ids')}
+        if pending:
+            values.update({key: value for key, value in pending[0]['changes'].items() if key != 'phone'})
+        return {'status': row['status'], 'purpose': 'profile', 'profile': values, 'groups': changes.groups()}
     if row['status'] == 'confirmed' and member:
         return _result(member | {'registration_result': 'already_registered' if member['status'] == 'approved' else 'submitted'}, bound)
     return {'status': row['status']}
@@ -136,12 +151,23 @@ def form_status(ctx, token, clock=now):
 
 def _apply_form(bound, row, data, clock):
     members = Members(bound, clock)
+    changes = None
+    if row['purpose'] == 'profile':
+        from .profile_changes import ProfileChanges
+        changes = ProfileChanges(bound, clock)
     with connect(bound.db_path, True) as business:
         _receipt_schema(business)
         existing = _active_member(members, business)
         saved = _receipt(business, bound, row)
         if saved:
             return existing, saved
+        if changes:
+            request = changes.submit(data, db=business)
+            result = {'status': 'completed', 'purpose': 'profile', 'request_id': request['id'],
+                      'name': existing['name'], 'message': '资料调整申请已提交，等待会员管理员审核。原资料在审核通过前继续使用。'}
+            business.execute('INSERT INTO registration_form_receipts VALUES(?,?,?,?,?,?,?)',
+                (bound.id, row['token_hash'], bound.scope_id, row['chat_id'], row['user_id'], dumps(result), stamp(clock())))
+            return existing, result
         if row['status'] == 'confirmed':
             if not existing:
                 raise ValueError('原注册资料已变更，请重新发送 注册')

@@ -51,7 +51,7 @@ const run=code=>vm.runInContext(code,ctx),key=(value,shift=false)=>{const event=
   ctx.featureReply={message:'请补充想查的内容'};await run("finderForms['ai-navigate-form']({get:()=> '查询'},{},3)");assert.match(finder.innerHTML,/请补充想查的内容/);
   finder.innerHTML='unchanged';run('state.viewEpoch=4');await run("finderForms['ai-navigate-form']({get:()=> '查询'},{},3)");assert.equal(finder.innerHTML,'unchanged');run('state.viewEpoch=3');await run("finderForms['ai-navigate-form']({get:()=> '查询'},{},2)");assert.equal(finder.innerHTML,'unchanged');
   assert.match(run("renderTimeline([{action:'member.roles',created_at:'2026-10-14T10:00:00+08:00'},{action:'registration.enroll'},{action:'future.action'}])"),/调整管理角色/);assert.match(run("activityActionName('registration.enroll')"),/活动报名/);assert.equal(run("activityActionName('future.action')"),'future.action');
-  assert.match(read('index.html'),/viewport-fit=cover/);assert.match(read('index.html'),/app.js\?v=2\.19/);
+  assert.match(read('index.html'),/viewport-fit=cover/);assert.match(read('index.html'),/app.js\?v=1\.0/);
   for(const width of [320,360,390,768]){assert.ok(width<=950);assert.match(css,/@media\(max-width:950px\)/);assert.match(css,/\.field input,\.field select,\.field textarea,input.control,select.control,textarea.control\{font-size:16px;min-height:44px\}/);}
   assert.match(css,/\.calendar-scroll \.calendar\{min-width:308px;grid-template-columns:repeat\(7,minmax\(44px,1fr\)\)\}/);
   assert.match(css,/\.scope-slot-options,\.role-directory\{grid-template-columns:minmax\(0,1fr\)\}/);assert.match(css,/max-height:calc\(100dvh - 16px/);assert.match(css,/env\(safe-area-inset-bottom\)/);assert.match(css,/左右滑动查看完整内容/);

@@ -39,10 +39,12 @@ An explicitly selected file must exist. `ROBORT_ENV_FILE=-` disables file loadin
 | `ROBORT_PUBLIC_BASE_URL` | Public origin, normally HTTPS. Applied to callback and business links. Blank: retain stored business configuration; callbacks use the request origin. |
 | `ROBORT_ADMIN_TOKEN` | Optional private bootstrap API token. Blank: retain existing grants. The exporter copies the existing bootstrap token when available. |
 | `ROBORT_INITIAL_ADMIN_PASSWORD` | Optional initial password (12–1024 characters). Only used before a password exists. Changing it never resets an existing password. Prefer the hidden password setup prompt and leave this blank. |
-| `ROBORT_AI_API_KEY` | SiliconFlow key. Blank: retain the stored value. New state has no key. |
-| `ROBORT_AI_MODEL` | Model ID. New state defaults to `deepseek-ai/DeepSeek-V3.2`. |
-| `ROBORT_AI_BASE_URL` | Supported value: `https://api.siliconflow.cn/v1`. |
+| `ROBORT_AI_API_KEY` | Model provider API key. Blank retains the stored value; new state has no key. |
+| `ROBORT_AI_MODEL` | Model identifier; must support Chat Completions tool calling. |
+| `ROBORT_AI_BASE_URL` | OpenAI-compatible base URL; configure custom endpoints in ROBORT_AI_ENDPOINTS. |
 | `ROBORT_AI_ENABLED` | `1`/`true` or `0`/`false`. Blank: retain stored switch; new state is off. |
+| `ROBORT_AI_ENDPOINTS` | Additional approved HTTPS model base URLs, comma-separated, without keys or query parameters. |
+| `ROBORT_WEBHOOK_JSON_ENDPOINTS` | Generic JSON adapter sending endpoints, comma-separated, without query credentials. |
 | `ROBORT_WEBHOOK_ENDPOINTS` | Extra approved HTTPS host/path pairs, comma-separated, **without `?key=`**. Public WPS is built in. |
 | `ROBORT_BOTS_JSON` | Private per-bot connection values, keyed by existing bot UUID. Blank: retain stored connections. Use the exporter or admin page. |
 

@@ -39,10 +39,12 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 9874 --workers 1 --no-acc
 | `ROBORT_PUBLIC_BASE_URL` | 对外访问地址，通常使用 HTTPS；同时用于回调、注册和图片链接。留空保留已存业务地址，回调根据请求地址生成。 |
 | `ROBORT_ADMIN_TOKEN` | 可选初始化 API 令牌；留空保留已有授权。导出脚本会复制现有初始化令牌。 |
 | `ROBORT_INITIAL_ADMIN_PASSWORD` | 可选首次密码，12–1024 字符；只在尚未设置密码时使用，不能重置已有密码。建议使用隐藏输入的密码设置脚本，本项留空。 |
-| `ROBORT_AI_API_KEY` | SiliconFlow 密钥；留空保留已有值，新环境无密钥。 |
-| `ROBORT_AI_MODEL` | 模型名；新环境默认 `deepseek-ai/DeepSeek-V3.2`。 |
-| `ROBORT_AI_BASE_URL` | 当前支持 `https://api.siliconflow.cn/v1`。 |
+| `ROBORT_AI_API_KEY` | 模型服务 API Key；空值保留已存值，新状态无密钥。 |
+| `ROBORT_AI_MODEL` | 模型标识；应支持 Chat Completions 工具调用。 |
+| `ROBORT_AI_BASE_URL` | OpenAI 兼容接口的基础地址，自定义端点在 ROBORT_AI_ENDPOINTS 配置。 |
 | `ROBORT_AI_ENABLED` | `1`/`true` 开启、`0`/`false` 关闭；留空保留已有设置，新环境关闭。 |
+| `ROBORT_AI_ENDPOINTS` | 额外允许的 HTTPS 模型基础地址，逗号分隔，不含密钥或查询参数。 |
+| `ROBORT_WEBHOOK_JSON_ENDPOINTS` | 通用 JSON 适配器的 HTTPS 发送端点，逗号分隔，不含查询凭据。 |
 | `ROBORT_WEBHOOK_ENDPOINTS` | 私有部署的 HTTPS 发送端点，以逗号分隔，**不含 `?key=`**；公开 WPS 端点已内置。 |
 | `ROBORT_BOTS_JSON` | 按现有机器人 UUID 保存各机器人私有连接参数；留空保留当前连接，建议由导出脚本或管理页面维护。 |
 

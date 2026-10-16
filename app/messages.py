@@ -276,12 +276,14 @@ class Outbox:
             owned = client is None
             client = client or httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False)
             try:
-                response = await client.post(bot['webhook_url'], json=json.loads(row['payload']), timeout=15)
+                from .integrations import outbound_payload, accepted
+                payload = outbound_payload(json.loads(row['payload']), bot['webhook_url'], platform.root,
+                                           event_id=row['id'], group_id=bot['chat_id'])
+                response = await client.post(bot['webhook_url'], json=payload, timeout=15)
                 if response.status_code >= 500:
                     status, error = 'unknown', f'HTTP {response.status_code}，结果待核实'
                 else:
-                    body = response.json()
-                    status = 'sent' if response.status_code == 200 and isinstance(body, dict) and body.get('result') == 'ok' else 'failed'
+                    status = 'sent' if accepted(response, bot['webhook_url'], platform.root) else 'failed'
                     error = None if status == 'sent' else f'HTTP {response.status_code}，平台未接受消息'
             except Exception:
                 status, error = 'unknown', '发送中断或响应无法确认，请人工核实；不会自动重发'

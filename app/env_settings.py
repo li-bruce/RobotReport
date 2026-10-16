@@ -17,7 +17,8 @@ KEYS = (
     'ROBORT_STATE_DIR', 'ROBORT_LIVE_SEND', 'ROBORT_PUBLIC_BASE_URL',
     'ROBORT_ADMIN_TOKEN', 'ROBORT_INITIAL_ADMIN_PASSWORD',
     'ROBORT_AI_API_KEY', 'ROBORT_AI_MODEL', 'ROBORT_AI_BASE_URL',
-    'ROBORT_AI_ENABLED', 'ROBORT_WEBHOOK_ENDPOINTS', 'ROBORT_BOTS_JSON',
+    'ROBORT_AI_ENABLED', 'ROBORT_AI_ENDPOINTS', 'ROBORT_WEBHOOK_ENDPOINTS',
+    'ROBORT_WEBHOOK_JSON_ENDPOINTS', 'ROBORT_BOTS_JSON',
 )
 _bindings = {}
 _locks = {}
@@ -307,6 +308,8 @@ def exported(platform, *, live=False, public_url=None):
     principal = Principal('local-export', 'platform_admin', ())
     config = Service(platform.context(principal)).config(True)
     values = {key:'' for key in KEYS}
+    for key in ('ROBORT_AI_ENDPOINTS', 'ROBORT_WEBHOOK_JSON_ENDPOINTS'):
+        values[key] = runtime_value(platform.root, key)
     values.update(ROBORT_STATE_DIR=str(platform.root), ROBORT_LIVE_SEND='1' if live else '0',
                   ROBORT_PUBLIC_BASE_URL=public_url if public_url is not None else config['public_base_url'],
                   ROBORT_AI_API_KEY=config['ai'].get('api_key', ''), ROBORT_AI_MODEL=config['ai']['model'],

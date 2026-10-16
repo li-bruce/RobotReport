@@ -134,12 +134,13 @@ async def send_test(platform, principal, bot_id, channel_id, request_id, *, live
         own=client is None
         client=client or httpx.AsyncClient(timeout=15,follow_redirects=False,trust_env=False)
         try:
-            response=await client.post(url,json={'msgtype':'text','text':{'content':
-                f'机器人「{bot["name"]}」消息发送连接成功。\n请管理员继续在后台复制回调地址，填入金山协作；随后在群内 @机器人发送“连接”。'}},timeout=15)
+            from .integrations import outbound_payload, accepted
+            payload={'msgtype':'text','text':{'content':
+                f'机器人「{bot["name"]}」消息发送连接成功。\n请管理员继续在后台复制回调地址，填入机器人平台或消息适配器；随后在群内 @机器人发送“连接”。'}}
+            response=await client.post(url,json=outbound_payload(payload,url,platform.root,event_id=request_id,group_id=channel['chat_id']),timeout=15)
             if response.status_code>=500:status,error='unknown','平台响应异常，发送结果待确认；请先检查群消息'
             else:
-                body=response.json()
-                status='sent' if response.status_code==200 and isinstance(body,dict) and body.get('result')=='ok' else 'failed'
+                status='sent' if accepted(response,url,platform.root) else 'failed'
                 error='' if status=='sent' else '平台未接受测试消息，请核对发送地址及机器人的安全设置'
         except (httpx.HTTPError,ValueError):
             status,error='unknown','未收到明确的发送结果，请先检查群消息后再决定是否重试'

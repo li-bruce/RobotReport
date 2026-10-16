@@ -29,17 +29,22 @@ def identifier(value):
 def validate_webhook(value, platform_root=None):
     if not value:
         return ''
+    from .integrations import json_webhook
     approved = {('xz.wps.cn', '/api/v1/webhook/send')} | env_settings.extra_endpoints(platform_root)
     try:
         url = urlsplit(value)
         query = parse_qs(url.query)
+        if (json_webhook(value, platform_root) and url.scheme == 'https' and url.port in (None,443)
+                and not (url.username or url.password or url.fragment) and len(value) <= 2048
+                and not any(c in value for c in ('\n','\r','\0'))):
+            return value
         valid = not (url.scheme != 'https' or (url.hostname, url.path) not in approved or url.port not in (None, 443)
             or url.username or url.password or url.fragment
             or set(query) != {'key'} or len(query['key']) != 1 or not query['key'][0])
     except (ValueError, TypeError):
         valid = False
     if not valid:
-        raise ValueError('Webhook 仅允许已批准的 WPS / 私有金山 HTTPS 发送地址')
+        raise ValueError('Webhook 须使用已在本地环境文件配置的 HTTPS 发送地址')
     return 'https://' + url.hostname + url.path + '?' + urlencode({'key': query['key'][0]})
 
 
@@ -454,7 +459,7 @@ class Platform:
                     raise ValueError('Robot Key 不能填写网址。请粘贴发送 Webhook 地址，系统会自动提取 key。')
             record[key] = value
         if data.get('webhook_url') and 'robot_key' not in data:
-            record['robot_key'] = parse_qs(urlsplit(record['webhook_url']).query)['key'][0]
+            record['robot_key'] = parse_qs(urlsplit(record['webhook_url']).query).get('key', [record.get('robot_key') or secrets.token_urlsafe(32)])[0]
         if (not record['chat_id'] and not record['group_id']) or not record['name']:
             raise ValueError('群名称和群ID不能为空')
         if 'venue_ids' in data and record['venue_ids'] and record['default_venue_id'] not in record['venue_ids']:
@@ -568,7 +573,8 @@ class Platform:
         initialize_transport(self.root_for(bot_id) / 'transport.sqlite3')
         private = self.root_for(bot_id) / 'callback.local.json'
         private.write_text(dumps({'bot_id':bot_id,'callback_token':callback}),encoding='utf-8')
-        return self.visible_bot(self.bot(bot_id),principal) | {'callback_path':f'/kingsoft/callback/{bot_id}/{callback}'}
+        from .integrations import callback_path
+        return self.visible_bot(self.bot(bot_id),principal) | {'callback_path':callback_path(self,bot_id,callback)}
 
     def update(self, principal, bot_id, data):
         self.require_platform(principal)

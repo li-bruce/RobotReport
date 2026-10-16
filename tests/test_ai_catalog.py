@@ -9,7 +9,7 @@ class CapabilityCatalogTests(unittest.TestCase):
         rows = features()
         self.assertGreaterEqual(len(rows), 50)
         self.assertEqual(len(rows), len({row['feature_id'] for row in rows}))
-        expected_routes = {'dashboard', 'members', 'applications', 'member-imports',
+        expected_routes = {'dashboard', 'members', 'applications', 'profile-requests', 'member-imports',
                            'guests', 'roles', 'calendar', 'venues', 'sessions', 'occupancies', 'holidays',
                            'daily', 'stats', 'reminders', 'tournaments', 'messages',
                            'bots', 'settings', 'ai', 'audit', 'guide', 'simulator', 'casual'}
@@ -43,7 +43,7 @@ class CapabilityCatalogTests(unittest.TestCase):
             self.assertIn(required, ids)
 
     def test_direct_commands_cannot_modify_business_or_roles(self):
-        approved_commands = {'我的会籍', '注册', '注册资料', '身份', '名单', '我的统计',
+        approved_commands = {'修改资料', '我的会籍', '注册', '注册资料', '身份', '名单', '我的统计',
                              '统计', '帮助', 'AI帮助', 'AI状态', '性别', '我的对战历史', '我的对战统计', '待审核'}
         for row in features():
             with self.subTest(feature=row['feature_id']):

@@ -43,6 +43,9 @@ def _snapshot(kind, value):
         groups = value.get('groups', [])
         return {'groups': sorted([{'id': g['id'], 'name': str(g['name'])}
                                   for g in groups], key=lambda g: str(g['id']))}
+    if kind == 'profile_request':
+        return {'request_id': value.get('request_id'), 'status': value.get('status'),
+                'fields': sorted(set(str(v) for v in value.get('fields', [])))}
     raise ValueError('身份通知类型无效')
 
 
@@ -138,6 +141,11 @@ def event_text(event):
     elif event['kind'] == 'groups':
         title = '会员组别已更新'
         detail = '当前组别：**' + ('、'.join(escape(g['name']) for g in new['groups']) or '未分组') + '**。'
+    elif event['kind'] == 'profile_request':
+        approved = new['status'] == 'approved'
+        title = '资料调整已通过' if approved else '资料调整已退回'
+        detail = f"资料申请{new['request_id']} · " + '、'.join(escape(v) for v in new['fields']) + '。\n\n'
+        detail += '新资料已生效。发送 **我的资料** 查看。' if approved else '原资料保持不变。请联系会员管理员核对后重新申请。'
     return '# ' + title + '\n\n' + mention(event['user_id'], event['member_name']) + '\n\n' + detail
 
 

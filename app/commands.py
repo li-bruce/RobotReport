@@ -97,6 +97,10 @@ class Commands:
 
         Event commands are checked after resolving their actual kind.
         """
+        if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:申请|修改|调整)(?:等级|分组)', text):
+            require_capability(self.ctx, 'registration')
+        if re.match(r'^资料(?:待审核|审核列表|查看|通过|拒绝)', text):
+            require_capability(self.ctx, 'management')
         if not supports(self.ctx, 'daily_events'):
             from .formats import metadata
             daily_names = {value for item in metadata() for value in (item['id'], item['name'], item['name'] + '比赛')}
@@ -114,7 +118,7 @@ class Commands:
             require_capability(self.ctx, 'registration')
         if (text in ('名单', '') or re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', text)
                 or re.match(r'^报名(?:\s+接龙)?[,，]', text)
-                or text.startswith('取消') and not re.fullmatch(r'取消\s+[a-f0-9]{12}', text, re.I) and text not in ('取消记录','取消计划')):
+                or text.startswith('取消') and not re.fullmatch(r'取消\s+[a-f0-9]{12}', text, re.I) and text not in ('取消记录','取消计划','取消资料申请')):
             require_capability(self.ctx, 'enrollment')
         if (re.fullmatch(r'(?:我的)?(?:对战历史|对局历史|对战记录|对战统计|对局统计)(?:\s+.+)?', text)
                 or re.match(r'^(?:修改记录|作废记录|撤销记录|记录)', text)
@@ -182,7 +186,7 @@ class Commands:
         register = re.fullmatch(r'(?:注册|设置姓名)\s+(.+)', text)
         if register:
             if member['status']=='approved':
-                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。资料修改请联系管理员。"
+                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。发送 修改资料 可申请调整个人信息。"
             tokens = register[1].strip().split()
             phone, level, gender = None, None, None
             if tokens and re.fullmatch(r'(?:1[3-9]\d{9}|\+[1-9]\d{7,14})', tokens[-1]):
@@ -210,6 +214,11 @@ class Commands:
             if member['status'] == 'approved':
                 return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。"
             return f"{escape(member['name'])}，注册申请已提交，等待管理员审核。"
+        if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:(?:申请|修改|调整)(?:等级|分组)|资料(?:待审核|审核列表|查看|通过|拒绝))', text):
+            from .profile_changes import ProfileChanges
+            profile_reply = ProfileChanges(self.ctx, self.clock).handle(text)
+            if profile_reply is not None:
+                return profile_reply
         if text in ('注册资料','会员状态','我的资料','我的会籍','续费记录','会员有效期'):
             labels = {'unregistered':'未注册','pending':'待审批','approved':'已通过','rejected':'已退回','suspended':'已停用'}
             result = table(['姓名', '性别', '会员状态', '等级', '自评申请'], [[member['name'] or '待填写', {'male':'男','female':'女'}.get(member.get('gender'),'待补齐'), labels.get(member['status'], member['status']),
@@ -228,6 +237,9 @@ class Commands:
             if text in ('我的会籍','续费记录','会员有效期'):
                 periods = terms.list()
                 result += '\n\n' + (table(['起始日期','截止日期','记录状态'], [[row['start_date'], row['end_date'], '有效记录' if row['status']=='valid' else '已作废'] for row in periods]) if periods else '尚未登记有效期，请联系管理员。')
+            if member['status'] == 'approved' and text in ('注册资料','会员状态','我的资料'):
+                result += '\n\n分组：' + ( '、'.join(escape(g['name']) for g in member['groups']) or '未分组')
+                result += '\n发送 修改资料 申请调整；我的资料申请 查看进度。'
             return result
         if text == '身份':
             return mention(self.ctx.actor, member.get('name') or '') + f"\n\n用户ID：{escape(self.ctx.actor)}；场地{venue_id}；" + ('后台管理员 · 正式会员' if self.ctx.is_admin else {'unregistered':'未注册账号','pending':'注册申请待审批','approved':'正式会员','rejected':'注册申请已退回','suspended':'会员已停用'}.get(member['status'],'未注册账号'))

@@ -32,6 +32,8 @@ python scripts/mobile_browser/run.py --suite bots
 
 浏览器测试需要可选依赖 Playwright。缺少时可手动安装：
 
+资料调整与审核可单独运行 `python scripts/mobile_browser/run.py --suite profile`，覆盖本人表单、提交、后台审批和历史记录，在 320、390、844、1280 像素宽度检查交互与页面溢出。
+
 ```shell
 python -m pip install playwright
 python -m playwright install chromium
