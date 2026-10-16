@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>会员注册 · 羽协</title><link rel="stylesheet" href="/static/register.css?v=2.12"><script src="/static/register.js?v=2.12" defer></script></head>
+<body><main>
+  <div class="brand">羽协 · 会员注册</div>
+  <h1>一起上场</h1>
+  <p>填写姓名和性别，提交后等待审核。管理员已为你登记过？填写登记手机号即可关联。</p>
+  <form id="registration" hidden>
+    <label><span class="field-title">姓名 <span>必填</span></span><input name="name" required maxlength="80" autocomplete="name" placeholder="请输入个人姓名"></label>
+    <label><span class="field-title">性别 <span>必填</span></span><select name="gender" required><option value="">请选择</option><option value="male">男</option><option value="female">女</option></select></label>
+    <label><span class="field-title">自评级别 <span>选填</span></span><select name="level"><option value="">暂不自评</option><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option><option value="4">4级</option><option value="5">5级</option><option value="6">6级</option><option value="7">7级</option><option value="8">8级</option><option value="9">9级</option></select></label>
+    <label><span class="field-title">手机号 <span>选填</span></span><input name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" placeholder="用于关联已登记资料" aria-describedby="phone-help"></label>
+    <p id="phone-help">关联只核对手机号；关联后保留管理员已登记的资料。普通注册可不填。</p>
+    <button type="submit" disabled>提交注册申请</button>
+  </form>
+  <section id="result" hidden aria-live="polite">
+    <div class="result-icon" aria-hidden="true">✓</div>
+    <h2 id="result-title" tabindex="-1">申请已提交</h2>
+    <p id="summary"></p>
+    <p id="result-message"></p>
+    <p id="next-step" class="next-step"></p>
+  </section>
+  <p id="status" role="status" aria-live="polite" tabindex="-1"></p>
+  <button id="retry" type="button" hidden>重新读取注册状态</button>
+  <nav class="registration-help" aria-label="使用帮助"><a href="/guide#members" rel="noreferrer" referrerpolicy="no-referrer">查看会员使用说明 <span aria-hidden="true">→</span></a></nav>
+  <p class="privacy-note">此链接仅供本人填写，请勿转发。</p>
+</main></body></html>

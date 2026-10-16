@@ -1,0 +1,46 @@
+/* Group names, two-address connections and optional robot business modules. */
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
+class Fields{constructor(values){this.values=values;}get(key){return this.values[key]??null;}getAll(key){const v=this.values[key];return Array.isArray(v)?v:v==null?[]:[v];}has(key){return Object.hasOwn(this.values,key);}}
+const node=s=>nodes[s]||(nodes[s]={value:'',innerHTML:'',textContent:'',isConnected:true,hidden:false,addEventListener(){},querySelector:()=>({}),querySelectorAll:()=>[]});
+const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});
+vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
+const run=code=>vm.runInContext(code,ctx),plain=value=>JSON.parse(JSON.stringify(value));
+ctx.catalog=[{id:'daily_events',name:'每日赛事',default_enabled:true},{id:'registration',name:'会员注册',default_enabled:true},{id:'enrollment',name:'活动报名',default_enabled:true},{id:'ai',name:'AI 助手',default_enabled:false},{id:'large_events',name:'大型赛事',default_enabled:false},{id:'management',name:'群内管理',default_enabled:false}];
+ctx.bots=[{id:'student',name:'学生机器人',capabilities:['registration'],active:true,venue_ids:[1],slot_keys:['slot:1']},{id:'other',name:'另一机器人',capabilities:['enrollment'],active:true,venue_ids:[1]}];
+ctx.groups=[{id:'group-a',chat_id:'266382',name:'共同群'},{id:'group-b',chat_id:'',name:'待接入学生群'}];
+ctx.channels=[{id:'student-channel',bot_id:'student',group_id:'group-a',chat_id:'266382',name:'共同群',active:true,configured:true,receive_commands:true,daily_notifications:true},{id:'other-channel',bot_id:'other',group_id:'group-a',chat_id:'266382',name:'共同群',active:true,configured:true},{id:'removed',bot_id:'student',chat_id:'removed-group',name:'<script>旧群',archived:true}];
+ctx.slots=[{slot_key:'slot:1',venue_id:1,venue_name:'默认馆',name:'第一场',start:'17:30',end:'20:30',weekdays:[0,1,2,3,4]}];
+run("state.epoch=3;state.viewEpoch=3;state.authed=true;state.venueId=1;state.venues=[{id:1,name:'默认馆'}];state.bots=bots;state.page.botCapabilities=catalog;state.config={};globalThis.forms={};globalThis.sent=[];globalThis.toasts=[];openModal=(title,html)=>{globalThis.modalTitle=title;globalThis.modal=html};bindForm=(id,callback)=>{forms[id]=callback};toast=text=>toasts.push(text);closeModal=()=>{};renderRoute=async()=>{};scopeSlots=async()=>slots;bindScopeControls=()=>{};bindBotPolicy=()=>()=>({enabled:false,match:'all',rules:[]});loadChannels=async()=>channels;");
+run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/bot-capabilities')return {capabilities:catalog};if(path==='/api/bots')return {bots};if(path==='/api/groups')return options.method?{id:'created-group',name:options.body.name}:{groups};if(path.includes('/connection'))return {callback_url:'http://localhost/kingsoft/callback/student/local-secret',webhook_url:'https://xz.wps.cn/api/v1/webhook/send?key=local-fixture'};if(path.includes('/channels'))return {channels:channels.filter(c=>c.bot_id==='student')};return {reply:'**会员注册** · 注册'}}");
+(async()=>{
+  assert.equal(run("channelSupportsBusiness({capabilities:['daily_events']},'messages')"),false);
+  await run('renderBotWorkspace(3)');let html=node('#main').innerHTML;
+  for(const action of ['group-new','group-delete','channel-remove','bot-help','bot-delete'])assert.match(html,new RegExp('data-action="'+action+'"'));
+  assert.doesNotMatch(html,/data-action="bot-callback"|已移除的群|连接详情与维护|removed-group|<script>旧群/);
+  assert.match(html,/工作日 第一场 17:30–20:30/);assert.match(html,/aria-label="业务组合"/);
+  assert.match(html,/<summary class="robot-card-summary">[\s\S]*?会员注册[\s\S]*?<\/summary>/);
+  assert.doesNotMatch(html,/<details class="robot-card"[^>]* open/);assert.match(html,/href="\/guide\/admin#robots"/);
+  const groups=plain(run('groupedBots(bots,channels,groups)'));assert.equal(groups[0].entries.length,2);assert.equal(groups[1].entries.length,0);
+  assert.equal(run("groupedBots(bots,[],[])[0].name"),'未绑定群');assert.doesNotMatch(run('botCapabilityBadges(bots[0])'),/每日赛事|AI 助手/);
+  run("state.botDisclosure.set('bot:student:student-channel',true)");await run('renderBotWorkspace(3)');assert.match(node('#main').innerHTML,/<details class="robot-card"[^>]*data-bot-id="student"[^>]* open/);
+  run("bots[0].name='<img src=x onerror=alert(1)>'");await run('renderBotWorkspace(3)');assert.doesNotMatch(node('#main').innerHTML,/<img src=x/);assert.match(node('#main').innerHTML,/&lt;img/);run("bots[0].name='学生机器人'");
+  assert.equal(ctx.sent.some(x=>x.path.includes('/connection')),false,'list does not fetch credential addresses');
+  await run('editBotScope(null)');assert.match(ctx.modal,/value="daily_events" checked/);assert.doesNotMatch(ctx.modal,/value="daily_events"[^>]*disabled/);
+  for(const key of ['ai','large_events','management'])assert.doesNotMatch(ctx.modal,new RegExp('value="'+key+'" checked'));
+  await run("editBotScope('student')");assert.doesNotMatch(ctx.modal,/value="daily_events" checked/);assert.match(ctx.modal,/value="registration" checked/);
+  ctx.data={name:'学生机器人',active:'on',capabilities:[],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
+  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:[],venue_ids:[1],slot_keys:null,user_policy:{enabled:false,match:'all',rules:[]}});
+  await run('editGroup(null)');assert.doesNotMatch(ctx.modal,/name="chat_id"|Robot Key/);await run("forms['group-form'](new FormData({name:'新建群'}),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'新建群'});
+  const form=node('#channel-form');form.elements={group_id:{value:'group-a'},webhook_url:{value:''}};
+  await run("editChannelScope('student','student-channel')");for(const name of ['group_id','callback_url','webhook_url'])assert.match(ctx.modal,new RegExp('name="'+name+'"'));
+  assert.doesNotMatch(ctx.modal,/name="chat_id"|name="name"|name="robot_key"|name="slot_mode"|已移除的群/);assert.equal(form.elements.group_id.required,true);
+  form.elements.group_id.value='group-b';form.elements.group_id.onchange();assert.equal(form.elements.webhook_url.value,'');form.elements.group_id.value='group-a';form.elements.group_id.onchange();assert.match(form.elements.webhook_url.value,/key=local-fixture$/);
+  await run("forms['channel-form'](new FormData({group_id:'group-a',webhook_url:'https://xz.wps.cn/api/v1/webhook/send?key=local-fixture'}),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{group_id:'group-a',webhook_url:'https://xz.wps.cn/api/v1/webhook/send?key=local-fixture'});
+  await run("toggleBotChannel('student','student-channel',false)");assert.deepEqual(plain(ctx.sent.at(-1).body),{active:false});await run("toggleChannelOption('student','student-channel','daily_notifications',false)");assert.deepEqual(plain(ctx.sent.at(-1).body),{daily_notifications:false});
+  run("removeBotChannel('student','student-channel','共同群')");assert.match(ctx.modal,/历史记录和同群其他机器人保留/);await run("forms['confirm-form'](new FormData({}),{},3)");assert.equal(ctx.sent.at(-1).method,'DELETE');
+  run("removeBot('student')");assert.match(ctx.modal,/历史消息保留/);await run("forms['confirm-form'](new FormData({}),{},3)");assert.equal(ctx.sent.at(-1).method,'DELETE');assert.equal(ctx.sent.at(-1).path,'/api/bots/student');
+  await run("previewBotHelp('student')");assert.match(ctx.modal,/已注册会员/);assert.match(ctx.modal,/未注册用户/);assert.equal(ctx.sent.at(-1).path,'/api/bots/student/help-preview?audience=member');await node('#f-help_audience').onchange({target:{value:'admin'}});assert.equal(ctx.sent.at(-1).path,'/api/bots/student/help-preview?audience=admin');
+  console.log('Robot UI passed: named groups, summary time/business, optional defaults, two-address connection, scope, help, history preservation and escaping.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,0 +1,112 @@
+/* Group-first robot administration; details remain native keyboard controls. */
+.robot-overview>a{margin-left:auto;align-self:center;color:var(--accent);font-size:12px;text-decoration:none;min-height:44px;display:inline-flex;align-items:center}
+.robot-cluster{overflow:hidden}
+.robot-cluster-summary{display:flex;align-items:center;gap:12px;padding:20px 24px;cursor:pointer;list-style:none}
+.robot-cluster-summary::-webkit-details-marker,.robot-card-summary::-webkit-details-marker{display:none}
+.robot-cluster-summary::before{content:'';width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);flex:none;transition:transform .15s}
+.robot-cluster>details[open]>.robot-cluster-summary::before{transform:rotate(45deg)}
+.robot-cluster-summary>span:first-of-type{flex:1;min-width:0}
+.robot-cluster-summary h2{font-size:16px;overflow-wrap:anywhere}
+.robot-cluster-summary .robot-group-id{display:block;margin-top:4px}
+.robot-cluster-summary>.badge{flex:none}
+.robot-cluster-body{padding:0 24px 20px}
+.robot-cluster-tools{display:flex;justify-content:flex-end;margin:0 0 10px}
+.robot-card{border:1px solid var(--line);border-radius:9px;background:var(--surface);margin-top:10px;overflow:hidden}
+.robot-card-summary{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:6px 18px;align-items:center;padding:17px 18px;cursor:pointer;list-style:none}
+.robot-summary-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.robot-summary-title>strong{font-size:14px;overflow-wrap:anywhere}
+.robot-summary-title>.badge{flex:none}
+.robot-summary-business{font-size:12px;color:var(--muted);overflow-wrap:anywhere;grid-column:2;grid-row:1 / 3}
+.robot-summary-scope{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;grid-column:1}
+.robot-disclosure-label{font-size:12px;color:var(--accent);grid-column:3;grid-row:1 / 3}
+.robot-card-summary .when-open,.robot-card[open]>.robot-card-summary .when-closed{display:none}
+.robot-card[open]>.robot-card-summary .when-open{display:inline}
+.robot-card[open]>.robot-card-summary{background:#f4f8f9;border-bottom:1px solid var(--line)}
+.robot-primary-actions{padding:16px 18px}
+.robot-card-content>.notice{margin:14px 18px 0}
+.robot-card .robot-coverage{padding:16px 18px;gap:16px}
+.robot-connection{padding:0 18px}
+.robot-connection>summary{font-size:12px;color:var(--muted);cursor:pointer;padding:15px 0;min-height:44px}
+.robot-connection-body{padding-bottom:16px}
+.robot-connection .robot-group{padding-top:0}
+.robot-connection .robot-group+.actions{margin-top:12px}
+.robot-clusters summary:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+@media(max-width:650px){
+  .robot-cluster-summary{padding:16px 14px;gap:9px}
+  .robot-cluster-summary h2{font-size:15px}
+  .robot-cluster-summary>.badge{font-size:10px}
+  .robot-cluster-body{padding:0 12px 14px}
+  .robot-card-summary{padding:14px 12px;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px}
+  .robot-summary-title{grid-column:1;gap:6px}
+  .robot-summary-business{grid-column:1 / 3;grid-row:2}
+  .robot-summary-scope{grid-column:1 / 3;grid-row:3}
+  .robot-disclosure-label{grid-column:2;grid-row:1;align-self:start;padding-top:2px}
+  .robot-primary-actions{padding:12px;gap:6px}
+  .robot-primary-actions .btn{flex:1 1 auto}
+  .robot-card .robot-coverage{padding:14px 12px}
+  .robot-connection{padding:0 12px}
+  .robot-overview>a{margin-left:0}
+}
+@media(prefers-reduced-motion:reduce){.robot-cluster-summary::before{transition:none}}
+
+/* Group > robot summary > task controls. Details never repeat the summary. */
+.robot-card-summary{grid-template-columns:minmax(220px,1.15fr) minmax(220px,1fr) auto;gap:14px 20px;padding:18px 20px}
+.robot-summary-main{display:flex;flex-direction:column;gap:7px;min-width:0}
+.robot-summary-title>strong{font-size:15px}
+.robot-summary-scope{grid-column:auto;white-space:normal;overflow:visible;font-size:12px;line-height:1.65;color:var(--muted)}
+.robot-summary-business{grid-column:auto;grid-row:auto;display:flex;flex-wrap:wrap;gap:6px}
+.robot-summary-business .badge{font-size:11px;padding:4px 8px;background:var(--surface);font-weight:500}
+.robot-disclosure-label{grid-column:auto;grid-row:auto;white-space:nowrap}
+.robot-card[open]>.robot-card-summary{background:#f4f8fa;border-bottom:1px solid #dce6eb}
+.robot-card-content{background:var(--surface)}
+.robot-setup-grid{display:grid;grid-template-columns:1fr 1fr;padding:6px 20px}
+.robot-setup-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 0;min-width:0}
+.robot-setup-panel+ .robot-setup-panel{border-left:1px solid var(--line);padding-left:24px;margin-left:24px}
+.robot-setup-panel h3{font-size:13px;font-weight:650;margin:0 0 5px}
+.robot-setup-panel p{font-size:12px;color:var(--muted);margin:0;line-height:1.5;overflow-wrap:anywhere}
+.robot-setup-panel .btn{flex:none}
+.robot-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:11px 20px}
+.robot-footer .actions{gap:6px}
+.robot-footer .quiet{background:transparent;color:var(--muted);border-color:transparent}
+.robot-footer .quiet:hover{background:#f2f6f8;color:var(--accent)}
+.robot-empty{padding:16px 4px 8px;color:var(--muted);font-size:13px}
+.robot-cluster-tools{gap:6px;margin-bottom:4px}
+.connection-step{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding:20px 0;border-top:1px solid var(--line)}
+.connection-step-number{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#e8f1f5;color:var(--accent);font-size:12px;font-weight:700}
+.connection-step h3{margin:2px 0 14px;font-size:14px}
+.connection-step .field:last-child{margin-bottom:0}
+.connection-step textarea[readonly]{font-size:12px;line-height:1.6;overflow-wrap:anywhere;resize:none;background:#f6f8f9}
+.connection-step .caption{margin:9px 0 0}
+.connection-done{color:var(--accent);font-size:13px;font-weight:600;line-height:1.7}
+.connection-resume{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding-top:18px;margin-top:18px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+@media(max-width:900px){.robot-card-summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px}.robot-setup-panel{gap:10px}.robot-setup-panel+ .robot-setup-panel{padding-left:16px;margin-left:16px}}
+@media(max-width:650px){
+ .robot-card-summary{grid-template-columns:minmax(0,1fr) auto;padding:15px 13px;gap:12px}
+ .robot-summary-main{grid-column:1;grid-row:1}
+ .robot-summary-business{grid-column:1/3;grid-row:2;gap:5px}
+ .robot-summary-business .badge{font-size:10px;padding:3px 7px}
+ .robot-disclosure-label{grid-column:2;grid-row:1;align-self:start}
+ .robot-summary-scope{font-size:11px}
+ .robot-setup-grid{grid-template-columns:1fr;padding:0 13px}
+ .robot-setup-panel{padding:16px 0}
+ .robot-setup-panel+ .robot-setup-panel{padding:16px 0;margin:0;border-left:0;border-top:1px solid var(--line)}
+ .robot-footer{padding:10px 9px;gap:8px}
+ .robot-footer .actions{flex-wrap:wrap;gap:3px}
+ .robot-footer .btn{min-height:38px;padding:7px;font-size:11px}
+ .connection-step{grid-template-columns:24px minmax(0,1fr);gap:8px;padding:18px 0}
+ .connection-step h3{font-size:13px}
+}
+/* User conditions stay behind one disclosure; each rule works at phone width. */
+.robot-user-settings{margin-top:14px;border-top:1px solid var(--border,#ddd);padding-top:14px}
+.robot-user-settings>summary{cursor:pointer;font-weight:600;padding:10px 0}
+.robot-user-body{display:grid;gap:14px;padding-top:10px}
+.robot-rule{padding:14px;border:1px solid var(--border,#ddd);border-radius:10px;min-width:0}
+.robot-rule-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.robot-rule-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.robot-rule-controls>label:last-child,.robot-rule-controls>.rule-choices{grid-column:1/-1}
+.robot-rule-controls label{display:grid;gap:6px;min-width:0}
+.robot-rule-controls input,.robot-rule-controls select{width:100%;min-width:0}
+.robot-rule-controls select,.robot-rule-controls input:not([type=checkbox]){min-height:44px;font-size:16px}
+.rule-choices{display:flex;flex-wrap:wrap;gap:8px 18px;border:0;padding:0;min-width:0}
+.rule-choices legend{margin-bottom:8px}.rule-choices .check-label{display:flex;align-items:center;min-height:44px}.rule-choices input{width:auto}
+@media(max-width:500px){.robot-rule-controls{grid-template-columns:minmax(0,1fr)}.robot-rule{padding:10px}}
