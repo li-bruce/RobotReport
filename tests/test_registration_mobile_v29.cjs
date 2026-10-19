@@ -42,7 +42,7 @@ const result=(extra={})=>({status:'completed',member_status:'pending',name:'李�
   await pending.submit();assert.equal(pending.requests.length,2);
   const sent=pending.requests[1];assert.equal(sent.url,'/public/registration/'+reference);
   assert.equal(sent.credentials,'omit');assert.equal(sent.referrerPolicy,'no-referrer');assert.equal(sent.cache,'no-store');
-  assert.deepEqual(JSON.parse(sent.body),{name:'李明',gender:'male',level:9,phone:''});
+  assert.deepEqual(JSON.parse(sent.body),{name:'李明',gender:'male',level:9});
   assert.equal(pending.node('#registration').hidden,true);assert.equal(pending.node('#result').hidden,false);
   assert.equal(pending.node('#result-title').textContent,'申请已提交');assert.equal(pending.activeElement,'#result-title');
   assert.match(pending.node('#next-step').textContent,/会员状态/);assert.equal(pending.node('#registration').attributes['aria-busy'],undefined);

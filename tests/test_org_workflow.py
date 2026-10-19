@@ -118,7 +118,7 @@ class OrganizationWorkflow(unittest.TestCase):
         self.assertEqual(response.status_code,400)
         self.assertFalse(Members(self.admin).get('new')['roles'])
         reply=self.run_command(self.actor(self.cc,'new'),'注册 新球友甲 女')
-        self.assertIn('会员资格已通过',reply)
+        self.assertIn('已注册',reply)
     def test_global_api_and_explicit_destinations(self):
         self.assertEqual(self.client.get('/api/workspace',headers=self.headers).status_code,200)
         self.assertEqual(self.client.get('/api/venues',headers=self.headers).status_code,200)

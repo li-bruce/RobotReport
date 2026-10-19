@@ -44,10 +44,13 @@ def normalize_capabilities(value):
 def supports(context, capability):
     if capability not in ALL_CAPABILITIES:
         return False
-    return capability in normalize_capabilities(getattr(context, 'capabilities', None))
+    from .time_rules import capability_open
+    return capability in normalize_capabilities(getattr(context, 'capabilities', None)) and capability_open(context,capability)
 
 
 def require_capability(context, capability):
     if not supports(context, capability):
         name = next((name for key, name, _ in _CATALOG if key == capability), capability)
-        raise PermissionError(f'当前机器人未开启{name}，请使用支持此业务的机器人')
+        if capability in normalize_capabilities(getattr(context,'capabilities',None)):
+            raise PermissionError(f'{name}当前时段未开放')
+        raise PermissionError(f'当前机器人未开启{name}')

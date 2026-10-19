@@ -330,7 +330,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
 
     @app.post('/api/members')
     def create_member(data: dict, ctx=Depends(context)):
-        svc(ctx).require_admin()
+        ctx.require('member.manage')
+        if not data.get('user_id'):
+            from .member_imports import MemberImports
+            return MemberImports(ctx,clock).create(data)
         manager = Members(ctx, clock)
         with connect(ctx.db_path, True) as db:
             user_id = identifier(data['user_id'])

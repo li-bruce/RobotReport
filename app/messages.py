@@ -93,18 +93,20 @@ def registration_table(rows):
 
 
 def roster(data, venue_id=1):
-    lines = [f'# 场地{venue_id} · 报名名单']
+    lines = []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
-        lines.append(f"## {session['date']} {escape(session['name'])} {session['start']}–{session['end']}")
+        label = f"{session['date']} · 场地{venue_id} · {escape(session['name'])} {session['start']}–{session['end']}"
+        if not rows:
+            state = '🔴 已占用：'+escape(session['booking_notice']) if session.get('occupancies') else '暂无报名'
+            lines.append(f'{label}：{state}')
+            continue
+        lines.append(f"## {label}")
         if session.get('occupancies'):
             lines.append('🔴 **已占用 · 不可报名** '+escape(session['booking_notice']))
-            if rows:
-                lines.append('已有报名保留，请留意活动调整。')
-        lines.append(f"报名 {len(rows)} 人 · 正式容量 {session['capacity']} · 替补 {session['substitute_capacity']}")
-        lines.append(registration_table(rows) if rows else '暂无报名')
-    lines.append('报名+N 追加N位同行；取消报名仅取消本人。取消张三，李四可取消自己代报的指定同行。')
-    return '\n\n'.join(lines)
+        lines.append(f"**{len(rows)} 人** · 正式 {session['capacity']} · 替补 {session['substitute_capacity']}")
+        lines.append(registration_table(rows))
+    return '\n\n'.join(lines) if lines else '暂无场次安排。'
 
 
 def tournament_text(item, mode='schedule'):
@@ -149,7 +151,8 @@ class Outbox:
         from .bot_capabilities import normalize_capabilities
         if refresh:
             ctx=refresh_context(ctx)
-        capabilities = sorted(normalize_capabilities(ctx.capabilities))
+        from .time_rules import effective_capabilities
+        capabilities = sorted(effective_capabilities(ctx))
         return {'venues': sorted(ctx.venue_ids) if ctx.venue_restricted or ctx.venue_ids else None,
                 'slots': sorted(ctx.slot_keys) if ctx.slot_keys is not None else None,
                 'capabilities': None if capabilities == sorted(normalize_capabilities(None)) else capabilities}
@@ -175,10 +178,12 @@ class Outbox:
                     themed = publish_tables(text,self.ctx,business)
                     row = business.execute("SELECT value FROM config WHERE key='theme'").fetchone()
             theme = json.loads(row[0]) if row else {}
-            if theme.get('enabled', True):
+            if theme.get('enabled', True) and themed.startswith('#'):
+                title, separator, body = themed.partition('\n')
+                title=title.lstrip('#').strip()
+                themed = f"<font color='{theme.get('accent', '#197661')}'><b>{title}</b></font>" + separator + body
                 if theme.get('banner_url'):
                     themed = '![](' + theme['banner_url'] + ')\n\n' + themed
-                themed = f"<font color='{theme.get('accent', '#197661')}'>羽协活动</font>\n\n" + themed
             ids = []
             for i, part in enumerate(chunks(themed)):
                 conn.execute('INSERT OR IGNORE INTO outbox(dedupe_key,chat_id,payload,created_at,channel_id,scope_json) VALUES(?,?,?,?,?,?)',
@@ -218,13 +223,19 @@ class Outbox:
             if row['chat_id'] != bot['chat_id']:
                 db.execute("UPDATE outbox SET status='failed',last_error='消息群绑定不匹配' WHERE id=?", (row['id'],))
                 return 'failed'
-            current_ctx = platform.context_for_channel(self.ctx.channel_id)
+            from .time_rules import bind_clock
+            current_ctx = bind_clock(platform.context_for_channel(self.ctx.channel_id),lambda:at)
             # Also covers legacy identity notices queued before management-only
             # routing, whose captured scope can still match the current robot.
             from .bot_capabilities import supports
             if (row['dedupe_key'].startswith((self.ctx.channel_id or self.ctx.chat_id) + ':identity:')
                     and not supports(current_ctx, 'management')):
                 db.execute("UPDATE outbox SET status='failed',last_error='机器人未开启群内管理，管理通知未发送' WHERE id=?", (row['id'],))
+                return 'failed'
+            from .time_rules import broadcast_delivery_allowed
+            from .service import Service
+            if not broadcast_delivery_allowed(row['dedupe_key'],current_ctx,at,Service(current_ctx,lambda:at).config()):
+                db.execute("UPDATE outbox SET status='failed',last_error='播报规则已变更或消息已过期' WHERE id=?",(row['id'],))
                 return 'failed'
             current_scope=self.scope_signature(current_ctx)
             captured_scope=json.loads(row['scope_json'])

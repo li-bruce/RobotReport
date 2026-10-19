@@ -8,7 +8,7 @@ import json
 import re
 import secrets
 import uuid
-from .db import connect, stamp, dumps
+from .db import connect, stamp, dumps, now
 from .workspace import initialize_workspace, initialize_transport
 from .bot_capabilities import normalize_capabilities, DEFAULT_CAPABILITIES
 from .registry_schema import GROUP_BINDING_GUARDS
@@ -129,6 +129,8 @@ class BotContext:
     permissions: tuple = ()
     capabilities: tuple | None = None
     bot_name: str = ''
+    capability_rules: tuple = ()
+    policy_clock: object = now
 
     def can(self, permission, db=None):
         if permission not in ALL_PERMISSIONS:
@@ -167,7 +169,7 @@ class Platform:
             ''')
         with connect(self.path, True) as db:
             bot_columns = {r['name'] for r in db.execute('PRAGMA table_info(bots)')}
-            for field, default in (('deleted_at', ''), ('user_policy', 'null')):
+            for field, default in (('deleted_at', ''), ('user_policy', 'null'), ('capability_rules','[]')):
                 if field not in bot_columns:
                     db.execute(f"ALTER TABLE bots ADD COLUMN {field} TEXT NOT NULL DEFAULT '{default}'")
             for table, fields in (('bots', ('venue_ids','slot_keys','capabilities')), ('bot_channels', ('slot_keys',))):
@@ -372,7 +374,8 @@ class Platform:
             'channels': channels, 'admin_user_ids': [],
             'user_policy': json.loads(bot['user_policy']) if principal.role=='platform_admin' else None,
             'venue_ids': json.loads(bot['venue_ids']), 'slot_keys': json.loads(bot['slot_keys']),
-            'capabilities': list(normalize_capabilities(json.loads(bot['capabilities'])))}
+            'capabilities': list(normalize_capabilities(json.loads(bot['capabilities']))),
+            'capability_rules': json.loads(bot['capability_rules'])}
 
     def list(self, principal):
         with connect(self.path) as db:
@@ -553,6 +556,8 @@ class Platform:
         record = self._channel_data(channel_data) if chat or data.get('group_id') else None
         scope_data = {k:self._scope_value(k,data[k]) for k in ('venue_ids','slot_keys') if k in data}
         capabilities = normalize_capabilities(data.get('capabilities', DEFAULT_CAPABILITIES))
+        from .time_rules import normalize_capability_rules
+        capability_rules = normalize_capability_rules(data.get('capability_rules'),capabilities)
         from .bot_access import normalize
         user_policy = normalize(data.get('user_policy'),self.workspace_context())
         bot_id = uuid.uuid4().hex
@@ -564,6 +569,7 @@ class Platform:
                 raise ValueError('该Webhook已用于另一个群通道')
             db.execute('INSERT INTO bots(id,name,active,chat_id,webhook_url,robot_key,callback_hash,legacy,created_at,capabilities) VALUES(?,?,1,?,?,?,?,?,?,?)', (bot_id,name,chat,record['webhook_url'] if record else '',record['robot_key'] if record else '',digest(callback),int(bool(data.get('legacy',False))),stamp(),dumps(capabilities)))
             db.execute('UPDATE bots SET user_policy=? WHERE id=?',(dumps(user_policy),bot_id))
+            db.execute('UPDATE bots SET capability_rules=? WHERE id=?',(dumps(capability_rules),bot_id))
             if record:
                 from .bot_groups import attach
                 attach(db,record)
@@ -582,9 +588,16 @@ class Platform:
         old = self.bot(bot_id)
         validated_scope = {k:self._scope_value(k,data[k]) for k in ('venue_ids','slot_keys') if k in data}
         capabilities = normalize_capabilities(data['capabilities']) if 'capabilities' in data else None
+        from .time_rules import normalize_capability_rules
+        selected = capabilities if capabilities is not None else normalize_capabilities(json.loads(old['capabilities']))
+        rules = data.get('capability_rules',json.loads(old['capability_rules']))
+        if 'capability_rules' not in data and capabilities is not None:
+            rules=[dict(r,capabilities=[c for c in r['capabilities'] if c in selected]) for r in rules]
+            rules=[r for r in rules if r['capabilities']]
+        capability_rules=normalize_capability_rules(rules,selected)
         from .bot_access import normalize
         user_policy = normalize(data['user_policy'],self.workspace_context()) if 'user_policy' in data else None
-        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy'}
+        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy','capability_rules'}
         if set(data)-allowed:
             raise ValueError('不支持的机器人配置字段')
         if data.get('admin_user_ids'):
@@ -617,6 +630,7 @@ class Platform:
                 db.execute('UPDATE bots SET capabilities=? WHERE id=?', (dumps(capabilities),bot_id))
             if user_policy is not None:
                 db.execute('UPDATE bots SET user_policy=? WHERE id=?',(dumps(user_policy),bot_id))
+            db.execute('UPDATE bots SET capability_rules=? WHERE id=?',(dumps(capability_rules),bot_id))
         self._save_bot_scope(bot_id, validated_scope)
         if 'callback_token' in data:
             (self.root_for(bot_id)/'callback.local.json').write_text(dumps({'bot_id':bot_id,'callback_token':data['callback_token']}),encoding='utf-8')

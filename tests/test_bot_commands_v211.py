@@ -157,7 +157,7 @@ class BotCommandsV211Tests(CoreFixture):
     def test_registration_only_robot_does_not_advertise_enrollment_or_ai(self):
         self.capabilities(['registration'])
         registered = self.send('注册')
-        self.assertIn('帮助', registered)
+        self.assertIn('已注册', registered)
         self.assertNotIn('发送 名单', registered)
         self.assertNotIn('AI', self.send('无法识别的业务'))
         self.s.update_config({'public_base_url':'https://club.example'})

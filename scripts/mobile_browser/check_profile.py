@@ -42,10 +42,11 @@ try:
             check(f'{width} form fits screen', page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'))
             page.locator('[name=level]').select_option('8')
             page.screenshot(path=str(base/f'profile-form-{width}.png'), full_page=True)
-            page.get_by_role('button', name='提交资料申请', exact=True).click()
+            with page.expect_response(lambda r:r.request.method=='POST' and '/public/registration/' in r.url) as submission:
+                page.get_by_role('button', name='提交资料申请', exact=True).click()
             page.get_by_role('heading', name='资料申请已提交').wait_for()
-            check(f'{width} pending notice', '等待会员管理员审核' in page.locator('#result-message').inner_text())
-            request_id = page.locator('#summary').inner_text().split('资料申请')[-1]
+            check(f'{width} pending notice', '等待管理员审核' in page.locator('#result-message').inner_text())
+            request_id = str(submission.value.json()['request_id'])
             page.goto(origin+'/admin#profile-requests')
             page.get_by_label('管理员密码', exact=True).fill(meta['password'])
             page.get_by_role('button', name='登录工作台', exact=True).click()

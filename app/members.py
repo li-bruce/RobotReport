@@ -142,12 +142,18 @@ class Members:
                 self._level(level)
             if phone is not None:
                 phone = self._phone(phone)
+            from .member_imports import ensure_schema
+            ensure_schema(db)
+            bound=db.execute('SELECT phone FROM pre_registered_members WHERE scope_id=? AND linked_user_id=?',(self.ctx.scope_id,user_id)).fetchone()
+            if bound and existing and existing['status']!='approved':
+                if phone and phone!=bound['phone']:raise PermissionError('当前申请已关联预登记手机号，不能换绑；请审核后再申请调整')
+                phone=bound['phone']
             imported = None
             if phone:
                 from .member_imports import registration_match
                 imported = registration_match(db, self.ctx.scope_id, phone, user_id)
             if imported:
-                return self._link_import(db, user_id, imported, gender)
+                return self._link_import(db, user_id, imported, gender, name, level)
             member = self._touch(db, user_id, name, source)
             db.execute('UPDATE member_records SET gender=? WHERE chat_id=? AND user_id=?', (gender, self.ctx.scope_id, user_id))
             if phone is not None:
@@ -164,8 +170,12 @@ class Members:
             result = 'submitted' if member['status'] != 'approved' else 'already_registered'
             return self._record(db, user_id) | {'registration_result': result}
 
-    def _link_import(self, db, user_id, imported, gender='unknown'):
+    def _link_import(self, db, user_id, imported, gender='unknown', name='', level=None):
         """Attach an imported, admin-reviewed profile in the caller's transaction."""
+        pending = bool(imported.get('review_required'))
+        imported = dict(imported)
+        imported['name'] = imported['name'] or name
+        requested_level = imported['level'] if imported['level'] is not None else level
         before = self._record(db, user_id) or {'status': 'unregistered', 'name': ''}
         group_ids = self.validate_group_ids(json.loads(imported['group_ids']), db)
         timestamp = stamp(self.clock())
@@ -193,17 +203,22 @@ class Members:
             raise PermissionError('预登记档案已关联其他账号，请联系管理员核实')
         db.execute("UPDATE membership_applications SET status='superseded' WHERE scope_id=? AND user_id=? AND status='pending'",
                    (self.ctx.scope_id,user_id))
-        db.execute('''INSERT INTO membership_applications(scope_id,user_id,name,requested_level,phone,gender,status,
+        application_id=db.execute('''INSERT INTO membership_applications(scope_id,user_id,name,requested_level,phone,gender,status,
             submitted_at,reviewed_at,reviewed_by,note) VALUES(?,?,?,?,?,?,'approved',?,?,?,?)''',
             (self.ctx.scope_id,user_id,imported['name'],level,imported['phone'],gender,timestamp,timestamp,
-             imported['created_by'],'手机号精确关联管理员预登记档案'))
+             imported['created_by'],'手机号精确关联管理员预登记档案')).lastrowid
         audit(db,self.ctx.actor,'member.import_link',{'user_id':user_id,'scope_id':self.ctx.scope_id,'pre_registration_id':imported['id']})
+        if pending:
+            db.execute("UPDATE member_records SET status='pending',requested_level=?,level_status=?,reviewed_at=NULL,review_note='' WHERE chat_id=? AND user_id=?",
+                       (requested_level,'pending' if requested_level is not None else 'none',self.ctx.scope_id,user_id))
+            db.execute("UPDATE membership_applications SET status='pending',requested_level=?,reviewed_at=NULL,reviewed_by=NULL,note='预登记资料已补全，待审核' WHERE id=? AND scope_id=? AND user_id=?",
+                       (requested_level,application_id,self.ctx.scope_id,user_id))
         result = self._record(db,user_id)
         from .identity_notifications import record_identity_change
         record_identity_change(db, self.ctx, user_id, kind='membership',
                                before={key: before[key] for key in ('status', 'name')},
                                after={key: result[key] for key in ('status', 'name')}, at=self.clock())
-        return result | {'registration_result':'linked'}
+        return result | {'registration_result':'submitted' if pending else 'linked'}
 
     def update_details(self, user_id, phone=None, requested_level=None, db=None, gender=None):
         self._admin()

@@ -1,5 +1,6 @@
 """Transport-independent addressing, preservation, routing and authority cases."""
 import asyncio
+import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -113,13 +114,16 @@ class UnifiedEntryTests(CoreFixture):
                 simulator = client.post('/api/simulator', headers={'Authorization': 'Bearer ' + TOKEN},
                     json={'content': prefix + command, 'user_id': '1001', 'channel_id': self.ctx.channel_id})
                 assert simulator.status_code == 200, simulator.text
-                assert simulator.json()['reply'] == expected
+                # Personal links are newly issued per entry; compare the command
+                # result independently of their random bearer token.
+                normalize_link=lambda value: re.sub(r'/register#[^)]*','/register#PERSONAL',value)
+                assert normalize_link(simulator.json()['reply']) == normalize_link(expected)
                 for path in (self.bots[0]['callback_path'], '/kingsoft/callback/callback-secret-01234567890123456789'):
                     body = {'robot_key': 'robot-test', 'chatid': '266382', 'creator': '1001',
                             'ctime': str(len(command)), 'content': prefix + command}
                     assert client.post(path, json=body).status_code == 200
                 with connect(self.ctx.transport_db_path) as db:
-                    assert db.execute('SELECT reply FROM inbox ORDER BY rowid DESC LIMIT 1').fetchone()[0] == expected
+                    assert normalize_link(db.execute('SELECT reply FROM inbox ORDER BY rowid DESC LIMIT 1').fetchone()[0]) == normalize_link(expected)
             with connect(self.ctx.transport_db_path) as db:
                 assert db.execute('SELECT count(*) FROM inbox').fetchone()[0] == 4
 

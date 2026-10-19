@@ -11,10 +11,7 @@ import unicodedata
 from .db import connect, dumps, audit, stamp, now
 from .gender import normalize_gender
 
-MAX_BYTES = 2 * 1024 * 1024
-MAX_ROWS = 1000
-HEADERS = {'姓名':'name','name':'name','手机号':'phone','手机号码':'phone','手机':'phone','phone':'phone',
-           '性别':'gender','gender':'gender','自评级别':'level','自评等级':'level','等级':'level','级别':'level','level':'level','组别':'groups','分组':'groups','groups':'groups'}
+from .member_sheet import extract, MAX_BYTES, MAX_ROWS
 
 
 def normalize_phone(value, required=False):
@@ -40,11 +37,32 @@ def ensure_schema(db):
     # execute(), not executescript(): this may run inside Members.apply's transaction.
     db.execute('''CREATE TABLE IF NOT EXISTS pre_registered_members(
         id INTEGER PRIMARY KEY AUTOINCREMENT,scope_id TEXT NOT NULL,name TEXT NOT NULL,
-        phone TEXT NOT NULL,level INTEGER,group_ids TEXT NOT NULL DEFAULT '[]',
+        phone TEXT,level INTEGER,group_ids TEXT NOT NULL DEFAULT '[]',
         linked_user_id TEXT,created_by TEXT NOT NULL,created_at TEXT NOT NULL,linked_at TEXT,
         UNIQUE(scope_id,phone))''')
     if 'gender' not in {r[1] for r in db.execute('PRAGMA table_info(pre_registered_members)')}:
         db.execute("ALTER TABLE pre_registered_members ADD COLUMN gender TEXT NOT NULL DEFAULT 'unknown'")
+    columns = {r[1]: r for r in db.execute('PRAGMA table_info(pre_registered_members)')}
+    if columns['phone'][3]:
+        # Nullable phones allow incomplete imports without inventing identities.
+        # Copy every historical column and value under a savepoint.
+        db.execute('SAVEPOINT nullable_prereg_phone')
+        try:
+            sql = db.execute("SELECT sql FROM sqlite_master WHERE name='pre_registered_members'").fetchone()[0]
+            db.execute(sql.replace('pre_registered_members', 'prereg_phone_upgrade', 1).replace('phone TEXT NOT NULL', 'phone TEXT'))
+            fields = ','.join(columns)
+            db.execute(f'INSERT INTO prereg_phone_upgrade({fields}) SELECT {fields} FROM pre_registered_members')
+            db.execute('DROP TABLE pre_registered_members')
+            db.execute('ALTER TABLE prereg_phone_upgrade RENAME TO pre_registered_members')
+            db.execute('RELEASE nullable_prereg_phone')
+        except BaseException:
+            db.execute('ROLLBACK TO nullable_prereg_phone')
+            db.execute('RELEASE nullable_prereg_phone')
+            raise
+    for column, definition in (('source_key', "TEXT NOT NULL DEFAULT ''"), ('review_required', 'INTEGER NOT NULL DEFAULT 0')):
+        if column not in columns:
+            db.execute(f'ALTER TABLE pre_registered_members ADD COLUMN {column} {definition}')
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS prereg_source ON pre_registered_members(scope_id,source_key) WHERE source_key<>''")
     db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS preregistered_account_binding
         ON pre_registered_members(scope_id,linked_user_id) WHERE linked_user_id IS NOT NULL''')
     db.execute('''CREATE TABLE IF NOT EXISTS member_import_previews(
@@ -53,6 +71,7 @@ def ensure_schema(db):
 
 
 def phone_accounts(db,scope,phone):
+    if not phone:return []
     matches=[]
     for row in db.execute("SELECT m.*,COALESCE(p.name,'') AS name FROM member_records m LEFT JOIN profiles p ON p.chat_id=m.chat_id AND p.user_id=m.user_id WHERE m.chat_id=? AND m.phone<>''",(scope,)):
         try:normalized=normalize_phone(row['phone'])
@@ -62,6 +81,7 @@ def phone_accounts(db,scope,phone):
 
 
 def phone_pre_registrations(db,scope,phone):
+    if not phone:return []
     matches=[]
     for row in db.execute('SELECT * FROM pre_registered_members WHERE scope_id=?',(scope,)):
         try:normalized=normalize_phone(row['phone'])
@@ -113,7 +133,9 @@ class MemberImports:
         for row in rows:
             row['status']='linked' if row['linked_user_id'] else 'unbound'
             if status and row['status']!=status:continue
-            row['phone_masked']=masked(row.pop('phone'))
+            phone=row.pop('phone')
+            row['phone_masked']=masked(phone)
+            row['missing_fields']=[label for label,value in (('姓名',row['name']),('手机号',phone),('性别',row['gender']!='unknown'),('级别',row['level'])) if not value]
             row['group_ids']=json.loads(row['group_ids'])
             row['groups']=[{'id':gid,'name':groups.get(gid,'已移除分组')} for gid in row['group_ids']]
             row.pop('scope_id');row.pop('created_by')
@@ -121,45 +143,39 @@ class MemberImports:
         return result
 
     @staticmethod
-    def _parse(content):
-        if not isinstance(content,bytes) or not content or len(content)>MAX_BYTES:
-            raise ValueError('CSV文件须为1字节至2MiB')
-        try:text=content.decode('utf-8-sig');encoding='UTF-8'
-        except UnicodeDecodeError:
-            try:text=content.decode('gb18030');encoding='GB18030'
-            except UnicodeDecodeError:raise ValueError('CSV须为UTF-8、UTF-8 BOM或GB18030编码') from None
-        if '\x00' in text:raise ValueError('CSV内容无效')
-        reader=csv.reader(io.StringIO(text,newline=''),strict=True)
-        try:header=next(reader)
-        except (StopIteration,csv.Error):raise ValueError('CSV缺少表头') from None
-        names=[HEADERS.get(value.strip().lower()) for value in header]
-        if None in names or len(set(names))!=len(names) or not {'name','phone'}<=set(names):
-            raise ValueError('CSV仅支持姓名、手机号、性别、自评级别、组别，姓名与手机号列必填；不得导入账号或管理员角色')
-        result=[]
-        try:
-            for values in reader:
-                if not any(v.strip() for v in values):continue
-                if len(result)>=MAX_ROWS:raise ValueError('CSV最多1000条记录')
-                item={'line':reader.line_num,'name':'','phone':'','level':None,'gender':'unknown','groups':[]}
-                try:
-                    if len(values)!=len(names):raise ValueError('列数与表头不一致')
-                    raw=dict(zip(names,values));name=raw['name'].strip()
-                    if not name or len(name)>80 or any(ord(c)<32 or ord(c)==127 for c in name):raise ValueError('姓名必填，最多80字且不能包含控制字符')
-                    item['name']=name;item['phone']=normalize_phone(raw['phone'],True)
-                    item['gender']=normalize_gender(raw.get('gender', '').strip())
-                    if item['gender']=='unknown':item['warning']='性别未填写，参加男双、女双或混双前需补齐'
-                    level=raw.get('level','').strip()
-                    if level:
-                        if not re.fullmatch(r'[1-9](?:级)?',level):raise ValueError('自评级别仅支持1至9或留空')
-                        item['level']=int(level[0])
-                    groups=sorted(set(g.strip() for g in re.split(r'[;；|、]',raw.get('groups','')) if g.strip()))
-                    if len(groups)>100 or any(len(g)>60 or any(ord(c)<32 for c in g) for g in groups):raise ValueError('组别名称最多60字，多个组别用分号分隔')
-                    item['groups']=groups
-                except ValueError as error:item['error']=str(error)
-                result.append(item)
-        except csv.Error:raise ValueError('CSV引号或行结构无效') from None
-        if not result:raise ValueError('CSV没有会员记录')
-        return result,encoding
+    def _parse(content, filename='members.csv'):
+        raw_rows, metadata = extract(content, filename)
+        result = []
+        for raw in raw_rows:
+            item = {key: raw[key] for key in ('line','sheet','source_key')}
+            item.update(name='', phone='', level=None, gender='unknown', groups=[])
+            try:
+                if any(str(raw.get(k, '')).startswith('=') for k in ('name','phone','gender','level','groups')):
+                    raise ValueError('资料列含公式，请粘贴为数值后导入')
+                name = raw.get('name', '').strip()
+                if len(name)>80 or any(ord(c)<32 or ord(c)==127 for c in name):
+                    raise ValueError('姓名最多80字且不能包含控制字符')
+                item['name'] = name
+                item['phone'] = normalize_phone(raw.get('phone'))
+                if not name and not item['phone']:
+                    raise ValueError('姓名与手机号至少填写一项')
+                item['gender'] = normalize_gender(raw.get('gender', ''))
+                level = unicodedata.normalize('NFKC',raw.get('level','')).strip()
+                if level:
+                    if not re.fullmatch(r'[1-9](?:级|\.0)?',level):raise ValueError('自评级别仅支持1至9或留空')
+                    item['level'] = int(level[0])
+                groups = sorted(set(g.strip() for g in re.split(r'[;；|、,，]', raw.get('groups','')) if g.strip()))
+                if len(groups)>100 or any(len(g)>60 or any(ord(c)<32 for c in g) for g in groups):
+                    raise ValueError('组别名称最多60字')
+                item['groups'] = groups
+                missing = [label for label, value in (('姓名',name),('手机号',item['phone']),('性别',item['gender']!='unknown'),('级别',item['level'])) if not value]
+                item['missing_fields'] = missing
+                item['review_required'] = bool(missing)
+                if missing:item['warning']='待补全：'+'、'.join(missing)
+            except ValueError as error:
+                item['error']=str(error)
+            result.append(item)
+        return result, metadata
 
     def _classify(self,db,items):
         groups={r['id']:r['name'] for r in db.execute('SELECT id,name FROM member_groups WHERE chat_id=?',(self.ctx.scope_id,))}
@@ -168,6 +184,10 @@ class MemberImports:
             item=dict(original);item['status']='create'
             if item.get('error'):item['status']='error';result.append(item);continue
             phone=item['phone'];identity=(item['name'],item['level'],item['groups'])
+            if not phone:
+                existing = db.execute('SELECT id FROM pre_registered_members WHERE scope_id=? AND source_key=?',(self.ctx.scope_id,item.get('source_key',''))).fetchone()
+                if existing:item['status']='skip'
+                result.append(item);continue
             if phone in seen:
                 previous=result[seen[phone]]
                 if (previous['name'],previous['level'],previous['groups'])!=identity or previous.get('gender', 'unknown') != item.get('gender', 'unknown') or previous['status']=='error':
@@ -196,8 +216,8 @@ class MemberImports:
 
     def preview(self,content,filename='members.csv'):
         self._admin()
-        if not isinstance(filename,str) or not filename.lower().endswith('.csv'):raise ValueError('请上传.csv文件')
-        parsed,encoding=self._parse(content)
+        if not isinstance(filename,str):raise ValueError('文件名无效')
+        parsed,metadata=self._parse(content,filename)
         expires=stamp(self.clock()+timedelta(minutes=20));token=None
         with connect(self.path,True) as db:
             ensure_schema(db)
@@ -209,7 +229,7 @@ class MemberImports:
                 db.execute('INSERT INTO member_import_previews(token_hash,scope_id,admin_id,payload,expires_at,created_at) VALUES(?,?,?,?,?,?)',
                            (hashlib.sha256(token.encode()).hexdigest(),self.ctx.scope_id,self.ctx.actor,dumps(parsed),expires,stamp(self.clock())))
         visible=[{k:v for k,v in r.items() if k!='phone'}|{'phone_masked':masked(r['phone'])} for r in rows]
-        return {'token':token,'expires_at':expires if token else None,'encoding':encoding,'total':len(rows),'create_count':sum(r['status']=='create' for r in rows),
+        return {'token':token,'expires_at':expires if token else None,**metadata,'total':len(rows),'create_count':sum(r['status']=='create' for r in rows),
                 'skip_count':sum(r['status']=='skip' for r in rows),'can_commit':not errors,'errors':errors,'rows':visible}
 
     def commit(self,token):
@@ -232,10 +252,49 @@ class MemberImports:
                 for name in row['groups']:
                     found=db.execute('SELECT id FROM member_groups WHERE chat_id=? AND name=?',(self.ctx.scope_id,name)).fetchone()
                     ids.append(found[0] if found else db.execute('INSERT INTO member_groups(chat_id,name,created_at) VALUES(?,?,?)',(self.ctx.scope_id,name,stamp(self.clock()))).lastrowid)
-                db.execute('INSERT INTO pre_registered_members(scope_id,name,phone,level,gender,group_ids,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)',
-                           (self.ctx.scope_id,row['name'],row['phone'],row['level'],row.get('gender','unknown'),dumps(sorted(ids)),self.ctx.actor,stamp(self.clock())))
+                db.execute('INSERT INTO pre_registered_members(scope_id,name,phone,level,gender,group_ids,created_by,created_at,source_key,review_required) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                           (self.ctx.scope_id,row['name'],row['phone'] or None,row['level'],row.get('gender','unknown'),dumps(sorted(ids)),self.ctx.actor,stamp(self.clock()),row.get('source_key',''),int(row.get('review_required',False))))
                 count+=1
             result={'imported':count,'skipped':len(items)-count,'total':len(items),'already_committed':False}
             db.execute("UPDATE member_import_previews SET status='committed',payload=NULL,result=? WHERE token_hash=?",(dumps(result),preview['token_hash']))
             audit(db,self.ctx.actor,'member_import.commit',{'imported':count,'skipped':len(items)-count})
             return result
+
+    def create(self, data):
+        self._admin()
+        allowed={'name','phone','gender','requested_level','level','groups'}
+        if not isinstance(data,dict) or set(data)-allowed:raise ValueError('预登记字段无效')
+        stream=io.StringIO(newline='')
+        writer=csv.writer(stream)
+        writer.writerow(['姓名','手机号','性别','级别','组别'])
+        writer.writerow([data.get('name',''),data.get('phone',''),data.get('gender',''),data.get('level',data.get('requested_level')) or '',data.get('groups','')])
+        preview=self.preview(stream.getvalue().encode())
+        if not preview['can_commit']:raise ValueError(preview['errors'][0]['message'])
+        return self.commit(preview['token'])
+
+    def update(self, record_id, data):
+        self._admin()
+        if not isinstance(data,dict) or set(data)-{'phone','name','gender','level'}:raise ValueError('预登记字段无效')
+        with connect(self.path,True) as db:
+            ensure_schema(db)
+            row=db.execute('SELECT * FROM pre_registered_members WHERE scope_id=? AND id=?',(self.ctx.scope_id,record_id)).fetchone()
+            if not row:raise ValueError('预登记不存在')
+            if row['linked_user_id']:raise ValueError('已关联资料请在会员档案中修改')
+            value=dict(row)
+            for key in data:
+                if key=='phone':
+                    phone=normalize_phone(data[key],True)
+                    others=[r for r in phone_pre_registrations(db,self.ctx.scope_id,phone) if r['id']!=record_id]
+                    if others or phone_accounts(db,self.ctx.scope_id,phone):raise ValueError('手机号已存在，请核实后处理')
+                    value[key]=phone
+                elif key=='name':
+                    from .members import display_name
+                    value[key]=display_name(data[key], '')
+                elif key=='gender':value[key]=normalize_gender(data[key])
+                elif key=='level':
+                    from .members import Members
+                    value[key]=Members._level(data[key]) if data[key] is not None else None
+            db.execute('UPDATE pre_registered_members SET name=?,phone=?,gender=?,level=?,review_required=1 WHERE id=? AND scope_id=?',
+                       (value['name'],value['phone'],value['gender'],value['level'],record_id,self.ctx.scope_id))
+            audit(db,self.ctx.actor,'member_import.update',{'id':record_id,'fields':sorted(data)})
+        return next(r for r in self.list() if r['id']==record_id)

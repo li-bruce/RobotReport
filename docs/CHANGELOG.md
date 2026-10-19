@@ -1,5 +1,14 @@
 # Changes
 
+## v1.0 — 2026-10-19 · Imports and availability
+
+- Recognize Excel/CSV roster columns and incomplete records; review personal completions while preserving phone-only account linking.
+- Generate pre-registration identifiers on the server; remove account ID fields from member forms.
+- Use compact empty rosters and business-focused bot receipts.
+- Configure daily message types, sender bots and date/calendar conditions.
+- Restrict each bot's supported capabilities by date and time, including commands, AI confirmation, personal forms, help and queued delivery.
+- Add phone-friendly rule editors and concise member/admin guides.
+
 ## v1.0 — 2026-10-19
 
 - Centralize inbound addressing in `message_parser.py` for callback, simulator, connection checks and AI command execution.

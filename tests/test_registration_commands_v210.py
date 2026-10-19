@@ -27,7 +27,8 @@ class RegistrationCommandsV210(CoreFixture):
         self.assertEqual(len(rows),8)
         for name in ('张三','李四'):
             self.assertEqual(next(r['id'] for r in rows if r['name']==name),original[name])
-        self.assertIn('本人及7位代报名人员',reply)
+        self.assertEqual(reply.count('小李代报名'),7)
+        self.assertIn('报名成功',reply)
         self.assertIn('| 姓名 | 性别 | 名额 |',reply)
         self.assertIn('张三（小李代报名）',reply)
         self.assertNotIn('| 序号',reply)
@@ -38,7 +39,7 @@ class RegistrationCommandsV210(CoreFixture):
     def test_self_then_selected_guest_cancel_preserves_remaining(self):
         self.send('报名，张三，李四，王五')
         reply=self.send('取消报名')
-        self.assertIn('3人仍保留',reply)
+        self.assertIn('保留 3 位代报名同行',reply)
         self.assertEqual({r['name'] for r in self.active()},{'张三','李四','王五'})
         reply=self.send('取消张三， 王五')
         self.assertIn('2人',reply)

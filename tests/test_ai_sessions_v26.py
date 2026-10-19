@@ -160,7 +160,7 @@ class OrdinalBusinessBridgeTests(CoreFixture):
         assert self.s.registrations('2026-10-13')['registrations'] == []
         token = self.pending_match(reply)[1]
         result = self.send('AI确认 ' + token)
-        assert '报名已确认' in result
+        assert '报名成功' in result
         rows = self.s.registrations('2026-10-13')['registrations']
         assert len(rows) == 1
         assert rows[0]['session_id'] == self.s.sessions('2026-10-13')[0]['id']

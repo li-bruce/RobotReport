@@ -158,3 +158,6 @@ Each user has one current plan. A revised AI message replaces it. The confirmati
 | Mutation reports a stale revision | Reload the current object, review changes and submit using the new revision. |
 
 Use synthetic state for callback/API tests. A test bot inside production shares real membership and event data.
+
+
+[Member imports and scheduling API](MEMBER_OPERATIONS.md): automatic Excel/CSV mappings, generated preregistration IDs, reviewed profile completion, broadcast rules and bot feature time windows.

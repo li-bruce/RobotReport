@@ -48,7 +48,7 @@ class AIRoutingV23Tests(CoreFixture):
             reply = self.send('AI 我要注册', newcomer)
             make.assert_not_called()
         self.assertIn('/register#', reply)
-        self.assertIn('姓名', reply)
+        self.assertIn('填写注册资料', reply)
         self.assertEqual(Members(newcomer, self.clock).get()['status'], 'unregistered')
         with connect(newcomer.transport_db_path) as db:
             rows = [dict(row) for row in db.execute('SELECT * FROM registration_forms')]

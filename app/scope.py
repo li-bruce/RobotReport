@@ -50,6 +50,7 @@ def refresh_context(ctx):
                 default = candidates[0]
         return replace(ctx, venue_ids=venues or (), venue_restricted=venues is not None, slot_keys=slots,
                        default_venue_id=default, capabilities=capabilities, bot_name=bot['name'],
+                       capability_rules=tuple(json.loads(bot['capability_rules'])) if 'capability_rules' in bot.keys() else (),
                        receive_commands=bool(channel['receive_commands']) if channel else ctx.receive_commands,
                        daily_notifications=bool(channel['daily_notifications']) if channel else ctx.daily_notifications)
 

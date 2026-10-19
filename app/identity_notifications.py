@@ -156,6 +156,10 @@ class IdentityNotifications:
         with connect(self.path, True) as db:
             ensure_schema(db)
 
+    def _context(self, channel_id):
+        from .time_rules import bind_clock
+        return bind_clock(self.platform.context_for_channel(channel_id),self.clock)
+
     def _event(self, event_id):
         with connect(self.path) as db:
             row = db.execute('SELECT * FROM identity_notification_events WHERE id=?', (event_id,)).fetchone()
@@ -173,7 +177,7 @@ class IdentityNotifications:
             # Identity membership is shared across venues: activity slot limits
             # do not hide an identity notice in the person's own related group.
             rows = [r for r in rows if self.platform.channel(r['id'])['webhook_url']]
-            rows = [r for r in rows if self._can_notify(self.platform.context_for_channel(r['id']))]
+            rows = [r for r in rows if self._can_notify(self._context(r['id']))]
             rows.sort(key=lambda r: (r['id'] != event['preferred_channel_id'], r['id']))
             if rows:
                 selected[chat] = rows[0]['id']
@@ -225,7 +229,7 @@ class IdentityNotifications:
             if item['status'] not in ('pending','blocked') or not item['channel_id']:
                 continue
             try:
-                ctx = self.platform.context_for_channel(item['channel_id'])
+                ctx = self._context(item['channel_id'])
                 if not self._can_notify(ctx):
                     raise PermissionError('机器人未开启群内管理')
                 if ctx.chat_id != item['chat_id']:
@@ -264,7 +268,7 @@ class IdentityNotifications:
                 invalid_destination = (not channel['active'] or not channel['bot_active'] or
                                        channel['chat_id'] != item['chat_id'])
                 invalid_sender = (not invalid_destination and not self._can_notify(
-                    self.platform.context_for_channel(item['channel_id'])))
+                    self._context(item['channel_id'])))
                 if invalid_destination or invalid_sender:
                     # Disabled channels are absent from the scheduler's send
                     # loop. Mark their untouched rows visibly failed instead

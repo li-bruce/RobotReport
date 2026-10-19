@@ -58,7 +58,7 @@ def management_router(platform, principal, context, clock):
         try:
             content=await file.read(2*1024*1024+1)
             if len(content)>2*1024*1024:
-                raise ValueError('CSV文件不能超过2MiB')
+                raise ValueError('名册文件不能超过2MiB')
             return MemberImports(ctx,clock).preview(content,file.filename or 'members.csv')
         finally:
             await file.close()
@@ -72,6 +72,11 @@ def management_router(platform, principal, context, clock):
     def imported_records(status:str=None,ctx=Depends(context)):
         from .member_imports import MemberImports
         return MemberImports(ctx,clock).list(status)
+
+    @router.patch('/api/member-imports/records/{record_id}')
+    def update_imported_record(record_id:int,data:dict,ctx=Depends(context)):
+        from .member_imports import MemberImports
+        return MemberImports(ctx,clock).update(record_id,data)
 
     @router.get('/api/channels')
     def channels(user=Depends(principal)):

@@ -37,41 +37,40 @@ class Scheduler:
         # Within a shared group, prefer a sender with an outgoing webhook;
         # otherwise an unconfigured robot could consume the dedupe allocation.
         channels.sort(key=lambda channel:not bool(self.platform.channel(channel.channel_id)['webhook_url']))
+        from .time_rules import broadcast_rules, calendar_matches, bind_clock, rule_fingerprint
+        channels=[bind_clock(c,lambda:at) for c in channels]
+        sent_sessions={}
         if config['daily_enabled']:
-            for venue in service.venues():
-                if not venue['active']:continue
-                for kind,hhmm in config['reminders'].items():
-                    target=datetime.fromisoformat(at.date().isoformat()+'T'+hhmm).replace(tzinfo=TZ)
-                    if not previous<target<=at:continue
-                    sent_sessions={}
-                    for channel in channels:
-                        if not channel.daily_notifications or not supports(channel, 'enrollment'):continue
-                        scoped=Service(channel,self.clock)
-                        try:
-                            sessions=scoped.sessions(at.date().isoformat(),venue['id'])
-                        except (ValueError,PermissionError):continue
-                        sessions=[item for item in sessions if item['id'] not in sent_sessions.get(channel.chat_id,set())]
-                        if not sessions:continue
-                        remaining=[item for item in sessions if item['status']!='ended']
-                        shown=sessions if kind!='closing' else remaining
-                        if not shown:continue
-                        if kind=='roster':
-                            data=scoped.registrations(at.date().isoformat(),venue['id'])
-                            shown_ids={item['id'] for item in shown}
-                            data['sessions']=[item for item in data['sessions'] if item['id'] in shown_ids]
-                            data['registrations']=[item for item in data['registrations'] if item['session_id'] in shown_ids]
-                            text=roster(data,venue['id'])
-                        elif kind=='closing':
-                            text='# 活动提醒\n\n'+ '；'.join(f"{item['name']} {item['start']}–{item['end']}，"+('已占用，不可报名：'+escape(item['booking_notice']) if item.get('occupancies') else item['end']+'结束报名') for item in shown)
-                            if any(not item.get('occupancies') for item in shown):text+='\n\n发送 场地'+str(venue['id'])+' 报名。'
-                            if supports(channel, 'registration'):text+='新用户先发送 注册。'
-                        else:
-                            onboarding='新用户先发送 注册。' if supports(channel, 'registration') else ''
-                            action='发送 报名 或 名单。' if any(not item.get('occupancies') and item['status']!='ended' for item in shown) else '发送 名单 查看安排。'
-                            text=f"# {venue['name']} · 今日活动\n\n{action}{onboarding}\n\n"+'；'.join(f"{item['name']} {item['start']}–{item['end']}"+(' · 已占用，不可报名：'+escape(item['booking_notice']) if item.get('occupancies') else '') for item in shown)
-                        self.notifications.enqueue(text,[channel.channel_id],key=f"daily:{at.date()}:{venue['id']}:{kind}:{channel.channel_id}",
-                                                   venue_id=venue['id'],session_ids=[item['id'] for item in shown],session_snapshots=[snapshot(item) for item in shown])
-                        sent_sessions.setdefault(channel.chat_id,set()).update(item['id'] for item in shown)
+            for rule in broadcast_rules(config,sorted({c.id for c in channels})):
+                target=datetime.fromisoformat(at.astimezone(TZ).date().isoformat()+'T'+rule['time']).replace(tzinfo=TZ)
+                if not rule['enabled'] or not previous<target<=at:continue
+                if calendar_matches(rule['when'],target.date(),ctx.db_path) is not True:continue
+                for venue in service.venues():
+                    if not venue['active']:continue
+                    for kind in rule['kinds']:
+                        for channel in channels:
+                            if channel.id not in rule['bot_ids'] or not channel.daily_notifications or not supports(channel,'enrollment'):continue
+                            allocation=(target.date().isoformat(),rule['time'],kind,channel.chat_id)
+                            scoped=Service(channel,lambda:at)
+                            try:sessions=scoped.sessions(target.date().isoformat(),venue['id'])
+                            except (ValueError,PermissionError):continue
+                            shown=[item for item in sessions if item['id'] not in sent_sessions.get(allocation,set()) and (kind!='closing' or item['status']!='ended')]
+                            if not shown:continue
+                            if kind=='roster':
+                                data=scoped.registrations(target.date().isoformat(),venue['id'])
+                                shown_ids={item['id'] for item in shown}
+                                data['sessions']=[item for item in data['sessions'] if item['id'] in shown_ids]
+                                data['registrations']=[item for item in data['registrations'] if item['session_id'] in shown_ids]
+                                text=roster(data,venue['id'])
+                            else:
+                                title='报名即将结束' if kind=='closing' else '今日报名'
+                                text=f"## {escape(venue['name'])} · {title}\n\n"+'\n'.join(
+                                    f"{escape(item['name'])} {item['start']}–{item['end']}"+
+                                    (' · 🔴 已占用：'+escape(item['booking_notice']) if item.get('occupancies') else '') for item in shown)
+                            key=f"broadcast:{rule['id']}:{rule_fingerprint(rule)}:{target.date()}:{rule['time'].replace(':','')}:{venue['id']}:{kind}:{channel.channel_id}"
+                            self.notifications.enqueue(text,[channel.channel_id],key=key,
+                                                       venue_id=venue['id'],session_ids=[item['id'] for item in shown],session_snapshots=[snapshot(item) for item in shown])
+                            sent_sessions.setdefault(allocation,set()).update(item['id'] for item in shown)
         from .competitions import TournamentService
         tournaments=TournamentService(ctx.db_path)
         for notice in tournaments.due_notifications(at):

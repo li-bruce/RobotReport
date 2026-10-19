@@ -184,7 +184,7 @@ class ProfileChanges:
             self.members.require_approved(allow_admin=False, bot_access=False)
             from .registration import create_form
             url = create_form(self.ctx, self.clock, purpose='profile')
-            return ('[填写本人资料调整申请](' + url + ')\n\n' if url else '') + '分组、等级、姓名、性别及手机号由会员管理员审核后生效。\n也可发送：申请分组 提高组 / 申请等级 5级。\n发送 我的资料申请 查看进度。'
+            return '[填写资料调整申请](' + url + ')' if url else '发送：申请分组 提高组 / 申请等级 5级。'
         if text in ('可选分组', '分组列表'):
             groups = self.groups()
             return '**可申请分组**\n\n' + ('、'.join(escape(g['name']) for g in groups) or '暂无分组，请联系管理员。')

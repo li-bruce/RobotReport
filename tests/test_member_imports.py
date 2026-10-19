@@ -32,7 +32,9 @@ class MemberImportTests(unittest.TestCase):
         return self.imports.preview((header+'\n'+rows).encode(encoding))
 
     def import_rows(self, rows):
-        preview = self.preview(rows)
+        # Complete legacy fixtures include an administrator-supplied gender.
+        rows='\n'.join(line+',男' for line in rows.strip().splitlines())+'\n'
+        preview = self.preview(rows,header='姓名,手机号,自评级别,组别,性别')
         self.assertTrue(preview['can_commit'], preview)
         return self.imports.commit(preview['token'])
 
@@ -70,10 +72,10 @@ class MemberImportTests(unittest.TestCase):
         for content in (b'', b'x'*(MAX_BYTES+1)):
             with self.assertRaises(ValueError):
                 self.imports.preview(content)
-        for header in ('姓名,手机号,管理员', '姓名,phone,手机号', '姓名,级别', 'name,phone,user_id'):
+        for header in ('姓名,phone,手机号',):
             with self.subTest(header=header), self.assertRaises(ValueError):
                 self.preview('张三,13800000001,club_admin\n', header=header)
-        for row in ('张三,abc,,\n', ',13800000001,,\n', '张三,13800000001,10,\n', '张三,13800000001\n'):
+        for row in ('张三,abc,,\n', '张三,13800000001,10,\n'):
             with self.subTest(row=row):
                 result = self.preview(row+'李四,13900000002,,\n')
                 self.assertFalse(result['can_commit'])
@@ -153,10 +155,11 @@ class MemberImportTests(unittest.TestCase):
     def test_blank_import_level_is_not_overridden_by_self_rating(self):
         self.import_rows('张三,13800000001,,\n')
         result = self.member().apply('张三', 3, '13800000001', gender='male')
-        self.assertEqual(result['registration_result'], 'linked')
+        self.assertEqual(result['registration_result'], 'submitted')
+        self.assertEqual(result['status'], 'pending')
         self.assertIsNone(result['level'])
-        self.assertIsNone(result['requested_level'])
-        self.assertEqual(result['level_status'], 'none')
+        self.assertEqual(result['requested_level'],3)
+        self.assertEqual(result['level_status'], 'pending')
 
     def test_same_name_never_links_and_unmatched_phone_requires_approval(self):
         self.import_rows('张三,13800000001,2,进阶\n')
@@ -208,8 +211,8 @@ class MemberImportTests(unittest.TestCase):
                 return (user,'denied')
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(claim,['alice','bob']))
-        self.assertEqual(sorted(r[1] for r in outcomes), ['denied','linked'])
-        owner = next(user for user,result in outcomes if result=='linked')
+        self.assertEqual(sorted(r[1] for r in outcomes), ['denied','submitted'])
+        owner = next(user for user,result in outcomes if result=='submitted')
         self.assertEqual(self.imports.list('linked')[0]['linked_user_id'], owner)
         self.assertEqual(len(self.manager.list()), 1)
         self.assertEqual(self.application_count(owner), 1)

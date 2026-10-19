@@ -28,7 +28,7 @@ def _platform(ctx):
     return Platform(ctx.platform_root)
 
 
-def _bound_context(ctx, row, platform):
+def _bound_context(ctx, row, platform, clock=now):
     """The token grants only the identity saved when its link was issued."""
     if row['channel_id']:
         channel = platform.channel(row['channel_id'], active=True)
@@ -45,6 +45,8 @@ def _bound_context(ctx, row, platform):
     if not channel['receive_commands']:
         raise PermissionError('原注册群通道已暂停接收业务，请联系管理员')
     bound = platform.context_for_channel(channel['id'], row['user_id'], False, 'registration_form')
+    from .time_rules import bind_clock
+    bound=bind_clock(bound,clock)
     require_capability(bound, 'registration')
     if (bound.db_path.resolve() != ctx.db_path.resolve()
             or bound.transport_db_path.resolve() != ctx.transport_db_path.resolve()):
@@ -74,7 +76,7 @@ def _result(member, ctx=None):
     outcome = member.get('registration_result',
                          'already_registered' if member['status'] == 'approved' else 'submitted')
     messages = {
-        'submitted': '注册申请已提交，等待管理员审核。无需回群确认，审核通过后即可报名。',
+        'submitted': '注册申请已提交，等待管理员审核。',
         'linked': '已关联管理员预登记资料，注册完成。现在可以回群报名。',
         'already_registered': '您已注册，无需重复提交。可以回群使用会员功能。',
     }
@@ -104,6 +106,8 @@ def create_form(ctx, clock=now, *, purpose='registration'):
         if (fresh.id, fresh.chat_id) != (ctx.id, ctx.chat_id) or not fresh.receive_commands:
             raise PermissionError('原注册群通道已变更，请重新发送 注册')
         ctx = fresh
+    from .time_rules import bind_clock
+    ctx=bind_clock(ctx,clock)
     require_capability(ctx, 'registration')
     if purpose == 'profile':
         Members(ctx, clock).require_approved(allow_admin=False, bot_access=False)
@@ -128,7 +132,7 @@ def form_status(ctx, token, clock=now):
         row = db.execute("SELECT * FROM registration_forms WHERE token_hash=? AND expires_at>? AND status IN ('draft','submitted','confirmed')", (digest(token), stamp(clock()))).fetchone()
     if not row:
         raise ValueError('注册链接已失效，请回群发送 注册 获取新链接')
-    bound = _bound_context(ctx, row, platform)
+    bound = _bound_context(ctx, row, platform, clock)
     members = Members(bound, clock)
     member = _active_member(members)
     with connect(bound.db_path) as business:
@@ -146,7 +150,11 @@ def form_status(ctx, token, clock=now):
         return {'status': row['status'], 'purpose': 'profile', 'profile': values, 'groups': changes.groups()}
     if row['status'] == 'confirmed' and member:
         return _result(member | {'registration_result': 'already_registered' if member['status'] == 'approved' else 'submitted'}, bound)
-    return {'status': row['status']}
+    if not member:
+        return {'status':row['status']}
+    values={key:member.get(key) for key in ('name','gender','requested_level')}
+    if values.get('name')==bound.actor:values['name']=''
+    return {'status':row['status'],'profile':{'name':values.get('name',''),'gender':values.get('gender',''),'level':values.get('requested_level')}}
 
 
 def _apply_form(bound, row, data, clock):
@@ -164,7 +172,7 @@ def _apply_form(bound, row, data, clock):
         if changes:
             request = changes.submit(data, db=business)
             result = {'status': 'completed', 'purpose': 'profile', 'request_id': request['id'],
-                      'name': existing['name'], 'message': '资料调整申请已提交，等待会员管理员审核。原资料在审核通过前继续使用。'}
+                      'name': existing['name'], 'message': '资料调整已提交，等待管理员审核。'}
             business.execute('INSERT INTO registration_form_receipts VALUES(?,?,?,?,?,?,?)',
                 (bound.id, row['token_hash'], bound.scope_id, row['chat_id'], row['user_id'], dumps(result), stamp(clock())))
             return existing, result
@@ -184,7 +192,7 @@ def _apply_form(bound, row, data, clock):
             if level is not None:
                 Members._level(level)
             from .member_imports import normalize_phone
-            phone = normalize_phone(data.get('phone') or '')
+            phone = normalize_phone(data.get('phone', (existing or {}).get('phone')) or '')
             member = members.apply(name, level, phone, db=business, gender=data.get('gender'))
         result = _result(member, bound)
         business.execute('INSERT INTO registration_form_receipts VALUES(?,?,?,?,?,?,?)',
@@ -203,7 +211,7 @@ def submit_form(ctx, token, data, clock=now):
         row = db.execute("SELECT * FROM registration_forms WHERE token_hash=? AND expires_at>? AND status IN ('draft','submitted','confirmed')", (digest(token), stamp(clock()))).fetchone()
         if not row:
             raise ValueError('注册链接已失效，请回群发送 注册 获取新链接')
-        bound = _bound_context(ctx, row, platform)
+        bound = _bound_context(ctx, row, platform, clock)
         member, result = _apply_form(bound, row, data, clock)
         _mark_confirmed(db, row['token_hash'])
     return result
@@ -219,7 +227,7 @@ def confirm_form(ctx, code, clock=now):
         row = db.execute("SELECT * FROM registration_forms WHERE code=? AND chat_id=? AND user_id=? AND expires_at>? AND status='submitted'", (code, ctx.chat_id, ctx.actor, stamp(clock()))).fetchone()
         if not row:
             raise ValueError('注册确认已失效或不属于本人，请重新发送 注册')
-        bound = _bound_context(ctx, row, platform)
+        bound = _bound_context(ctx, row, platform, clock)
         data = json.loads(row['payload'])
         member, result = _apply_form(bound, row, data, clock)
         _mark_confirmed(db, row['token_hash'])

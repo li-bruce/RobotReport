@@ -10,7 +10,8 @@ const events=fs.readFileSync(path.join(__dirname,'../app/static/event-workspace.
 const registrationScript=fs.readFileSync(path.join(__dirname,'../app/static/register.js'),'utf8');
 const registrationPage=fs.readFileSync(path.join(__dirname,'../app/static/register.html'),'utf8');
 const availability=fs.readFileSync(path.join(__dirname,'../app/static/availability-workspace.js'),'utf8').split("document.addEventListener('click'")[0];
-const code=availability+'\n'+workspace+'\n'+events+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'"));
+const timeWorkspace=fs.readFileSync(path.join(__dirname,'../app/static/time-workspace.js'),'utf8');
+const code=timeWorkspace+'\n'+availability+'\n'+workspace+'\n'+events+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'"));
 const calls=[];
 const context=vm.createContext({URL,Intl,Date,Map,Set,Symbol,Number,String,Array,JSON,AbortController,FormData,fetch:async (url,options)=>{calls.push({url,options});return {ok:true,status:200,json:async()=>({items:[]})};},location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null}});
 vm.runInContext(code,context);

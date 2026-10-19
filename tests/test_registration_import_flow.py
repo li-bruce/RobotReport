@@ -34,7 +34,7 @@ class RegistrationImportFlow(unittest.TestCase):
         return response.json()
     def sim(self,user,text,channel=None,status=200):
         return self.call('POST','/api/simulator',{'user_id':user,'content':text,'channel_id':(channel or self.channel)['id']},status)
-    def csv(self):return '姓名,手机号,自评级别,组别\n登记姓名,13800000001,2,周一组\n'
+    def csv(self):return '姓名,手机号,自评级别,组别,性别\n登记姓名,13800000001,2,周一组,男\n'
     def test_csv_import_phone_binding_and_already_registered_skip(self):
         template=self.client.get('/api/member-imports/template',headers=self.headers)
         self.assertEqual(template.status_code,200)

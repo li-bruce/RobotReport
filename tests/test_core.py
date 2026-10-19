@@ -133,7 +133,7 @@ class CoreTests(CoreFixture):
             self.assertEqual(Members(self.member,self.clock).get()['status'], 'approved')
             Members(self.ctx,self.clock).review('1001','approved',name='张三')
             self.assertIn('张三', await router.run('报名+2 接龙'))
-            self.assertIn('报名已确认', await router.run('2026年10月13日20时报名'))
+            self.assertIn('报名成功', await router.run('2026年10月13日20时报名'))
             self.assertIn('张三', await router.run('2026-10-13 名单'))
             self.assertIn('已取消', await router.run('取消报名'))
             with self.assertRaises(PermissionError):

@@ -14,7 +14,7 @@ Current application version: **v1.0**. The interface and bot commands are curren
 
 | Area | Capabilities |
 | --- | --- |
-| Members | Personal registration links, application review, CSV pre-registration, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
+| Members | Personal registration links, application review, Excel/CSV pre-registration with automatic column matching, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
 | Profile changes | Request changes to name, gender, phone, level or groups through a bot or personal form; review in the admin page or chat, retain history and notify the member. |
 | Registration | Book today's or future sessions; add named guests or `+N` guests; cancel yourself or selected guests; configure regular, substitute and waiting places. |
 | Venues and schedules | Multiple venues, recurring rules, date-specific plans, individual holiday plans, event reservations and other occupancy. |
@@ -22,13 +22,15 @@ Current application version: **v1.0**. The interface and bot commands are curren
 | Daily competitions | Select an eligible format from session participants, generate draws, record scores and resume unfinished competitions. |
 | Large events | Registration windows and keywords, staff, groups, draws, schedules, results, photo/file archives and notifications through selected bots. |
 | Match history | Casual singles/doubles records, personal results, partner combinations and opponent statistics. |
-| Bots and groups | Multiple bots in one group; **one current group per bot**. Configure capabilities, venues, sessions and member eligibility rules; help adapts to each bot. |
-| Messages | Compose, preview and send text, images and file links; configure scheduled registration reminders. |
+| Bots and groups | Multiple bots in one group; **one current group per bot**. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
+| Messages | Compose, preview and send text, images and file links; schedule reminders by message type, bot, date, workday/weekend/holiday conditions and time. |
 | Optional AI | Natural-language business requests, multi-step plans, numbered previews and simple `确认` confirmation before changes. |
 
 Membership approval, club roles and event-specific staff roles are separate. Approved members share their identity across this backend's bots and venues. Expired membership prevents new registrations while preserving access to history.
 
-New registration requires a **name and gender**; self-rating and phone are optional. CSV pre-registration requires name and phone. Account linking uses exact normalized phone matching, never name-only matching. This matches administrator-entered records; **SMS ownership verification is not implemented**.
+New registration requires a **name and gender**; self-rating and phone are optional. Imports accept incomplete profiles with at least a name or phone; members complete missing information through a personal link for administrator review. Internal IDs are generated automatically. Account linking uses exact normalized phone matching, never name-only matching. This matches administrator-entered records; **SMS ownership verification is not implemented**.
+
+See [member imports and time rules](docs/MEMBER_OPERATIONS.md) for setup and integration fields.
 
 ### Competition formats
 

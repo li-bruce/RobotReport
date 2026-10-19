@@ -34,7 +34,8 @@ class Notifications:
             raise ValueError('请明确选择至少一个通知群通道')
         destinations=[];groups=set()
         for cid in dict.fromkeys(channel_ids):
-            ctx=self.platform.context_for_channel(cid)
+            from .time_rules import bind_clock
+            ctx=bind_clock(self.platform.context_for_channel(cid),self.clock)
             service=Service(ctx,self.clock)
             if venue_id is not None:
                 service.venue(venue_id)
@@ -129,6 +130,9 @@ class Notifications:
             cid=destination['channel_id']
             try:
                 ctx=self.destinations([cid],item['venue_id'],item['session_ids'],item['tournament_id'])[0]
+                from .time_rules import broadcast_delivery_allowed
+                if not broadcast_delivery_allowed(item['dedupe_key'],ctx,self.clock(),Service(ctx,self.clock).config()):
+                    raise PermissionError('播报规则已变更或消息已过期')
                 ids=Outbox(ctx).enqueue(item['text'],'notice:'+item['dedupe_key'])
                 state,error='queued',None
             except (ValueError,PermissionError):

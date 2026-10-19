@@ -71,9 +71,9 @@ class NineLevelTests(unittest.TestCase):
 
     def test_csv_one_four_nine_optional_and_phone_binding_preserve_grade(self):
         imports = MemberImports(self.admin, self.clock)
-        rows = ['姓名,手机号,自评级别,组别']
+        rows = ['姓名,手机号,自评级别,组别,性别']
         for index, value in enumerate(('1', '4级', '9', ''), 1):
-            rows.append(f'导入球友{index},1380000000{index},{value},')
+            rows.append(f'导入球友{index},1380000000{index},{value},,男')
         preview = imports.preview(('\n'.join(rows) + '\n').encode('utf-8-sig'))
         self.assertTrue(preview['can_commit'], preview)
         self.assertEqual([r['level'] for r in preview['rows']], [1, 4, 9, None])
@@ -81,9 +81,9 @@ class NineLevelTests(unittest.TestCase):
         for index, value in enumerate((1, 4, 9, None), 1):
             person = self.member('imported-' + str(index))
             result = person.apply('提交姓名', phone=f'1380000000{index}', gender='male')
-            self.assertEqual(result['status'], 'approved')
+            self.assertEqual(result['status'], 'approved' if value is not None else 'pending')
             self.assertEqual(result['level'], value)
-        for value in ('0', '10', '-1', 'true', '1.0', '9.5'):
+        for value in ('0', '10', '-1', 'true', '9.5'):
             with self.subTest(value=value):
                 preview = imports.preview(f'姓名,手机号,自评级别\n错误球友,13900000001,{value}\n'.encode())
                 self.assertFalse(preview['can_commit'])

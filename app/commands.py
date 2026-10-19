@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import secrets
+from .time_rules import effective_capabilities
 from .db import connect, dumps, stamp, now
 from .service import Service, day_value, time_value, clean_name
 from .messages import escape, roster, tournament_text, table, mention, registration_table
@@ -64,8 +65,9 @@ class Commands:
                 approved = db.execute('SELECT 1 FROM member_records WHERE chat_id=? AND user_id=? AND status=\'approved\'', (ctx.scope_id, ctx.actor)).fetchone()
                 roles = [row[0] for row in db.execute('SELECT role FROM user_roles WHERE user_id=? AND scope_type=\'club\' AND scope_id=?', (ctx.actor, ctx.scope_id))] if approved else []
             ctx = replace(ctx, is_admin='club_admin' in roles, permissions=permissions_for_roles(roles))
-        self.ctx = ctx
-        self.service = Service(ctx, self.clock)
+        from .time_rules import bind_clock
+        self.ctx = bind_clock(ctx,self.clock)
+        self.service = Service(self.ctx, self.clock)
         if enforce_access:
             from .bot_access import require_access
             require_access(ctx,self.clock)
@@ -101,7 +103,7 @@ class Commands:
             require_capability(self.ctx, 'management')
         if text in ('场地占用','占用查询','场地安排'):
             require_capability(self.ctx, 'enrollment')
-        if (text in ('注册','注册申请','注册资料','会员状态','我的资料','我的会籍','续费记录','会员有效期','性别','补充性别')
+        if (text in ('补全资料','注册','注册申请','注册资料','会员状态','我的资料','我的会籍','续费记录','会员有效期','性别','补充性别')
                 or re.match(r'^(?:注册|设置姓名|确认注册)\s+', text)
                 or re.fullmatch(r'(?:补充)?性别\s*[:：]?\s*(?:男|女)', text)
                 or re.fullmatch(r'自评\s*(?:\d+|[一二三四五六七八九])\s*级', text)):
@@ -163,21 +165,27 @@ class Commands:
         members = Members(self.ctx, self.clock)
         # A platform display name can prefill a record; it never approves membership.
         member = members.touch(name=name if name and name != self.ctx.actor else None)
+        if text=='补全资料':
+            text='修改资料' if member['status']=='approved' else '注册'
         if text in ('注册','注册申请'):
             if member['status']=='approved':
-                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。发送 注册资料 查看会员状态。" + ('发送 名单 查看活动。' if supports(self.ctx, 'enrollment') else '发送 帮助 查看可用功能。')
+                if member.get('gender') not in ('male','female') or not member.get('phone') or not member.get('level'):
+                    from .registration import create_form
+                    link=create_form(self.ctx,self.clock,purpose='profile')
+                    if link:return f"**{escape(member['name'])} · 已注册**\n\n[补全个人资料]({link})"
+                return f"**{escape(member['name'])} · 已注册**"
             if member['status']=='suspended':
                 return '会员已停用，请联系管理员处理，无需重复注册。'
             from .registration import create_form
             url = create_form(self.ctx, self.clock)
-            intro = '姓名、性别必填；自评级别、手机号选填。已由管理员批量登记的，请填写登记手机号，匹配后直接关联；其他申请由管理员审核。'
+            intro = '姓名、性别必填；级别、手机号选填。'
             if url:
-                return mention(self.ctx.actor) + '\n\n# 会员注册\n\n' + intro + f'\n\n[填写并提交注册申请]({url})\n\n链接已关联当前账号，填写后在页面直接提交即可。请使用发给本人的链接，20分钟内有效。'
+                return mention(self.ctx.actor) + f'\n\n[填写注册资料]({url})'
             return intro + '\n\n发送：注册 张三 男 2级；也可发送 注册 张三 男。'
         register = re.fullmatch(r'(?:注册|设置姓名)\s+(.+)', text)
         if register:
             if member['status']=='approved':
-                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。发送 修改资料 可申请调整个人信息。"
+                return f"**{escape(member['name'])} · 已注册**"
             tokens = register[1].strip().split()
             phone, level, gender = None, None, None
             if tokens and re.fullmatch(r'(?:1[3-9]\d{9}|\+[1-9]\d{7,14})', tokens[-1]):
@@ -192,18 +200,18 @@ class Commands:
                 raise ValueError('姓名和性别必填，例如：注册 张三 男 2级；也可发送 注册 打开表单')
             member = members.apply(' '.join(tokens), level, phone, gender=gender)
             if member.get('registration_result')=='linked':
-                return f"{escape(member['name'])}，已根据手机号关联预登记资料，注册成功。" + ('可直接发送 报名 或 名单。' if supports(self.ctx, 'enrollment') else '发送 帮助 查看可用功能。')
+                return f"**{escape(member['name'])} · 资料已关联，注册成功**"
             if member['status'] == 'approved':
-                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。"
-            return f"已提交 {escape(member['name'])} 的注册资料，等待管理员审核。自评级别通过审核后显示。"
+                return f"**{escape(member['name'])} · 已注册**"
+            return f"**{escape(member['name'])} · 注册申请已提交，待审核**"
         confirmation = re.fullmatch(r'确认注册\s+([a-f0-9]{10})', text)
         if confirmation:
             from .registration import confirm_form
             member = confirm_form(self.ctx, confirmation[1], self.clock)
             if member.get('registration_result')=='linked':
-                return f"{escape(member['name'])}，已根据手机号关联预登记资料，注册成功。" + ('可直接发送 报名 或 名单。' if supports(self.ctx, 'enrollment') else '发送 帮助 查看可用功能。')
+                return f"**{escape(member['name'])} · 资料已关联，注册成功**"
             if member['status'] == 'approved':
-                return f"{escape(member['name'])}，您已注册，会员资格已通过，无需重复注册。"
+                return f"**{escape(member['name'])} · 已注册**"
             return f"{escape(member['name'])}，注册申请已提交，等待管理员审核。"
         if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:(?:申请|修改|调整)(?:等级|分组)|资料(?:待审核|审核列表|查看|通过|拒绝))', text):
             from .profile_changes import ProfileChanges
@@ -251,7 +259,7 @@ class Commands:
             members.set_gender(gender_input[1])
             return '性别已保存为' + gender_input[1] + '，可继续' + ('报名或' if supports(self.ctx, 'enrollment') else '') + '组织比赛。'
         if text in ('性别', '补充性别'):
-            return '请发送 性别 男 或 性别 女，补齐或更正个人资料；历史对局快照保持不变。'
+            return '发送：性别 男 / 性别 女。'
         self_rating = re.fullmatch(r'自评\s*(\d+|[一二三四五六七八九])\s*级', text)
         if self_rating:
             level = int(self_rating[1]) if self_rating[1].isdigit() else '一二三四五六七八九'.index(self_rating[1]) + 1
@@ -262,7 +270,7 @@ class Commands:
         ai_entry = re.fullmatch(r'(?:/?ai)(?:[\s:：]+(.*))?', text, re.I | re.S)
         ai_body = (ai_entry[1] or '').strip() if ai_entry else None
         if re.fullmatch(r'AI\s*帮助', text, re.I) or ai_entry and ai_body in ('', '帮助', 'help', '?', '？'):
-            return command_help(member, self.ctx.is_admin, 'AI',permissions=self.ctx.permissions,capabilities=self.ctx.capabilities)
+            return command_help(member, self.ctx.is_admin, 'AI',permissions=self.ctx.permissions,capabilities=effective_capabilities(self.ctx))
         if re.fullmatch(r'AI\s*状态', text, re.I) or ai_entry and ai_body == '状态':
             enabled = self.service.config()['ai']['enabled']
             return '**AI业务助手：' + ('已开启' if enabled else '已关闭') + '**\n\n发送 AI 加一句业务需求；普通指令始终直接处理。发送 帮助 AI 查看用法。'
@@ -312,7 +320,7 @@ class Commands:
         if re.fullmatch(r'(?:开启|关闭)AI', text, re.I):
             enabled = text.startswith('开启')
             self.service.update_config({'ai': {'enabled': enabled}})
-            return '全后台AI业务助手已' + ('开启。请发送 AI 加业务需求；写操作先展示提案，确认后执行。' if enabled else '关闭。未完成提案不能继续确认；普通指令仍可使用。')
+            return '**AI 助手已' + ('开启**' if enabled else '关闭**')
         if ai_entry:
             if not allow_ai:
                 raise ValueError('AI提案不能再次调用AI')
@@ -334,7 +342,7 @@ class Commands:
                 from .casual import CasualMatches
                 games = CasualMatches(self.ctx, self.clock).statistics(user_id=self.ctx.actor, venue_id=venue_id)
                 result += '\n\n## 对战汇总\n\n' + table(['完赛', '获胜', '失利', '胜率'], [[games['played'], games['wins'], games['losses'], str(games['win_rate']) + '%']])
-                result += '\n\n发送 我的对战历史 或 我的对战统计 查看对局、搭档和对手。'
+                pass  # Detailed history is available on explicit request.
             return result
         guest_names = None
         if re.match(r'^报名(?:\s+接龙)?[,，]', text):
@@ -352,12 +360,12 @@ class Commands:
                 return roster(data, venue_id)
             owned = [r for r in data['registrations'] if r['user_id'] == self.ctx.actor and r['status'] == 'active']
             total_guests = sum(r['guest_index'] > 0 for r in owned)
-            return f"报名已确认：{session['date']} {session['start']}–{session['end']}，场地{venue_id}。当前本人及{total_guests}位代报名人员。\n\n" + registration_table(owned) + '\n\n发送 名单 查看完整名单。'
+            return f"## 报名成功 · {session['date']}\n\n场地{venue_id} · {escape(session['name'])} {session['start']}–{session['end']}\n\n" + registration_table(owned)
         if text == '取消报名':
             result = self.service.cancel(self.ctx.actor, **selection)
             remaining = sum(r['user_id'] == self.ctx.actor and r['guest_index'] > 0 and r['status'] == 'active' for r in result['registrations'])
-            reply = '已取消本人报名，后续报名已依次递补。' if result['cancelled'] else '本人当前未报名，无需取消。'
-            return reply + (f'\n\n你代报名的{remaining}人仍保留。发送 取消姓名 可单独取消。' if remaining else '')
+            reply = '**已取消本人报名**' if result['cancelled'] else '本人尚未报名。'
+            return reply + (f'\n\n保留 {remaining} 位代报名同行。' if remaining else '')
         if text in ('名单', ''):
             session_id = None
             if selection['at'] or selection['number']:

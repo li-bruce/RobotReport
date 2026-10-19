@@ -15,6 +15,7 @@ import tempfile
 
 from .ai_operations import execute_step, describe_step, bind_target
 from .ai_plan_store import AiPlanStore, PLAN_VERSION
+from .time_rules import effective_capabilities
 from .db import connect, dumps
 from .messages import escape, table
 
@@ -46,7 +47,7 @@ def snapshot(commands):
     ctx = commands.ctx
     result = {'business': _database_digest(ctx.db_path),
               'scope': [ctx.id,ctx.chat_id,ctx.actor,ctx.scope_id,ctx.is_admin,list(ctx.permissions),list(ctx.venue_ids),ctx.venue_restricted,list(ctx.slot_keys) if ctx.slot_keys is not None else None,ctx.default_venue_id,ctx.receive_commands,
-                        list(ctx.capabilities) if ctx.capabilities is not None else None]}
+                        list(effective_capabilities(ctx))]}
     if ctx.platform_root:
         result['registry'] = _database_digest(Path(ctx.platform_root)/'registry.sqlite3',{'bots','bot_channels'})
     with connect(ctx.transport_db_path) as db:

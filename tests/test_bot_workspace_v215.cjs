@@ -4,8 +4,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
 class Fields{constructor(values){this.values=values;}get(key){return this.values[key]??null;}getAll(key){const v=this.values[key];return Array.isArray(v)?v:v==null?[]:[v];}has(key){return Object.hasOwn(this.values,key);}}
 const node=s=>nodes[s]||(nodes[s]={value:'',innerHTML:'',textContent:'',isConnected:true,hidden:false,addEventListener(){},querySelector:()=>({}),querySelectorAll:()=>[]});
-const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});
-vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
+const ctx=vm.createContext({structuredClone,URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});
+vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js','time-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
 const run=code=>vm.runInContext(code,ctx),plain=value=>JSON.parse(JSON.stringify(value));
 ctx.catalog=[{id:'daily_events',name:'每日赛事',default_enabled:true},{id:'registration',name:'会员注册',default_enabled:true},{id:'enrollment',name:'活动报名',default_enabled:true},{id:'ai',name:'AI 助手',default_enabled:false},{id:'large_events',name:'大型赛事',default_enabled:false},{id:'management',name:'群内管理',default_enabled:false}];
 ctx.bots=[{id:'student',name:'学生机器人',capabilities:['registration'],active:true,venue_ids:[1],slot_keys:['slot:1']},{id:'other',name:'另一机器人',capabilities:['enrollment'],active:true,venue_ids:[1]}];
@@ -31,7 +31,7 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
   for(const key of ['ai','large_events','management'])assert.doesNotMatch(ctx.modal,new RegExp('value="'+key+'" checked'));
   await run("editBotScope('student')");assert.doesNotMatch(ctx.modal,/value="daily_events" checked/);assert.match(ctx.modal,/value="registration" checked/);
   ctx.data={name:'学生机器人',active:'on',capabilities:[],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
-  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:[],venue_ids:[1],slot_keys:null,user_policy:{enabled:false,match:'all',rules:[]}});
+  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:[],capability_rules:[],venue_ids:[1],slot_keys:null,user_policy:{enabled:false,match:'all',rules:[]}});
   await run('editGroup(null)');assert.doesNotMatch(ctx.modal,/name="chat_id"|Robot Key/);await run("forms['group-form'](new FormData({name:'新建群'}),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'新建群'});
   const form=node('#channel-form');form.elements={group_id:{value:'group-a'},webhook_url:{value:''}};
   await run("editChannelScope('student','student-channel')");for(const name of ['group_id','callback_url','webhook_url'])assert.match(ctx.modal,new RegExp('name="'+name+'"'));

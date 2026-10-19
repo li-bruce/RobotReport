@@ -42,7 +42,7 @@ def connect(path, write=False):
 
 DEFAULT_CONFIG = {
     'admin_user_ids': [], 'reminders': {'open': '09:30', 'closing': '17:30', 'roster': '18:00'},
-    'daily_enabled': True, 'capacity': 8, 'substitute_capacity': 4,
+    'daily_enabled': True, 'broadcast_rules': None, 'capacity': 8, 'substitute_capacity': 4,
     'public_base_url': '', 'ai': {'enabled': False, 'model': 'deepseek-ai/DeepSeek-V3.2',
                                 'base_url': 'https://api.siliconflow.cn/v1', 'api_key': '', 'confirmation_minutes': 5},
     'theme': {'accent': '#197661', 'banner_url': '', 'enabled': True},

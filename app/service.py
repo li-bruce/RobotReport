@@ -65,7 +65,8 @@ class Service:
     def __init__(self, context: BotContext, clock=now):
         if not isinstance(context, BotContext):
             raise PermissionError('缺少可信机器人上下文')
-        self.ctx = context
+        from .time_rules import bind_clock
+        self.ctx = bind_clock(context,clock)
         self.path = context.db_path
         self.clock = clock
         initialize_scope(self.path)
@@ -76,6 +77,7 @@ class Service:
     def config(self, secret=False):
         with connect(self.path) as db:
             result = {r['key']: json.loads(r['value']) for r in db.execute('SELECT * FROM config')}
+        result.setdefault('broadcast_rules',None)
         result['ai'].setdefault('confirmation_minutes', 5)
         if secret:
             from .integrations import ai_endpoints
@@ -88,7 +90,7 @@ class Service:
     def update_config(self, data):
         if not isinstance(data, dict):
             raise ValueError('配置字段不支持')
-        activity_fields = {'reminders', 'daily_enabled', 'capacity', 'substitute_capacity', 'scoring_mode', 'leader_user_ids'}
+        activity_fields = {'reminders', 'broadcast_rules', 'daily_enabled', 'capacity', 'substitute_capacity', 'scoring_mode', 'leader_user_ids'}
         for permission in {'activity.manage' if key in activity_fields else 'system.manage' for key in data}:
             self.require_admin(permission)
         if not data:
@@ -118,6 +120,13 @@ class Service:
         if not isinstance(updated['daily_enabled'], bool) or not isinstance(updated['ai']['enabled'], bool):
             raise ValueError('开关必须为布尔值')
         integer(updated['ai']['confirmation_minutes'], 1, 1440, 'AI确认有效期（分钟）')
+        if 'broadcast_rules' in data:
+            from .time_rules import normalize_broadcasts
+            ids=None
+            if self.ctx.platform_root:
+                with connect(self.ctx.platform_root/'registry.sqlite3') as registry:
+                    ids={r[0] for r in registry.execute("SELECT id FROM bots WHERE deleted_at=''")}
+            updated['broadcast_rules']=normalize_broadcasts(updated['broadcast_rules'],ids)
         for value in updated['reminders'].values():
             time_value(value)
         from .integrations import ai_endpoints, validate_ai_url

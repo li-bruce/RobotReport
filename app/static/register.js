@@ -39,7 +39,7 @@ function showResult(result,moveFocus=false){
   if(result.purpose==='profile'){
     document.querySelector('#result').hidden=false;
     document.querySelector('#result-title').textContent='资料申请已提交';
-    document.querySelector('#summary').textContent=`${result.name} · 资料申请${result.request_id}`;
+    document.querySelector('#summary').textContent=result.name;
     document.querySelector('#result-message').textContent=result.message;
     document.querySelector('#next-step').textContent='回群发送“我的资料申请”查看审核进度。';
     status.textContent='';if(moveFocus)document.querySelector('#result-title').focus();return;
@@ -63,6 +63,7 @@ async function initialize(){
     const result=await call('GET');
     if(result.status==='completed'){showResult(result);return;}
     if(result.purpose==='profile')profileForm(result);
+    else if(result.profile)for(const key of ['name','gender','level'])form.elements[key].value=result.profile[key]??'';
     form.hidden=false;submitButton.disabled=false;status.textContent='';
   }catch(error){form.hidden=true;status.textContent=error.message;retryButton.hidden=false;}
 }
@@ -71,7 +72,8 @@ form.addEventListener('submit',async event=>{
   event.preventDefault();if(submitting)return;submitting=true;form.setAttribute('aria-busy','true');submitButton.disabled=true;submitButton.textContent='正在提交…';status.textContent='';
   try{
     const data=new FormData(form),payload={name:data.get('name'),gender:data.get('gender'),level:data.get('level')?Number(data.get('level')):null,phone:data.get('phone')};
-    if(purpose==='profile'){payload.group_ids=data.getAll('group_ids').map(Number);if(!payload.phone.trim())delete payload.phone;}
+    if(!payload.phone.trim())delete payload.phone;
+    if(purpose==='profile')payload.group_ids=data.getAll('group_ids').map(Number);
     const result=await call('POST',payload);
     showResult(result,true);
   }catch(error){status.textContent=error.message;status.focus();}

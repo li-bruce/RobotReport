@@ -9,11 +9,12 @@ _semaphores = {}
 async def interpret_limited(ctx, text, context, config, clock=now, *, navigation=False):
     from .scope import refresh_context
     from .bot_capabilities import require_capability
-    ctx = refresh_context(ctx)
+    from .time_rules import bind_clock, effective_capabilities
+    ctx = bind_clock(refresh_context(ctx),clock)
     from .bot_access import require_access
     require_access(ctx,clock)
     require_capability(ctx, 'ai')
-    context = {**context, 'bot_capabilities': ctx.capabilities}
+    context = {**context, 'bot_capabilities': effective_capabilities(ctx)}
     from .ai import interpret
     if navigation:
         from .ai import classify_feature

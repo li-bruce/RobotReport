@@ -62,7 +62,7 @@ class AudienceTests(test_core.CoreFixture):
             with self.subTest(text=text),self.assertRaisesRegex(PermissionError,'使用条件'):self.run_command(text)
         newcomer=replace(self.member,actor='brand-new')
         result=self.run_command('注册 测试新用户 女 3级',newcomer)
-        self.assertIn('等待',result)
+        self.assertIn('待审核',result)
         self.assertEqual(Members(newcomer,self.clock).get()['status'],'pending')
 
     def test_roles_are_constraints_not_grants_and_admins_cannot_bypass(self):
