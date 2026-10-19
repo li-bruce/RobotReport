@@ -19,15 +19,25 @@ from .help import command_help, scoped_help
 HELP = command_help({'status':'approved'})
 
 
-def strip_mention(content):
-    value = re.sub(r'<at\b[^>]*>.*?</at>', '', content, flags=re.I | re.S)
-    value = re.sub(r'^\s*@\S+\s+', '', value)
-    return html.unescape(value).strip()
+def strip_mention(content, bot_name=''):
+    value = html.unescape(content)
+    value = re.sub(r'<at\b[^>]*>.*?</at>', '', value, flags=re.I | re.S)
+    if bot_name:
+        # Chat display names may insert spaces around punctuation. Match the
+        # entire configured name before the legacy single-word mention form;
+        # never search ahead for a command or consume its arguments.
+        letters = ''.join(html.unescape(bot_name).split())
+        if letters:
+            name = r'[^\S\r\n]*'.join(re.escape(letter) for letter in letters)
+            match = re.match(r'^\s*[@＠][^\S\r\n]*' + name + r'(?=\s|$)', value)
+            if match:
+                return value[match.end():].strip()
+    return re.sub(r'^\s*[@＠]\S+\s+', '', value).strip()
 
 
-def parse(content, default_venue=1, today=None):
+def parse(content, default_venue=1, today=None, *, bot_name=''):
     from .selection_parser import parse_selection
-    return parse_selection(strip_mention(content), default_venue, today)
+    return parse_selection(strip_mention(content, bot_name), default_venue, today)
 
 
 def cancellation_guests(text):
@@ -165,7 +175,7 @@ class Commands:
         if not isinstance(content, str) or not 0 < len(content) <= 4000:
             raise ValueError('请输入1至4000字指令')
         self.refresh_context()
-        text, selection = parse(content, venue_id or self.ctx.default_venue_id, today=self.clock().date())
+        text, selection = parse(content, venue_id or self.ctx.default_venue_id, today=self.clock().date(), bot_name=self.ctx.bot_name)
         venue_id = selection['venue_id']
         self.service.venue(venue_id)
         self.require_command_capabilities(text)
@@ -329,7 +339,7 @@ class Commands:
             prefix = ' '.join(value for value in (selection['day'], selection['at'], f"第{selection['number']}场" if selection['number'] else None) if value)
             return await self.propose((prefix + ' ' + body).strip(), venue_id)
         from .casual_dialog import handle_casual
-        casual_reply = handle_casual(self.ctx, text, venue_id, self.clock, explicit_venue=bool(re.match(r'^场地\s*\d+', strip_mention(content))))
+        casual_reply = handle_casual(self.ctx, text, venue_id, self.clock, explicit_venue=bool(re.match(r'^场地\s*\d+', strip_mention(content, self.ctx.bot_name))))
         if casual_reply is not None:
             return casual_reply
         if text in ('我的统计', '统计', '全部统计', '统计 全部'):

@@ -49,7 +49,7 @@ def refresh_context(ctx):
             if candidates and default not in candidates:
                 default = candidates[0]
         return replace(ctx, venue_ids=venues or (), venue_restricted=venues is not None, slot_keys=slots,
-                       default_venue_id=default, capabilities=capabilities,
+                       default_venue_id=default, capabilities=capabilities, bot_name=bot['name'],
                        receive_commands=bool(channel['receive_commands']) if channel else ctx.receive_commands,
                        daily_notifications=bool(channel['daily_notifications']) if channel else ctx.daily_notifications)
 

@@ -840,7 +840,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             if not db.execute("INSERT OR IGNORE INTO inbox(event_id,status,created_at,channel_id) VALUES(?,'processing',?,?)", (event_id, stamp(clock()),ctx.channel_id)).rowcount:
                 return {'result': 'ok'}
         try:
-            if strip_mention(content) in ('连接','连接测试'):
+            if strip_mention(content, ctx.bot_name) in ('连接','连接测试'):
                 reply='**机器人连接成功**\n发送“帮助”查看本机器人的可用功能。'
             else:
                 reply = await Commands(ctx, clock).run(content, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)

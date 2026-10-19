@@ -128,6 +128,7 @@ class BotContext:
     slot_keys: tuple | None = None
     permissions: tuple = ()
     capabilities: tuple | None = None
+    bot_name: str = ''
 
     def can(self, permission, db=None):
         if permission not in ALL_PERMISSIONS:

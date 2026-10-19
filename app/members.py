@@ -11,7 +11,7 @@ from .gender import normalize_gender
 def display_name(value, user_id):
     value = re.sub(r'[\x00-\x1f\x7f]', '', str(value or '')).strip()
     if not value or len(value) > 80 or value == str(user_id):
-        raise ValueError('请提供真实用户名；用户 ID 不能作为姓名。发送 注册 姓名 提交审核')
+        raise ValueError('请提供真实用户名；用户 ID 不能作为姓名。发送 注册 打开本人注册表单')
     if re.fullmatch(re.escape(str(user_id)) + r'\+\d+', value):
         raise ValueError('用户 ID 不能作为姓名')
     return value
@@ -379,7 +379,7 @@ class Members:
         if allow_admin and admin and user_id == self.ctx.actor:
             return member
         if not member or not member['name'] or member['status'] == 'unregistered':
-            raise PermissionError('请先发送 注册 姓名，审核通过后即可使用会员功能')
+            raise PermissionError('请先发送 注册，打开本人注册表单；审核通过后即可使用会员功能')
         if member['status'] != 'approved':
             status = {'rejected':'未通过，请修改资料重新提交','suspended':'已停用，请联系管理员','pending':'待审核'}.get(member['status'],'尚未通过')
             raise PermissionError(f'会员资料{status}，请等待管理员审核后使用会员功能')
