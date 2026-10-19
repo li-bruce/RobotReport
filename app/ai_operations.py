@@ -152,7 +152,8 @@ async def execute_step(commands, step):
         sid = service.resolve_session(**selection(a), for_write=False)['id'] if a.get('number') or a.get('hour') is not None else None
         return roster(service.registrations(a.get('date'), venue, sid), venue)
     if op in ('PersonalStats','AllStats'):
-        return await commands.run('场地' + str(venue) + (' 我的统计' if op=='PersonalStats' else ' 统计'), allow_ai=False)
+        from .message_parser import MessageInput
+        return await commands.run(MessageInput('场地' + str(venue) + (' 我的统计' if op=='PersonalStats' else ' 统计')), allow_ai=False)
     if op == 'StartDailyPlan':
         return DailyPlanning(ctx,commands.clock).begin(selection(a), a['discipline'], a['assignment_strategy'], a.get('title'), doubles_category=a['doubles_category'])
     if op == 'DailyPlan':
@@ -232,5 +233,7 @@ async def execute_step(commands, step):
         service.save_slots(venue, saved + [{k:a[k] for k in fields if k in a}])
         return '每周活动时段已新增：' + describe_step(step)[1]
     if op == 'FeatureRoute': return await commands.route_feature(a['feature_id'])
-    if op == 'Help': return await commands.run('帮助',allow_ai=False)
+    if op == 'Help':
+        from .message_parser import MessageInput
+        return await commands.run(MessageInput('帮助'),allow_ai=False)
     raise ValueError('此业务操作尚不可执行，请使用对应管理页面')

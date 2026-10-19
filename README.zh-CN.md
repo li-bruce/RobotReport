@@ -181,6 +181,8 @@ state/               私有运行数据，不进入 Git
 
 服务安装、升级、备份恢复和迁移见[部署说明](docs/DEPLOYMENT.zh-CN.md)。回调报文、认证及 API 示例见[对接说明](docs/INTEGRATION.zh-CN.md)。数据库、凭据、上传文件和备份均不应提交到仓库。
 
+统一输入契约见[消息解析方案](docs/MESSAGE_PARSING.zh-CN.md)，版本改动见[变更记录](docs/CHANGELOG.md)。
+
 ## 许可证
 
 项目代码和文档采用 [MIT 许可证](LICENSE)。内置字体和节假日数据保留各自许可与署名，见[第三方组件说明](THIRD_PARTY_NOTICES.md)。

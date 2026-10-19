@@ -4,6 +4,7 @@ import hashlib
 import re
 
 from . import env_settings
+from .message_parser import message_input
 
 
 LEGACY_AI_URL = 'https://api.siliconflow.cn/v1'
@@ -77,14 +78,13 @@ def incoming_json(platform, bot_id, token, body):
     channel = platform.channel(channels[0]['id'], active=True)
     if not json_webhook(channel['webhook_url'], platform.root):
         raise PermissionError('此机器人未配置通用 JSON Webhook')
-    if not isinstance(body, dict) or set(body) - {'event_id','group_id','user_id','text','display_name'}:
+    if not isinstance(body, dict) or set(body) - {'event_id','group_id','user_id','text','display_name','text_format','mentions'}:
         raise ValueError('JSON Webhook 字段无效')
     event_id = body.get('event_id')
     if not isinstance(event_id, str) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', event_id):
         raise ValueError('event_id 须为稳定且唯一的消息标识')
     text = body.get('text')
-    if not isinstance(text, str) or not 0 < len(text) <= 4000:
-        raise ValueError('text 须为1至4000字')
+    message = message_input(text, body.get('text_format', 'command'), body.get('mentions'))
     name = body.get('display_name')
     if name is not None and (not isinstance(name, str) or len(name) > 80):
         raise ValueError('display_name 格式无效')
@@ -92,4 +92,4 @@ def incoming_json(platform, bot_id, token, body):
     return {'chatid': body.get('group_id'), 'creator': body.get('user_id'),
             'content': text, 'creator_name': name, 'robot_key': channel['robot_key'],
             'ctime': str(int(hashlib.sha256(event_id.encode()).hexdigest()[:15], 16)),
-            '_event_id': event_id}
+            '_event_id': event_id, '_message': message}

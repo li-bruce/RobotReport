@@ -2,7 +2,6 @@
 from datetime import timedelta
 from dataclasses import replace
 import hashlib
-import html
 import json
 import re
 import secrets
@@ -14,30 +13,11 @@ from .planning import DailyPlanning, STRATEGIES
 from .score_parser import parse_score
 from .tournaments import Tournaments
 from .bot_capabilities import require_capability, supports
+from .message_parser import MessageInput, normalize_message, parse, strip_mention
+from .selection_parser import parse_selection
 
 from .help import command_help, scoped_help
 HELP = command_help({'status':'approved'})
-
-
-def strip_mention(content, bot_name=''):
-    value = html.unescape(content)
-    value = re.sub(r'<at\b[^>]*>.*?</at>', '', value, flags=re.I | re.S)
-    if bot_name:
-        # Chat display names may insert spaces around punctuation. Match the
-        # entire configured name before the legacy single-word mention form;
-        # never search ahead for a command or consume its arguments.
-        letters = ''.join(html.unescape(bot_name).split())
-        if letters:
-            name = r'[^\S\r\n]*'.join(re.escape(letter) for letter in letters)
-            match = re.match(r'^\s*[@＠][^\S\r\n]*' + name + r'(?=\s|$)', value)
-            if match:
-                return value[match.end():].strip()
-    return re.sub(r'^\s*[@＠]\S+\s+', '', value).strip()
-
-
-def parse(content, default_venue=1, today=None, *, bot_name=''):
-    from .selection_parser import parse_selection
-    return parse_selection(strip_mention(content, bot_name), default_venue, today)
 
 
 def cancellation_guests(text):
@@ -172,10 +152,11 @@ class Commands:
         return self.require_event(self.tournaments().get(found[0]['id'], venue_id))
 
     async def run(self, content, name=None, venue_id=None, allow_ai=True, expected=None):
-        if not isinstance(content, str) or not 0 < len(content) <= 4000:
-            raise ValueError('请输入1至4000字指令')
         self.refresh_context()
-        text, selection = parse(content, venue_id or self.ctx.default_venue_id, today=self.clock().date(), bot_name=self.ctx.bot_name)
+        message = normalize_message(content, self.ctx.bot_name)
+        if message.text in ('连接', '连接测试'):
+            return '**机器人连接成功**\n发送“帮助”查看本机器人的可用功能。'
+        text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())
         venue_id = selection['venue_id']
         self.service.venue(venue_id)
         self.require_command_capabilities(text)
@@ -339,7 +320,7 @@ class Commands:
             prefix = ' '.join(value for value in (selection['day'], selection['at'], f"第{selection['number']}场" if selection['number'] else None) if value)
             return await self.propose((prefix + ' ' + body).strip(), venue_id)
         from .casual_dialog import handle_casual
-        casual_reply = handle_casual(self.ctx, text, venue_id, self.clock, explicit_venue=bool(re.match(r'^场地\s*\d+', strip_mention(content, self.ctx.bot_name))))
+        casual_reply = handle_casual(self.ctx, text, venue_id, self.clock, explicit_venue=bool(re.match(r'^场地\s*\d+', message.text)))
         if casual_reply is not None:
             return casual_reply
         if text in ('我的统计', '统计', '全部统计', '统计 全部'):
@@ -477,7 +458,7 @@ class Commands:
             if not candidates:
                 return '未找到本场地、本群且人员匹配的未结束赛事。可先报名后发起赛制。'
             if len(candidates) == 1:
-                return await self.run(f'场地{venue_id} 继续比赛 {candidates[0]["id"]}', name, allow_ai=False)
+                return await self.run(MessageInput(f'场地{venue_id} 继续比赛 {candidates[0]["id"]}'), name, allow_ai=False)
             return '存在多场未结束赛事，请选择：\n\n' + '\n\n'.join(f"继续比赛 {e['id']} · {escape(e['title'])}" for e in candidates)
         event_command = re.fullmatch(r'赛事\s*(\d+)\s+(报名(?:\+(\d+))?|取消报名|名单)', text)
         if event_command:
@@ -507,7 +488,7 @@ class Commands:
         require_capability(self.ctx, 'ai')
         feature = feature_descriptor(self.ctx, feature_id, self.clock)
         if feature['allowed'] and feature['mode'] == 'command' and feature.get('command'):
-            return await self.run(feature['command'], allow_ai=False)
+            return await self.run(MessageInput(feature['command']), allow_ai=False)
         return feature['message']
 
     def event_ai_actions(self, event):
@@ -575,7 +556,7 @@ class Commands:
                 'resumable_tournament_ids': [e['id'] for e in events if 'resume' in e['actions']]}
 
     def snapshot(self, command):
-        text, selection = parse(command)
+        text, selection = parse_selection(command)
         self.require_command_capabilities(text)
         result = {'bot_capabilities':list(self.ctx.capabilities) if self.ctx.capabilities is not None else None}
         if re.fullmatch(r'自评[1-9]级', text):
@@ -706,7 +687,7 @@ class Commands:
             raise PermissionError('AI提案身份绑定无效')
         intent = proposal.get('intent')
         writes = {'Register','CancelRegistration','StartDailyPlan','DailyPlan','ResumeTournament','RecordScore','ToggleAI','SelfLevel','EventAction','EventRegistration'}
-        query_text, _ = parse(command)
+        query_text, _ = parse_selection(command)
         valid = {
             'SelfLevel': bool(re.fullmatch(r'自评[1-9]级', query_text)),
             'EventAction': bool(re.fullmatch(r'.+?[,，]\s*(暂停比赛|关闭比赛|晋级)', query_text)),
@@ -758,7 +739,7 @@ class Commands:
                 label = next((k for k,v in STRATEGIES.items() if v == arguments['assignment_strategy']), '随机')
                 detail = f'\n\n分配方式：{label}；确认后显示人数与可选赛制，再选择比赛形式。'
             return '**AI 计划待确认 · 尚未执行**\n\n1. '+escape(command)+detail+'\n\n回复 **确认** 执行；修改请发 **AI + 修改意见**；放弃请发 **取消计划**。'
-        return '**AI 查询 · 后台结果**\n\n' + await self.run(command, allow_ai=False)
+        return '**AI 查询 · 后台结果**\n\n' + await self.run(MessageInput(command), allow_ai=False)
 
     def ai_policy_epoch(self):
         with connect(self.ctx.db_path) as db:
@@ -825,10 +806,10 @@ class Commands:
             if payload['intent'] == 'StartDailyPlan':
                 from .ai import StartDailyPlan
                 arguments = StartDailyPlan.model_validate(payload['arguments'])
-                _, selection = parse(payload['command'])
+                _, selection = parse_selection(payload['command'])
                 result = DailyPlanning(self.ctx,self.clock).begin(selection,arguments.discipline,arguments.assignment_strategy,arguments.title,doubles_category=arguments.doubles_category)
             else:
-                result = await self.run(payload['command'], name, allow_ai=False, expected=payload['snapshot'])
+                result = await self.run(MessageInput(payload['command']), name, allow_ai=False, expected=payload['snapshot'])
         except BaseException:
             with connect(self.ctx.transport_db_path, True) as db:
                 db.execute("UPDATE ai_pending SET status='failed' WHERE token=?", (token,))

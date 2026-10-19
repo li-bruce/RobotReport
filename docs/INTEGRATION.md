@@ -16,6 +16,8 @@ Send POST JSON to the callback:
 
 `event_id` is a stable unique string (1–128 ASCII letters, digits, `_ . : -`) for deduplication; reuse it when retrying an event. `display_name` is optional. `group_id` and `user_id` must be 1–100 ASCII letters, digits or `_ @ . : -`. `text` is 1–4000 characters. Do not send role, permission or destination claims. The response `{"result":"ok"}` acknowledges processing; replies arrive separately at the sending endpoint.
 
+`text_format` defaults to `command`: send only the business body, with no bot address. For original platform text, use `mentions` plus explicit `start`/`end`/`kind` spans; `legacy` supports older raw text. All business commands use the same parsing pipeline. See [Unified message parsing](MESSAGE_PARSING.md) for examples, Unicode offsets and compatibility rules.
+
 Outgoing JSON:
 
 ```json

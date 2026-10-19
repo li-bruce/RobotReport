@@ -21,7 +21,7 @@ from tests.test_core import CoreFixture
     '<at user_id="bot">机器人</at>2026-10-14第２场报名',
 ])
 def test_fixed_registration_accepts_literal_order_and_chinese_ordinals(text):
-    assert parse(text, today=date(2026, 10, 13)) == (
+    assert parse(text, today=date(2026, 10, 13), bot_name='机器人') == (
         '报名', {'day': '2026-10-14', 'venue_id': 1, 'at': None, 'number': 2})
 
 
@@ -142,7 +142,7 @@ class OrdinalBusinessBridgeTests(CoreFixture):
         return asyncio.run(self.commands().run(text))
 
     def test_fixed_screenshot_enroll_and_cancel_target_second_session(self):
-        reply = self.send('@机器人 2026-10-14 第二场 报名')
+        reply = self.send('@一号 2026-10-14 第二场 报名')
         assert '20:30' in reply
         rows = self.s.registrations('2026-10-14')['registrations']
         assert len(rows) == 1

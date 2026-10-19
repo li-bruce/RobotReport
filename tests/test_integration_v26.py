@@ -83,7 +83,7 @@ class IntegrationV26Tests(CoreFixture):
 
     def test_screenshot_static_command_selects_second_session(self):
         self.now=datetime(2026,10,13,9,tzinfo=TZ)
-        reply=asyncio.run(self.commands().run('@机器人 2026-10-14 第二场 报名'))
+        reply=asyncio.run(self.commands().run('@一号 2026-10-14 第二场 报名'))
         self.assertIn('20:30',reply)
         with connect(self.ctx.db_path) as db:
             row=db.execute("SELECT s.* FROM sessions s JOIN registrations r ON r.session_id=s.id WHERE r.user_id='1001' AND r.status='active'").fetchone()

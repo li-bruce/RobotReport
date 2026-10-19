@@ -181,6 +181,8 @@ state/               Private runtime data; ignored by Git
 
 See [Deployment](docs/DEPLOYMENT.md) for service installation, upgrades and data migration, and [Integration](docs/INTEGRATION.md) for callback payloads, authentication and API examples. Keep databases, credentials, uploads and backups out of Git.
 
+Maintainers can find the shared inbound contract in [Message parsing](docs/MESSAGE_PARSING.md) and updates in the [Changelog](docs/CHANGELOG.md).
+
 ## License
 
 Project code and documentation use the [MIT License](LICENSE). Bundled fonts and holiday data retain their own notices; see [Third-party notices](THIRD_PARTY_NOTICES.md).

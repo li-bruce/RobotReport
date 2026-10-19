@@ -24,7 +24,6 @@ from tests.test_core import CoreFixture, TOKEN
     ('&lt;at id="bot"&gt;喂 - 一组专用&lt;/at&gt; 注册', '喂-一组专用'),
     ('@羽球 [A](一组)+ 注册', '羽球 [A](一组)+'),
     ('@注册 助手 注册', '注册 助手'),
-    ('@喂 注册', '喂-一组专用'),
     ('注册', '喂-一组专用'),
 ])
 def test_bot_name_and_whitespace_variants(message, name):
@@ -37,9 +36,9 @@ def test_only_leading_complete_name_is_removed_and_command_arguments_are_preserv
     assert strip_mention('@喂 - 一组专用 注册 张三 男 3级', name) == '注册 张三 男 3级'
     assert strip_mention('@喂 - 一组专用 AI 帮我查明天的名单', name) == 'AI 帮我查明天的名单'
     assert strip_mention('报名，@张三，李四', name) == '报名，@张三，李四'
-    assert strip_mention('@喂 - 一组专用其他 注册', name) != '注册'
-    assert strip_mention('@喂\n- 一组专用 注册', name) != '注册'
-    assert strip_mention('@喂 - 二组专用 注册', name) != '注册'
+    for message in ('@喂 - 一组专用其他 注册', '@喂\n- 一组专用 注册', '@喂 - 二组专用 注册', '@喂 注册'):
+        with pytest.raises(ValueError, match='完整的机器人提及'):
+            strip_mention(message, name)
 
 
 class MentionRegistrationTests(CoreFixture):

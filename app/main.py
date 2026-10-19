@@ -22,7 +22,8 @@ from .service import Service
 from .members import Members
 from .membership_terms import MembershipTerms
 from .password_auth import PasswordAuth
-from .commands import Commands, strip_mention
+from .commands import Commands
+from .message_parser import message_input
 from .tournaments import Tournaments
 from .messages import Outbox, tournament_text
 from .media import Media, MAX_BYTES
@@ -768,7 +769,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         member=platform.context_for_channel(channel_id,user_id,False,'simulator')
         profile=Members(replace(member,is_admin=True),clock).get(user_id)
         member=replace(member,is_admin=bool(profile and profile['status']=='approved' and 'club_admin' in profile['roles']))
-        reply=await Commands(member,clock).run(data['content'],data.get('name'),int(data.get('venue_id',member.default_venue_id)))
+        message=message_input(data['content'],data.get('text_format','legacy'),data.get('mentions'))
+        reply=await Commands(member,clock).run(message,data.get('name'),int(data.get('venue_id',member.default_venue_id)))
         return {'reply':reply,'mode':'simulator','notice':'已作用于统一后台的业务数据；没有发送群消息'}
 
     @app.get('/api/ai/capabilities')
@@ -840,10 +842,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             if not db.execute("INSERT OR IGNORE INTO inbox(event_id,status,created_at,channel_id) VALUES(?,'processing',?,?)", (event_id, stamp(clock()),ctx.channel_id)).rowcount:
                 return {'result': 'ok'}
         try:
-            if strip_mention(content, ctx.bot_name) in ('连接','连接测试'):
-                reply='**机器人连接成功**\n发送“帮助”查看本机器人的可用功能。'
-            else:
-                reply = await Commands(ctx, clock).run(content, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)
+            message = body['_message'] if generic else message_input(content, 'legacy')
+            reply = await Commands(ctx, clock).run(message, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)
         except (ValueError, PermissionError) as exc:
             reply = str(exc)
         except BaseException:
