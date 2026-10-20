@@ -23,7 +23,7 @@ run("state.bots[0].venue_ids=null");
 const options=run("channelOptions(rows,['a','b'])");
 assert.equal((options.match(/ checked/g)||[]).length,2);
 assert.match(options,/同一群可选择多个机器人/);assert.ok(!options.includes('<script>'));
-assert.match(read('scope-workspace.js'),/把这个地址填到金山协作/);
+assert.match(read('scope-workspace.js'),/把这个地址填到机器人平台/);
 assert.match(read('event-workspace.js'),/同群通知只发一次/);
 
 (async()=>{

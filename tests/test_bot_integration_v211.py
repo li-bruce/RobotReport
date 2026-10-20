@@ -153,7 +153,7 @@ class BotIntegrationTests(unittest.TestCase):
         self.caps(['registration'])
         self.assertEqual(asyncio.run(Outbox(ctx).deliver_one(self.platform)), 'failed')
 
-    def test_registration_notice_chooses_management_bot_once(self):
+    def test_registration_notice_chooses_applicant_registration_bot_once(self):
         self.caps(['registration'])
         self.caps(['management'], 1)
         Members(self.ctx(), self.clock).touch('张三')
@@ -163,8 +163,11 @@ class BotIntegrationTests(unittest.TestCase):
         notices = IdentityNotifications(self.platform, self.clock)
         result = notices.dispatch(eid)
         self.assertEqual(result['status'], 'queued')
-        self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[1])
-        self.assertEqual(Outbox(self.ctx()).list(), [])
+        self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[0])
+        self.assertEqual(len(Outbox(self.ctx()).list()), 1)
+        self.assertEqual(Outbox(self.ctx(1)).list(), [])
+        notices.dispatch(eid)
+        self.assertEqual(len(Outbox(self.ctx()).list()), 1)
 
     def test_backend_global_admin_remains_independent_of_bot_modules(self):
         for i in range(2): self.caps([], i)

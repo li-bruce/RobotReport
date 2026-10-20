@@ -68,6 +68,11 @@ def management_router(platform, principal, context, clock):
         from .member_imports import MemberImports
         return MemberImports(ctx,clock).commit(data.get('token'))
 
+    @router.post('/api/member-imports/matches')
+    def resolve_import_matches(data:dict,ctx=Depends(context)):
+        from .member_imports import MemberImports
+        return MemberImports(ctx,clock).resolve(data.get('token'),data.get('choices'))
+
     @router.get('/api/member-imports/records')
     def imported_records(status:str=None,ctx=Depends(context)):
         from .member_imports import MemberImports

@@ -43,6 +43,7 @@ function botStatus(bot,channel){
   if(!isActive(bot.active))return ['已停用',''];
   if(!channel)return ['待连接','amber'];
   if(!isActive(channel.active))return ['已暂停',''];
+  if(channel.connection_status==='connected')return [channel.connection_mode==='receive_only'?'仅接收':channel.connection_mode==='send_only'?'仅发送':'已连接','green'];
   if(channel.connection_status==='needs_test')return ['待测试发送','amber'];
   if(channel.connection_status==='waiting_callback')return ['待配置回调','amber'];
   if(channel.connection_status==='waiting_message'||channel.awaiting_callback)return ['等待群内验证','amber'];
@@ -61,16 +62,12 @@ function compactBotCard({bot,channel,legacy}){
 }
 async function renderBotWorkspace(epoch){
   const [result,channels,catalog,known,slots]=await Promise.all([api('/api/bots'),loadChannels(),api('/api/bot-capabilities'),api('/api/groups'),scopeSlots()]);if(!isCurrent(epoch))return;
-  state.bots=asList(result,'bots');state.page.botCapabilities=asList(catalog,'capabilities');state.page.botGroups=asList(known,'groups');state.page.botScopeSlots=slots;
-  const groups=groupedBots(state.bots,channels),count=state.page.botGroups.length;
-  $('#main').innerHTML=head('机器人与群','先建群，再连接机器人。每个机器人服务一个群。',btn('新建群','group-new','')+btn(`${icon('plus')}新建机器人`,'bot-new','primary'),'BOTS & GROUPS')+`<div class="robot-overview"><span><strong>${count}</strong> 个群</span><span><strong>${state.bots.length}</strong> 个机器人</span><a href="/guide/admin#robots" target="_blank" rel="noopener">接入说明 ↗</a></div><div class="stack robot-clusters">${groups.map(g=>{
-    const key=`group:${g.id}`;
-    return `<section class="panel robot-cluster" data-group-id="${attr(g.id)}" data-chat-id="${attr(g.chat_id)}"><details data-disclosure-key="${attr(key)}"${disclosureOpen(key,true)}><summary class="robot-cluster-summary"><span><h2>${e(g.name)}</h2><span class="robot-group-id">${g.chat_id?'群 ID · '+e(g.chat_id):g.unbound?'选择已有群并配置连接':'等待机器人自动识别群 ID'}</span></span><span class="badge outline">${g.entries.length} 个机器人</span></summary><div class="robot-cluster-body">${!g.unbound?`<div class="robot-cluster-tools">${btn('重命名','group-edit','small quiet',`data-id="${attr(g.id)}"`)}${btn('添加机器人','bot-new','small',`data-group-id="${attr(g.id)}"`)}${btn('删除群','group-delete','small danger-quiet',`data-id="${attr(g.id)}"`)}</div>`:''}${g.entries.map(compactBotCard).join('')||'<p class="robot-empty">尚未添加机器人</p>'}</div></details></section>`;
-  }).join('')}</div>${!groups.length?empty('先新建一个群','填写群名称即可，群 ID 会自动识别。'):''}`;
+  state.bots=asList(result,'bots');state.channels=channels;state.page.botCapabilities=asList(catalog,'capabilities');state.page.botGroups=asList(known,'groups');state.page.botScopeSlots=slots;
+  if(state.botGroupFilter&&!state.page.botGroups.some(g=>g.id===state.botGroupFilter))state.botGroupFilter='';
+  $('#main').innerHTML=robotWorkspaceTabs()+(state.route==='bot-links'?robotRelationsMarkup():robotManagerMarkup());
   state.botDisclosure??=new Map();
   $$('[data-disclosure-key]',$('#main')).forEach(detail=>detail.addEventListener('toggle',()=>{if(detail.isConnected)state.botDisclosure.set(detail.dataset.disclosureKey,detail.open);}));
-  if(typeof clearTimeout==='function')clearTimeout(state.botRefreshTimer);
-  if(channels.some(c=>c.connection_status!=='connected')&&typeof setTimeout==='function')state.botRefreshTimer=setTimeout(()=>{if(isCurrent(epoch))renderBotWorkspace(epoch).catch(()=>{});},5000);
+  if(state.route==='bot-links')bindRelationGraph();
 }
 function removeBotGroup(id){
   const group=(state.page.botGroups||[]).find(g=>g.id===id);if(!group)return;
@@ -85,16 +82,16 @@ async function editGroup(id,returnBot){
 async function editBotScope(id,preset={}){
   const epoch=state.epoch,bot=state.bots.find(b=>String(b.id)===String(id))||{},[slots,catalog,attributes]=await Promise.all([scopeSlots(),api('/api/bot-capabilities'),api('/api/bot-user-attributes')]);if(epoch!==state.epoch)return;
   state.page.botCapabilities=asList(catalog,'capabilities');const enabled=new Set(botCapabilities(bot));
-  openModal(id?'机器人设置':'新建机器人',`<form id="bot-form">${field('机器人名称','name',bot.name||'','text','required maxlength="80"')}<fieldset class="robot-capability-field"><legend>业务组合</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong><small>${e(c.description||'')}</small></span></label>`).join('')}</div></fieldset><details class="robot-scope-settings"><summary>场地与场次范围</summary>${scopeControls(bot,slots,{bot:true})}</details>${botPolicyForm(bot.user_policy)}<details class="robot-scope-settings"><summary>功能开放时间 · ${(bot.capability_rules||[]).length} 条规则</summary><p class="caption">仅开放规则限制可用时间；关闭规则优先。</p><div id="bot-time-rules"></div></details>${id?`<label class="check-label robot-active"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label>`:''}${formFooter(id?'保存设置':'创建并连接群')}</form>`,true);bindScopeControls($('#bot-form'));
+  openModal(id?'机器人设置':'新建机器人',`<form id="bot-form">${field('机器人名称','name',bot.name||'','text','required maxlength="80"')}<fieldset class="robot-capability-field"><legend>业务组合</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong><small>${e(c.description||'')}</small></span></label>`).join('')}</div></fieldset><details class="robot-scope-settings"><summary>场地与场次范围</summary>${scopeControls(bot,slots,{bot:true})}</details>${botPolicyForm(bot.user_policy)}<details class="robot-scope-settings"><summary>功能开放时间 · ${(bot.capability_rules||[]).length} 条规则</summary><p class="caption">仅开放规则限制可用时间；关闭规则优先。</p><div id="bot-time-rules"></div></details>${id?`<label class="check-label robot-active"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label>`:''}${formFooter(id?'保存设置':'创建机器人')}</form>`,true);bindScopeControls($('#bot-form'));
   const readPolicy=bindBotPolicy($('#bot-form'),bot.user_policy,attributes);
   const readTimeRules=bindTimeRules($('#bot-time-rules'),bot.capability_rules,{mode:'capabilities',capabilities:()=>[...$('#bot-form').querySelectorAll('[name="capabilities"]:checked')].map(el=>el.value)});
   $('#bot-form').querySelectorAll('[name="capabilities"]').forEach(el=>el.addEventListener('change',()=>readTimeRules.refresh()));
-  bindForm('bot-form',async(data,_form,context)=>{const result=await api(id?`/api/bots/${encodeURIComponent(id)}`:'/api/bots',{method:id?'PATCH':'POST',body:{name:data.get('name').trim(),active:id?data.has('active'):true,capabilities:data.getAll('capabilities'),...scopeBody(data,true),user_policy:readPolicy(),capability_rules:readTimeRules().filter(r=>r.capabilities.length)}});if(context!==state.epoch)return;closeModal();toast('机器人设置已保存。');await renderRoute();if(!id)await editChannelScope(result.id,null,preset);});
+  bindForm('bot-form',async(data,_form,context)=>{const result=await api(id?`/api/bots/${encodeURIComponent(id)}`:'/api/bots',{method:id?'PATCH':'POST',body:{name:data.get('name').trim(),active:id?data.has('active'):true,capabilities:data.getAll('capabilities'),...scopeBody(data,true),user_policy:readPolicy(),capability_rules:readTimeRules().filter(r=>r.capabilities.length)}});if(context!==state.epoch)return;closeModal();toast('机器人设置已保存。');await renderRoute();});
 }
 
 function removeBot(id){
   const bot=state.bots.find(b=>b.id===id);if(!bot)return;
-  confirmAction('删除机器人',`删除“${bot.name}”后停止收发并解除群连接，会员、报名、赛事和历史消息保留。同群其他机器人不受影响。此操作只移除后台机器人，群内机器人可在金山协作中移除。`,'删除机器人',async epoch=>{await api(`/api/bots/${encodeURIComponent(id)}`,{method:'DELETE'});if(epoch===state.epoch){closeModal();toast('机器人已删除。');await renderRoute();}});
+  confirmAction('删除机器人',`删除“${bot.name}”后停止收发并解除群连接，会员、报名、赛事和历史消息保留。同群其他机器人不受影响。此操作只移除后台机器人，群内机器人可在对应平台中移除。`,'删除机器人',async epoch=>{await api(`/api/bots/${encodeURIComponent(id)}`,{method:'DELETE'});if(epoch===state.epoch){closeModal();toast('机器人已删除。');await renderRoute();}});
 }
 
 function botPolicyForm(policy){
@@ -136,7 +133,7 @@ async function editChannelScope(botId,id,preset={}){
   if(!id&&current.length){toast('机器人已有连接，请编辑现有连接。');return;}
   if(!known.length){openModal('先新建群',`<p>填写群名称后，即可继续连接机器人。</p><div class="actions">${btn('新建群','group-new','primary',`data-bot-id="${attr(botId)}"`)}${btn('稍后连接','modal-close')}</div>`);return;}
   const c=current.find(c=>String(c.id)===String(id))||preset;
-  openModal(id?'编辑连接':'连接群',`<form id="channel-form">${selectfield('所属群','group_id',[['','请选择群'],...known.map(g=>[g.id,g.name])],c.group_id||'')}<div class="connection-step"><span class="connection-step-number">发</span><div><h3>发送到群</h3>${field('发送 Webhook','webhook_url',addresses.webhook_url||'','url','autocomplete="off" spellcheck="false"')}<p class="caption">粘贴群里这个机器人提供的 Webhook。</p></div></div><div class="connection-step"><span class="connection-step-number">收</span><div><h3>接收群消息</h3>${textfield('机器人回调地址','callback_url',addresses.callback_url,'readonly rows="3"')}<div class="actions">${btn('复制回调地址','copy-callback','small')}</div><p class="caption">填到同一个机器人的“消息接收地址 / 回调地址”。保存后在群内 @机器人发送“连接”。</p></div></div><div class="inline-error" role="alert"></div><div class="form-footer">${btn('取消','modal-close','ghost')}${btn('保存并测试发送','connection-save-test','')}<button class="btn primary" type="submit">保存连接</button></div></form>${id?`<div class="connection-resume"><span>${e(botStatus(state.bots.find(b=>b.id===botId)||{active:true},c)[0])}</span>${btn('查看连接状态','connection-progress','small',`data-bot-id="${attr(botId)}" data-id="${attr(id)}"`)}</div>`:''}`,true);
+  openModal(id?'编辑连接':'连接群',`<form id="channel-form">${selectfield('所属群','group_id',[['','请选择群'],...known.map(g=>[g.id,g.name])],c.group_id||'')}<div class="connection-step"><span class="connection-step-number">发</span><div><h3>发送到群</h3>${field('发送 Webhook','webhook_url',addresses.webhook_url||'','url','autocomplete="off" spellcheck="false"')}<p class="caption">粘贴群里这个机器人提供的 Webhook。</p></div></div><div class="connection-step"><span class="connection-step-number">收</span><div><h3>接收群消息</h3>${textfield('机器人回调地址','callback_url',addresses.callback_url,'readonly rows="3"')}<div class="actions">${btn('复制回调地址','copy-callback','small')}</div><p class="caption">填到同一个机器人的“消息接收地址 / 回调地址”。保存后在群内 @机器人发送“连接”。</p></div></div><div class="connection-options"><label><input type="checkbox" name="active"${c.active===false?'':' checked'}>启用连接</label><label><input type="checkbox" name="receive_commands"${c.receive_commands===false?'':' checked'}>接收群指令</label><label><input type="checkbox" name="daily_notifications"${c.daily_notifications===false?'':' checked'}>发送活动提醒</label></div><div class="inline-error" role="alert"></div><div class="form-footer">${btn('取消','modal-close','ghost')}${btn('保存并测试发送','connection-save-test','')}<button class="btn primary" type="submit">保存连接</button></div></form>${id?`<div class="connection-resume"><span>${e(botStatus(state.bots.find(b=>b.id===botId)||{active:true},c)[0])}</span>${btn('查看连接状态','connection-progress','small',`data-bot-id="${attr(botId)}" data-id="${attr(id)}"`)}${btn('解除连接','channel-remove','small danger-quiet',`data-bot-id="${attr(botId)}" data-id="${attr(id)}" data-name="${attr(c.name||'所选群')}"`)}</div>`:''}`,true);
   const form=$('#channel-form');form.elements.group_id.required=true;
   form.elements.group_id.onchange=()=>{form.elements.webhook_url.value=form.elements.group_id.value===c.group_id?(addresses.webhook_url||''):'';};
   let currentId=id,attemptId=null,wantTest=false;
@@ -144,22 +141,22 @@ async function editChannelScope(botId,id,preset={}){
   bindForm('channel-form',async(data,_form,context)=>{
     const test=wantTest,url=data.get('webhook_url').trim();
     if(test&&!url)throw new Error('请先填写群里提供的发送 Webhook。');
-    const result=await api(`/api/bots/${encodeURIComponent(botId)}/channels${currentId?`/${encodeURIComponent(currentId)}`:''}`,{method:currentId?'PATCH':'POST',body:{group_id:data.get('group_id'),webhook_url:data.get('webhook_url').trim()}});
+    const result=await api(`/api/bots/${encodeURIComponent(botId)}/channels${currentId?`/${encodeURIComponent(currentId)}`:''}`,{method:currentId?'PATCH':'POST',body:{group_id:data.get('group_id'),webhook_url:data.get('webhook_url').trim(),active:data.has('active'),receive_commands:data.has('receive_commands'),daily_notifications:data.has('daily_notifications')}});
     currentId=result.id;
-    if(!test){if(context===state.epoch){closeModal();toast(url?'连接已保存，请在群内 @机器人发送“连接”验证。':'连接已保存，可继续补充发送地址。');await renderRoute();}return;}
+    if(!test){if(context===state.epoch){closeModal();toast(!data.has('active')?'连接已暂停。':!data.has('receive_commands')?'发送连接已保存。':url?'连接已保存，请在群内 @机器人发送“连接”验证。':'接收连接已保存。');await renderRoute();}return;}
     attemptId??=Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('');
     const tested=await api(`/api/bots/${encodeURIComponent(botId)}/connection/test`,{method:'POST',body:{channel_id:currentId,request_id:attemptId}});
     if(tested.status!=='sending')attemptId=null;
     if(tested.status!=='sent')throw new Error(tested.message);
-    if(context===state.epoch){await renderBotWorkspace(context);await showConnectionProgress(botId,currentId);}
+    if(context===state.epoch){await renderRoute();await showConnectionProgress(botId,currentId);}
   });
 }
 async function showConnectionProgress(botId,id){
   const epoch=state.epoch,path=query(`/api/bots/${encodeURIComponent(botId)}/connection`,{channel_id:id}),data=await api(path);if(epoch!==state.epoch)return;
-  openModal('群连接状态',`<div id="connection-progress"><p id="connection-send-status" class="connection-done"></p><div class="connection-step"><span class="connection-step-number">收</span><div><h3>把这个地址填到金山协作</h3>${textfield('机器人回调地址','callback_url',data.callback_url,'readonly rows="3"')}<div class="actions">${btn('复制回调地址','copy-callback','small primary')}</div><p class="caption">粘贴到同一个机器人的“消息接收地址 / 回调地址”，然后保存。</p></div></div><div class="connection-step"><span class="connection-step-number">验</span><div><h3>回到群里 @机器人发送“连接”</h3><p id="connection-status" role="status" aria-live="polite"></p></div></div><div class="form-footer">${btn('关闭','modal-close','ghost')}${btn('刷新状态','connection-refresh','')}</div></div>`,true);
+  openModal('群连接状态',`<div id="connection-progress"><p id="connection-send-status" class="connection-done"></p><div class="connection-step"><span class="connection-step-number">收</span><div><h3>把这个地址填到机器人平台</h3>${textfield('机器人回调地址','callback_url',data.callback_url,'readonly rows="3"')}<div class="actions">${btn('复制回调地址','copy-callback','small primary')}</div><p class="caption">粘贴到同一个机器人的“消息接收地址 / 回调地址”，然后保存。</p></div></div><div class="connection-step"><span class="connection-step-number">验</span><div><h3>回到群里 @机器人发送“连接”</h3><p id="connection-status" role="status" aria-live="polite"></p></div></div><div class="form-footer">${btn('关闭','modal-close','ghost')}${btn('刷新状态','connection-refresh','')}</div></div>`,true);
   const area=$('#connection-progress'),status=$('#connection-status');
-  const update=value=>{$('#connection-send-status').textContent=value.send_verified?'发送已验证':'发送尚未验证，可返回编辑连接测试发送。';status.textContent=value.connection_status==='connected'?'已连接 · 消息收发验证完成':value.receive_verified?'已收到群消息，等待发送验证。':value.callback_checked?'回调地址已验证，等待群内 @机器人发送“连接”。':'等待金山协作验证回调地址；保存后请在群内发送“连接”。';status.className=value.connection_status==='connected'?'connection-done':'caption';};update(data);
-  const refresh=async()=>{if(!area.isConnected||epoch!==state.epoch)return;try{const next=await api(path);if(!area.isConnected)return;update(next);if(next.connection_status==='connected'){await renderBotWorkspace(epoch);return;}}catch(error){if(area.isConnected)status.textContent=error.message;}if(area.isConnected&&epoch===state.epoch)state.connectionTimer=setTimeout(refresh,3000);};
+  const update=value=>{$('#connection-send-status').textContent=value.connection_mode==='receive_only'?'仅接收群消息':value.send_verified?'发送已验证':'发送尚未验证';status.textContent=value.connection_status==='connected'?(value.connection_mode==='receive_only'?'已连接 · 接收已验证':value.connection_mode==='send_only'?'已连接 · 发送已验证':'已连接 · 消息收发验证完成'):value.receive_verified?'已收到群消息，等待发送验证。':value.callback_checked?'回调地址已验证，等待群内 @机器人发送“连接”。':'等待机器人平台验证回调地址；保存后请在群内发送“连接”。';status.className=value.connection_status==='connected'?'connection-done':'caption';};update(data);
+  const refresh=async()=>{if(!area.isConnected||epoch!==state.epoch)return;try{const next=await api(path);if(!area.isConnected)return;update(next);if(next.connection_status==='connected'){await renderRoute();return;}}catch(error){if(area.isConnected)status.textContent=error.message;}if(area.isConnected&&epoch===state.epoch)state.connectionTimer=setTimeout(refresh,3000);};
   $('[data-action=connection-refresh]',area).onclick=()=>{clearTimeout(state.connectionTimer);refresh();};
   if(data.connection_status!=='connected')state.connectionTimer=setTimeout(refresh,3000);
 }

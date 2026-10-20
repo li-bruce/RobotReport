@@ -58,6 +58,27 @@ def ensure_schema(db):
         last_error TEXT,updated_at TEXT NOT NULL,PRIMARY KEY(event_id,chat_id))''')
     db.execute('''CREATE INDEX IF NOT EXISTS identity_notification_pending
         ON identity_notification_events(status,created_at)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS identity_request_sources(
+        scope_id TEXT NOT NULL,user_id TEXT NOT NULL,kind TEXT NOT NULL,
+        channel_id TEXT NOT NULL,chat_id TEXT NOT NULL,bot_id TEXT NOT NULL,
+        submitted_at TEXT NOT NULL,PRIMARY KEY(scope_id,user_id,kind))''')
+
+
+def remember_request_source(db, ctx, user_id, kind, at=None):
+    """Persist the trusted applicant's origin in the same business transaction."""
+    if (ctx.source not in ('callback', 'registration_form') or ctx.actor != user_id
+            or not ctx.channel_id or not ctx.chat_id or ctx.id == 'workspace'):
+        return
+    if notification_capability(kind) != 'registration':
+        return
+    ensure_schema(db)
+    db.execute('''INSERT INTO identity_request_sources VALUES(?,?,?,?,?,?,?)
+        ON CONFLICT(scope_id,user_id,kind) DO UPDATE SET channel_id=excluded.channel_id,
+        chat_id=excluded.chat_id,bot_id=excluded.bot_id,submitted_at=excluded.submitted_at''',
+        (ctx.scope_id,user_id,kind,ctx.channel_id,ctx.chat_id,ctx.id,stamp(at)))
+    db.execute('''INSERT INTO identity_observations VALUES(?,?,?,?,?,?)
+        ON CONFLICT(scope_id,user_id,bot_id,chat_id) DO UPDATE SET last_seen_at=excluded.last_seen_at''',
+        (ctx.scope_id,user_id,ctx.id,ctx.chat_id,stamp(at),stamp(at)))
 
 
 def _snapshot(kind, value):
@@ -98,6 +119,15 @@ def record_identity_change(db, ctx, user_id, kind, before, after, at=None):
         'SELECT chat_id FROM identity_observations WHERE scope_id=? AND user_id=?',
         (ctx.scope_id, user_id)) if r[0]})
     preferred = ctx.channel_id if ctx.source in ('callback', 'registration_form') and ctx.chat_id in chats else ''
+    preferred_chat = ctx.chat_id if preferred else ''
+    if notification_capability(kind) == 'registration':
+        origin = db.execute('''SELECT channel_id,chat_id FROM identity_request_sources
+            WHERE scope_id=? AND user_id=? AND kind=?''', (ctx.scope_id,user_id,kind)).fetchone()
+        if origin:
+            preferred, preferred_chat = origin['channel_id'], origin['chat_id']
+        elif ctx.actor != user_id:
+            # The reviewing administrator is not the applicant's chosen robot.
+            preferred = preferred_chat = ''
     event_id = uuid.uuid4().hex
     status = 'suppressed' if ctx.source in ('simulator', 'preview', 'dry_run') else 'pending'
     db.execute('''INSERT INTO identity_notification_events(
@@ -105,7 +135,7 @@ def record_identity_change(db, ctx, user_id, kind, before, after, at=None):
         preferred_channel_id,preferred_chat_id,recipient_chats,status,created_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
         (event_id,ctx.scope_id,user_id,name,kind,dumps(old),dumps(new),ctx.actor,ctx.source,
-         preferred,ctx.chat_id if preferred else '',dumps(chats),status,stamp(at)))
+         preferred,preferred_chat,dumps(chats),status,stamp(at)))
     return event_id
 
 
@@ -197,17 +227,30 @@ class IdentityNotifications:
         return dict(row)
 
     def _channels(self, event, chats):
+        personal = notification_capability(event['kind']) == 'registration'
+        with connect(self.path) as db:
+            observations = {(r['chat_id'],r['bot_id']):r['last_seen_at'] for r in db.execute(
+                'SELECT chat_id,bot_id,last_seen_at FROM identity_observations WHERE scope_id=? AND user_id=?',
+                (event['scope_id'],event['user_id']))}
         groups = {chat: [] for chat in chats}
         for row in self.platform.list_channels(active_only=True):
             if row['chat_id'] in groups:
                 groups[row['chat_id']].append(row)
         selected = {}
         for chat, rows in groups.items():
+            if personal:
+                if event['preferred_channel_id'] and event['preferred_chat_id'] == chat:
+                    # Keep the original sender even if temporarily unavailable.
+                    rows = [r for r in rows if r['id'] == event['preferred_channel_id']]
+                else:
+                    rows = [r for r in rows if (chat,r['bot_id']) in observations]
+                    rows.sort(key=lambda r: observations[(chat,r['bot_id'])],reverse=True)
             # Identity membership is shared across venues: activity slot limits
             # do not hide an identity notice in the person's own related group.
             rows = [r for r in rows if self.platform.channel(r['id'])['webhook_url']]
             rows = [r for r in rows if self._can_notify(self._context(r['id']), event)]
-            rows.sort(key=lambda r: (r['id'] != event['preferred_channel_id'], r['id']))
+            if not personal:
+                rows.sort(key=lambda r: (r['id'] != event['preferred_channel_id'], r['id']))
             if rows:
                 selected[chat] = rows[0]['id']
         return selected

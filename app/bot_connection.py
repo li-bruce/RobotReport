@@ -70,10 +70,12 @@ def summary(platform, channel, bot=None):
     bot=bot or platform.bot(channel['bot_id'],include_deleted=True)
     with connect(platform.path) as db:row=_check(db,channel,bot)
     sent=row['send_status']=='sent'
-    if sent and row['verified_at']:status='connected'
+    receive_only = not channel['webhook_url'] and not channel['robot_key'] and bool(channel['receive_commands'])
+    if (sent and (row['verified_at'] or not channel['receive_commands'])) or (receive_only and row['verified_at']):status='connected'
+    elif receive_only:status='waiting_message' if row['callback_at'] else 'waiting_callback'
     elif sent:status='waiting_message' if row['callback_at'] else 'waiting_callback'
     else:status='needs_test'
-    return {'connection_status':status,'send_verified':sent,'callback_checked':bool(row['callback_at']),
+    return {'connection_status':status,'connection_mode':'receive_only' if receive_only else ('send_only' if not channel['receive_commands'] else 'duplex'),'send_verified':sent,'callback_checked':bool(row['callback_at']),
             'receive_verified':bool(row['verified_at']),'last_send_status':row['send_status']}
 
 
@@ -85,9 +87,11 @@ def record_callback(platform, bot_id, token, channel_id=None, body=None):
         channels=list(db.execute('SELECT * FROM bot_channels WHERE bot_id=? AND active=1 AND archived=0',(bot_id,)))
         for channel in channels:
             if channel_id and channel['id']!=channel_id:continue
+            receive_only = not channel['webhook_url'] and not channel['robot_key']
             if channel_id and (not body or channel['chat_id']!=str(body.get('chatid',''))
-                    or not channel['receive_commands'] or not isinstance(body.get('robot_key'),str)
-                    or not hmac.compare_digest(channel['robot_key'].encode(),body['robot_key'].encode())):continue
+                    or not channel['receive_commands'] or (not receive_only and (
+                    not isinstance(body.get('robot_key'),str)
+                    or not hmac.compare_digest(channel['robot_key'].encode(),body['robot_key'].encode())))):continue
             _ensure(db,channel,bot)
             field='verified_at' if channel_id else 'callback_at'
             db.execute(f'UPDATE bot_connection_checks SET {field}=? WHERE channel_id=?',(stamp(),channel['id']))

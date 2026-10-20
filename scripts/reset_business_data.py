@@ -38,7 +38,7 @@ BUSINESS_DELETE = frozenset({
     'venue_reservations', 'availability_notices',
     'profiles', 'member_records', 'membership_applications', 'member_profile_requests', 'identity_observations',
     'membership_terms', 'membership_term_audit',
-    'identity_notification_events', 'identity_notification_deliveries',
+    'identity_notification_events', 'identity_notification_deliveries', 'identity_request_sources',
     'user_roles', 'member_group_links', 'sessions', 'registrations', 'imports',
     'member_imports', 'pre_registered_members', 'member_import_previews',
     'audit', 'legacy_rows', 'legacy_delivery', 'workspace_migration_issues',

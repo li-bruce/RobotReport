@@ -4,13 +4,22 @@
 
 Upload `.xlsx`, `.xls` or `.csv` in **Members → Bulk registration**. The preview recognizes common Chinese and English column names, finds a header in the first 20 rows, ignores unrelated columns, and combines visible roster worksheets. Check the column mapping and rows before confirming. Limits: 2 MiB, 1,000 people, 100 columns and 20 worksheets. Spreadsheet macros are not executed. For `.xlsx`, formulas in mapped fields must first be pasted as values.
 
-A row needs a name or a phone number. Missing information does not prevent pre-registration. Blank phone numbers remain blank; no account or phone number is fabricated. Re-importing an identical file skips previously imported rows without phones. A different file containing the same names requires administrator review; names never establish identity.
+A row needs a name or a phone number. Missing information does not prevent pre-registration. Blank phone numbers remain blank; no account or phone number is fabricated. Re-importing an identical file skips previously imported rows without phones. A changed file is checked against name, nickname, email, student/employee/member numbers, messaging handles and document numbers. Gender, rating and groups are not identity evidence.
+
+Review each suggested match and select **Confirm match** or **Not a match, add new**. Bulk confirmation handles only rows with a single candidate. Multiple candidates require an explicit selection. Matching preserves the original record and never binds accounts or overwrites profiles. Commit rechecks all candidates and rejects changed evidence atomically.
 
 **Add member** creates a pre-registration record with a server-generated internal identifier. No platform account ID is entered. Members send `注册` or `补全资料` to the bot and follow their personal link. The callback supplies the account identity. Name and gender are required on submission; rating (1–9) and phone are optional.
 
 Only an exact normalized phone match associates an imported record. If an imported row has no phone, an administrator first adds it through **Complete details**. A matched incomplete record is reserved for that account and submitted for normal membership review. Self-supplied ratings remain pending review. Complete, already reviewed imports retain the existing direct-association behavior. Neither import path grants management roles. Already approved members submit changes through the profile approval queue.
 
-Membership, profile-review, level and group results are sent by a registration-enabled bot in the member's related group. Management-role changes use management-enabled bots. Performing an approval still requires member-management permission, and group approval commands require the management capability.
+Application receipts return through the bot that received the registration, profile or level request. If that bot is unavailable, delivery waits instead of switching to another bot. Legacy requests with no saved source consider only registration bots the person actually interacted with. Personal receipts require registration capability. Management-role changes use management-enabled bots. Performing an approval still requires member-management permission, and group approval commands require the management capability.
+
+## Robot management and group connections
+
+- **Robot management** configures names, capabilities, venues, sessions, eligibility and availability; expandable rows also provide help previews and deletion.
+- **Group connections** provides group creation, renaming and deletion beside a zoomable bot-to-group graph. Select a bot or edge to edit sending Webhook and receiving callback addresses. Each bot has one current group; a group may have several bots.
+- Connections can be paused or removed. Receiving-only connections return the business response in the callback HTTP `reply` field, without sending a separate message; displaying that response requires support in the calling platform. Sending-only connections require an already identified group and can send announcements after a successful send test.
+- Private callback tokens authenticate receiving-only connections. Duplex connections retain the additional bot-key check. Keep callback URLs private. Only an authenticated incoming message discovers a new group; a send-test response is not trusted as group identity.
 
 ## Scheduled announcements
 
@@ -27,7 +36,7 @@ Queued broadcasts are cancelled when their rule changes, their sender becomes in
 
 ## Bot feature availability
 
-Open **Bots and groups → Edit settings → Feature availability**. Choose only that bot's enabled capabilities and add date/time conditions.
+Open **Bots and groups → Robot management → Edit name and features → Feature availability**. Choose only that bot's enabled capabilities and add date/time conditions.
 
 - **Open only during these periods**: selected capabilities are unavailable outside the union of their enabled opening rules.
 - **Close during these periods**: matching closing rules override opening rules.
@@ -40,6 +49,7 @@ These conditions apply to commands, current help, AI plans and confirmation, per
 ## Integration fields
 
 - `POST /api/member-imports/preview`: multipart file; returns `mappings`, `skipped_sheets`, masked rows, errors and a short-lived confirmation token. `POST /api/member-imports/commit` confirms it once. `PATCH /api/member-imports/records/{id}` edits an unlinked pre-registration.
+- `POST /api/member-imports/matches`: `{token, choices:[{source_key,target}]}`; choose a returned candidate or `new`. It stores a review decision, not a membership mutation.
 - `POST /api/members` without `user_id`: creates a pre-registration. The authenticated legacy account-specific API remains available for trusted administrators.
 - `PATCH /api/config`: `broadcast_rules` is an array of `{id,name,enabled,kinds,bot_ids,time,when}`. `null` preserves legacy defaults; `[]` disables all rules. `kinds`: `open`, `closing`, `roster`.
 - `POST/PATCH /api/bots`: `capability_rules` is an array of `{id,name,enabled,capabilities,action,when}`. `action`: `open` or `closed`.

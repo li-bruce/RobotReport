@@ -20,6 +20,49 @@ class ConnectionFlowTests(unittest.TestCase):
     pending=onboarding.OnboardingTests.pending
     body=onboarding.OnboardingTests.body
     callback=onboarding.OnboardingTests.callback
+    def test_receive_only_uses_private_callback_and_never_queues_external_reply(self):
+        bot=self.p.create(self.admin,{'name':'接收专用','group_id':self.group['id']})
+        body=self.body();body.pop('robot_key')
+        bad=bot['callback_path'].rsplit('/',1)[0]+'/invalid-token'
+        self.assertEqual(self.client.post(bad,json=body).status_code,403)
+        response=self.callback(bot,body)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIn('reply',response.json())
+        self.assertEqual(self.callback(bot,body).json(),response.json())
+        channel=self.p.channel(bot['channels'][0]['id'])
+        self.assertEqual(channel['chat_id'],'266382')
+        self.assertEqual(summary(self.p,channel)['connection_mode'],'receive_only')
+        self.assertEqual(summary(self.p,channel)['connection_status'],'connected')
+        with connect(self.p.context_for_channel(channel['id']).transport_db_path) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM outbox').fetchone()[0],0)
+        self.assertEqual(self.callback(bot,{**body,'chatid':'another-group'}).status_code,403)
+        self.p.save_channel(self.admin,bot['id'],{'receive_commands':False},channel['id'])
+        self.assertEqual(self.callback(bot,body).status_code,403)
+
+    def test_send_only_proof_does_not_require_receiving_group_messages(self):
+        # Another bot has identified the group. A send-only bot does not receive.
+        peer=self.pending('onboarding-peer')
+        self.assertEqual(self.callback(peer,self.body(key='onboarding-peer')).status_code,200)
+        bot=self.pending()
+        cid=bot['channels'][0]['id']
+        channel=self.p.save_channel(self.admin,bot['id'],{'receive_commands':False,'webhook_url':self.p.channel(cid)['webhook_url']},cid)
+        cid=channel['id'];bot['channels']=[channel]
+        self.assertEqual(self.p.context_for_channel(cid).chat_id,'266382')
+        self.assertEqual(self.send(bot)['status'],'sent')
+        result=summary(self.p,self.p.channel(cid))
+        self.assertEqual(result['connection_mode'],'send_only')
+        self.assertEqual(result['connection_status'],'connected')
+        self.assertFalse(result['receive_verified'])
+        self.assertEqual(self.callback(bot).status_code,403)
+
+    def test_send_only_unknown_group_requires_discovery_and_clearing_send_clears_key(self):
+        bot=self.pending();cid=bot['channels'][0]['id']
+        with self.assertRaisesRegex(ValueError,'已识别'):
+            self.p.save_channel(self.admin,bot['id'],{'receive_commands':False},cid)
+        self.p.save_channel(self.admin,bot['id'],{'webhook_url':''},cid)
+        self.assertEqual(self.p.channel(cid)['robot_key'],'')
+        body=self.body();body.pop('robot_key')
+        self.assertEqual(self.callback(bot,body).status_code,200)
     def send(self,bot,response=None,request_id=None,handler=None,**kwargs):
         self.requests=[]
         def respond(request):

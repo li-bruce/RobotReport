@@ -58,6 +58,59 @@ class IdentityNotificationTests(unittest.TestCase):
     def caps(self, index, values):
         self.platform.update(self.principal, self.bots[index]['id'], {'capabilities': values})
 
+    def test_registration_origin_survives_web_review_and_later_bot_interactions(self):
+        self.user((0,))
+        Members(self.ctx(0), self.clock).apply('张三', 3, gender='male')
+        self.at += timedelta(minutes=2)
+        Members(self.ctx(1), self.clock).touch('张三')
+        Members(self.admin, self.clock).review('person-one', 'approved')
+        event = next(e for e in self.notices.list() if e['kind']=='membership')
+        result = self.notices.dispatch(event['id'])
+        self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[0])
+        self.assertEqual(len(self.outbox(0)), 1)
+        self.assertEqual(self.outbox(1), [])
+
+    def test_original_registration_sender_waits_instead_of_using_another_bot(self):
+        self.user((0,1))
+        Members(self.ctx(0), self.clock).apply('张三', gender='male')
+        Members(self.admin, self.clock).review('person-one', 'approved')
+        self.caps(0, ['enrollment'])
+        event = next(e for e in self.notices.list() if e['kind']=='membership')
+        self.assertEqual(self.notices.dispatch(event['id'])['status'], 'blocked')
+        self.assertEqual(self.outbox(1), [])
+        self.caps(0, ['registration'])
+        result = self.notices.retry(event['id'])
+        self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[0])
+
+    def test_legacy_web_approval_does_not_use_unobserved_bot_in_same_group(self):
+        self.user((0,))
+        event = self.event()
+        result = self.notices.dispatch(event)
+        self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[0])
+        self.assertEqual(self.outbox(1), [])
+
+    def test_profile_and_level_requests_keep_their_own_origin(self):
+        from app.profile_changes import ProfileChanges
+        self.user((0,1))
+        Members(self.admin, self.clock).review('person-one','approved')
+        self.notices.recover()
+        Members(self.ctx(1), self.clock).request_level(5)
+        Members(self.admin, self.clock).review_level('person-one',True)
+        request = ProfileChanges(self.ctx(1),self.clock).submit({'name':'张三新'})
+        ProfileChanges(self.admin,self.clock).review(request['id'],True)
+        for kind in ('level','profile_request'):
+            event = next(e for e in self.notices.list() if e['kind']==kind)
+            result = self.notices.dispatch(event['id'])
+            self.assertEqual(result['deliveries'][0]['channel_id'],self.channels[1])
+
+    def test_simulation_and_admin_edits_cannot_forge_request_origins(self):
+        from app.identity_notifications import remember_request_source
+        self.user((0,))
+        with connect(self.admin.db_path,True) as db:
+            for ctx in (self.admin, self.ctx(1,source='simulator'),self.ctx(1,user='reviewer')):
+                remember_request_source(db,ctx,'person-one','membership',self.at)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM identity_request_sources').fetchone()[0],0)
+
     def test_personal_results_and_role_notices_use_their_own_business_bots(self):
         self.user((0,))
         self.caps(0, ['registration', 'messages'])
@@ -291,13 +344,13 @@ class IdentityNotificationTests(unittest.TestCase):
         self.assertEqual(len(self.outbox(2)), 1)
         self.assertEqual(self.outbox(3), [])
 
-    def test_group_review_prefers_origin_robot_without_other_group_broadcast(self):
+    def test_group_review_uses_applicant_robot_not_reviewer_robot(self):
         self.user((0,))
         reviewer = replace(self.ctx(1, 'reviewer'), is_admin=True)
         item = self.notices.dispatch(self.event(reviewer))
-        self.assertEqual(item['deliveries'][0]['channel_id'], self.channels[1])
-        self.assertEqual(len(self.outbox(1)), 1)
-        self.assertEqual(self.outbox(0), [])
+        self.assertEqual(item['deliveries'][0]['channel_id'], self.channels[0])
+        self.assertEqual(len(self.outbox(0)), 1)
+        self.assertEqual(self.outbox(1), [])
         self.assertEqual(self.outbox(2), [])
 
     def test_unrelated_origin_group_cannot_become_a_recipient(self):
@@ -307,10 +360,10 @@ class IdentityNotificationTests(unittest.TestCase):
         self.assertEqual([d['chat_id'] for d in item['deliveries']], ['known-room'])
         self.assertEqual(self.outbox(3), [])
 
-    def test_unconfigured_preferred_robot_falls_back_before_selection(self):
+    def test_unconfigured_reviewer_robot_does_not_replace_applicant_robot(self):
         self.user((0,))
         self.platform.save_channel(self.principal,self.bots[1]['id'],{'webhook_url':''},self.channels[1])
-        item = self.notices.dispatch(self.event(replace(self.ctx(1),is_admin=True)))
+        item = self.notices.dispatch(self.event(replace(self.ctx(1,'reviewer'),is_admin=True)))
         self.assertEqual(item['deliveries'][0]['channel_id'], self.channels[0])
 
     def test_no_source_waits_then_recovers_after_actual_observation(self):

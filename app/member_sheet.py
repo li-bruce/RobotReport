@@ -34,6 +34,8 @@ def header_key(value):
 
 
 HEADERS = {header_key(alias): key for key, aliases in ALIASES.items() for alias in aliases}
+from .member_matching import IDENTITY_COLUMNS
+IDENTITY_HEADERS = {header_key(alias):key for key,aliases in IDENTITY_COLUMNS.items() for alias in aliases}
 
 
 def _sheets(content, filename):
@@ -118,8 +120,13 @@ def extract(content, filename):
             if any(cell_text(v) for v in header[MAX_COLUMNS:]):
                 raise ValueError('表格最多100列')
             columns = {key: cell_text(header[i]) for i, key in enumerate(names) if key}
+            identity_names = [IDENTITY_HEADERS.get(header_key(v)) if not key else None for v,key in zip(header,names)]
+            identity_columns = [key for key in identity_names if key]
+            if len(identity_columns) != len(set(identity_columns)):
+                raise ValueError(f'{sheet} 存在重复的身份属性列，请保留一个')
             mappings.append({'sheet': sheet, 'header_row': offset + 1, 'columns': columns,
-                             'ignored': [cell_text(v) for v, key in zip(header, names) if cell_text(v) and not key]})
+                             'identity_columns':{key:cell_text(header[i]) for i,key in enumerate(identity_names) if key},
+                             'ignored': [cell_text(v) for i,(v, key) in enumerate(zip(header, names)) if cell_text(v) and not key and not identity_names[i]]})
             for number, raw in enumerate(itertools.chain(lead[offset + 1:], reader), offset + 2):
                 if number > MAX_ROWS + 21:
                     raise ValueError('每张表最多1000条记录，请删除多余空行或尾部内容')
@@ -129,6 +136,7 @@ def extract(content, filename):
                 if any(raw[MAX_COLUMNS:]):
                     raise ValueError('表格最多100列')
                 item = {key: raw[i] if i < len(raw) else '' for i, key in enumerate(names) if key}
+                item['identity_attributes'] = {key:raw[i] for i,key in enumerate(identity_names) if key and i<len(raw) and raw[i]}
                 if not any(item.values()):
                     continue
                 if len(rows) >= MAX_ROWS:

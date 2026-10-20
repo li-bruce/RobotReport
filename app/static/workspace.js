@@ -1,15 +1,15 @@
 /* Shared club administration. Bot channels are delivery destinations, never data owners. */
 'use strict';
-const importRowState = row => ({create:['新增','green'],skip:['跳过',''],error:['错误','red']}[row.status]||[row.status||'待检查','']);
+const importRowState = row => ({create:['新增','green'],skip:['跳过',''],error:['错误','red'],match:['待核对','amber']}[row.status]||[row.status||'待检查','']);
 const importGroupNames = groups => Array.isArray(groups)?groups.map(group=>typeof group==='string'?group:group.name||'').filter(Boolean).join('、'):'—';
 function importPreviewTable(preview){
   const rows=asList(preview.rows);
   return rows.length?`<div class="table-wrap import-preview-table"><table><thead><tr><th>工作表 / 行</th><th>处理结果</th><th>姓名</th><th>性别</th><th>手机号</th><th>等级</th><th>组别</th><th>说明</th></tr></thead><tbody>${rows.map(row=>{const [label,color]=importRowState(row);return `<tr><td class="mono">${e(row.sheet||'CSV')} / ${nf(row.line)}</td><td><span class="badge ${color}">${e(label)}</span></td><td class="name">${e(row.name||'—')}</td><td>${e(genderName(row.gender))}</td><td class="mono">${e(row.phone_masked||'—')}</td><td>${e(levelName(row.level))}</td><td>${e(importGroupNames(row.groups)||'—')}</td><td class="${row.status==='error'?'import-error':'muted'}">${e(row.error||row.warning||'')}</td></tr>`;}).join('')}</tbody></table></div>`:empty('文件中没有可登记的人员','请提供姓名或手机号列。');
 }
-function importPreviewCanCommit(preview){return Boolean(preview?.token&&preview.can_commit&&num(preview.create_count)>0&&!(preview.errors||[]).length&&!(preview.rows||[]).some(row=>row.status==='error'));}
+function importPreviewCanCommit(preview){return Boolean(preview?.token&&preview.can_commit&&num(preview.total)>0&&!num(preview.match_count)&&!(preview.errors||[]).length&&!(preview.rows||[]).some(row=>row.status==='error'));}
 function importPreviewMarkup(preview){
   const errors=asList(preview.errors),canCommit=importPreviewCanCommit(preview);
-  return `<div class="panel-head"><div><h2>核对导入结果</h2><p>确认前不会新增人员；资料一致的重复记录将跳过。</p></div>${btn('重新选择文件','imports-reset','small')}</div><div class="panel-body"><div class="import-summary" aria-label="导入预览统计"><span>共 <strong>${nf(preview.total)}</strong> 行</span><span class="green">新增 <strong>${nf(preview.create_count)}</strong> 人</span><span>跳过 <strong>${nf(preview.skip_count)}</strong> 人</span><span class="${errors.length?'import-error':''}">错误 <strong>${nf(errors.length)}</strong> 项</span></div>${errors.length?`<div class="notice error import-errors"><strong>请修改以下内容后重新上传。本次不会导入任何人员。</strong><ul>${errors.map(error=>`<li>${error.line?`第 ${e(error.line)} 行：`:''}${e(error.message)}</li>`).join('')}</ul></div>`:''}${!errors.length&&!num(preview.create_count)?'<div class="notice">没有需要新增的人员。已登记人员保持原资料。</div>':''}</div>${importMappingMarkup(preview)}${importPreviewTable(preview)}<div class="panel-body"><form id="member-import-commit"><p class="caption">${preview.expires_at?`请在 ${e(displayTime(preview.expires_at))} 前确认。`:''}缺失资料可由本人补全后提交审核。</p><div class="inline-error" role="alert"></div><div class="form-footer"><button type="submit" class="btn primary"${canCommit?'':' disabled'}>确认导入 ${nf(preview.create_count)} 人</button></div></form></div>`;
+  return `<div class="panel-head"><div><h2>核对导入结果</h2><p>确认重复人员后，再导入新人员。</p></div>${btn('重新选择文件','imports-reset','small')}</div><div class="panel-body"><div class="import-summary" aria-label="导入预览统计"><span>共 <strong>${nf(preview.total)}</strong> 行</span><span class="green">新增 <strong>${nf(preview.create_count)}</strong> 人</span><span>跳过 <strong>${nf(preview.skip_count)}</strong> 人</span><span class="${errors.length?'import-error':''}">错误 <strong>${nf(errors.length)}</strong> 项</span></div>${errors.length?`<div class="notice error import-errors"><strong>请修改以下内容后重新上传。本次不会导入任何人员。</strong><ul>${errors.map(error=>`<li>${error.line?`第 ${e(error.line)} 行：`:''}${e(error.message)}</li>`).join('')}</ul></div>`:''}${!errors.length&&!num(preview.create_count)&&!num(preview.match_count)?'<div class="notice">没有需要新增的人员。已登记人员保持原资料。</div>':''}</div>${importMappingMarkup(preview)}${importMatchesMarkup(preview)}${importPreviewTable(preview)}<div class="panel-body"><form id="member-import-commit"><p class="caption">${preview.expires_at?`请在 ${e(displayTime(preview.expires_at))} 前确认。`:''}缺失资料可由本人补全后提交审核。</p><div class="inline-error" role="alert"></div><div class="form-footer"><button type="submit" class="btn primary"${canCommit?'':' disabled'}>完成核对 · 新增 ${nf(preview.create_count)} 人</button></div></form></div>`;
 }
 async function renderMemberImports(epoch){
   const records=asList(await api('/api/member-imports/records'),'records');if(!isCurrent(epoch))return;
@@ -22,12 +22,7 @@ async function renderMemberImports(epoch){
     resetImportPreview();const request=state.page.importRequest,view=state.viewEpoch,result=await api('/api/member-imports/preview',{method:'POST',body:data});
     if(context!==state.epoch||view!==state.viewEpoch||request!==state.page.importRequest||!form.isConnected)return;
     state.page.importPreview=result;const preview=$('#member-import-preview');preview.hidden=false;preview.innerHTML=importPreviewMarkup(result);
-    bindForm('member-import-commit',async(_data,commitForm,commitContext)=>{
-      if(!importPreviewCanCommit(state.page.importPreview))throw new Error('请修正文件内容并重新预览。');
-      const response=await api('/api/member-imports/commit',{method:'POST',body:{token:state.page.importPreview.token}});
-      if(commitContext!==state.epoch||view!==state.viewEpoch||!commitForm.isConnected)return;
-      state.page.importPreview=null;preview.innerHTML=`<div class="panel-body import-complete">${icon('check')}<div><h2>${response.already_committed?'这份名册已导入':'导入完成'}</h2><p>新增 ${nf(response.imported)} 人，跳过 ${nf(response.skipped)} 人。</p></div>${btn('继续导入','imports-reset','small')}</div>`;form.reset();await refreshImportRecords();
-    });
+    bindImportCommit(form,view);
     preview.scrollIntoView({behavior:'smooth',block:'start'});
   });
 }

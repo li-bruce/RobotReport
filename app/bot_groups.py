@@ -118,8 +118,10 @@ def discover(platform, bot_id, token, body):
         if len(rows)!=1:
             raise PermissionError('回调群未绑定或已停用')
         channel=rows[0]
-        if (not channel['receive_commands'] or not channel['robot_key'] or not isinstance(key,str)
-                or not hmac.compare_digest(key.encode(),channel['robot_key'].encode())):
+        receive_only = not channel['webhook_url'] and not channel['robot_key']
+        if (not channel['receive_commands'] or (not receive_only and (
+                not channel['robot_key'] or not isinstance(key,str)
+                or not hmac.compare_digest(key.encode(),channel['robot_key'].encode())))):
             raise PermissionError('回调凭据无效或群指令已停用')
         # A racing callback may have resolved the connection while we waited.
         if channel['chat_id']:

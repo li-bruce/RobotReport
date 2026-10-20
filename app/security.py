@@ -464,6 +464,14 @@ class Platform:
             record[key] = value
         if data.get('webhook_url') and 'robot_key' not in data:
             record['robot_key'] = parse_qs(urlsplit(record['webhook_url']).query).get('key', [record.get('robot_key') or secrets.token_urlsafe(32)])[0]
+        elif 'webhook_url' in data and not record['webhook_url'] and 'robot_key' not in data:
+            record['robot_key'] = ''
+        if not record['receive_commands'] and not record['chat_id'] and record['group_id']:
+            from .bot_groups import get
+            with connect(self.path) as db:
+                record['chat_id'] = get(db,record['group_id'])['chat_id']
+            if not record['chat_id']:
+                raise ValueError('仅发送连接请选择已识别的群；新群请先接收一次群消息完成识别')
         if (not record['chat_id'] and not record['group_id']) or not record['name']:
             raise ValueError('群名称和群ID不能为空')
         if 'venue_ids' in data and record['venue_ids'] and record['default_venue_id'] not in record['venue_ids']:
@@ -691,7 +699,8 @@ class Platform:
             row={'id':channel_id}
         channel=self.channel(row['id'],active=True)
         key=body.get('robot_key')
-        if not channel['robot_key'] or not isinstance(key,str) or not hmac.compare_digest(key.encode(),channel['robot_key'].encode()):
+        receive_only = not channel['webhook_url'] and not channel['robot_key']
+        if not receive_only and (not channel['robot_key'] or not isinstance(key,str) or not hmac.compare_digest(key.encode(),channel['robot_key'].encode())):
             raise PermissionError('回调凭据无效')
         if not channel['receive_commands']:
             raise PermissionError('该群通道已关闭机器人指令')

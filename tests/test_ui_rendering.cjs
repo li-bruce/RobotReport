@@ -11,7 +11,8 @@ const registrationScript=fs.readFileSync(path.join(__dirname,'../app/static/regi
 const registrationPage=fs.readFileSync(path.join(__dirname,'../app/static/register.html'),'utf8');
 const availability=fs.readFileSync(path.join(__dirname,'../app/static/availability-workspace.js'),'utf8').split("document.addEventListener('click'")[0];
 const timeWorkspace=fs.readFileSync(path.join(__dirname,'../app/static/time-workspace.js'),'utf8');
-const code=timeWorkspace+'\n'+availability+'\n'+workspace+'\n'+events+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'"));
+const importMatches=fs.readFileSync(path.join(__dirname,'../app/static/import-matches.js'),'utf8').split("document.addEventListener('click'")[0];
+const code=importMatches+'\n'+timeWorkspace+'\n'+availability+'\n'+workspace+'\n'+events+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'"));
 const calls=[];
 const context=vm.createContext({URL,Intl,Date,Map,Set,Symbol,Number,String,Array,JSON,AbortController,FormData,fetch:async (url,options)=>{calls.push({url,options});return {ok:true,status:200,json:async()=>({items:[]})};},location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null}});
 vm.runInContext(code,context);
@@ -78,11 +79,12 @@ const importPreview={token:'preview-token',expires_at:'2026-10-13T06:30:00Z',tot
 context.importFixture=importPreview;
 assert.equal(run('importPreviewCanCommit(importFixture)'),true);
 const importMarkup=run('importPreviewMarkup(importFixture)');
-assert.match(importMarkup,/<table>/);assert.match(importMarkup,/新增/);assert.match(importMarkup,/跳过/);assert.match(importMarkup,/138\*\*\*\*0001/);assert.match(importMarkup,/提高组、周末组/);assert.match(importMarkup,/确认导入 2 人/);
+assert.match(importMarkup,/<table>/);assert.match(importMarkup,/新增/);assert.match(importMarkup,/跳过/);assert.match(importMarkup,/138\*\*\*\*0001/);assert.match(importMarkup,/提高组、周末组/);assert.match(importMarkup,/完成核对 · 新增 2 人/);
 assert.match(importMarkup,/&lt;script&gt;/);assert.ok(!importMarkup.includes('<script>'));assert.ok(!importMarkup.includes('<img src=x>'));assert.ok(!importMarkup.includes('preview-token'));
 assert.equal(run('importPreviewCanCommit({...importFixture,token:null})'),false);
 assert.equal(run('importPreviewCanCommit({...importFixture,can_commit:false})'),false);
-assert.equal(run('importPreviewCanCommit({...importFixture,create_count:0})'),false);
+assert.equal(run('importPreviewCanCommit({...importFixture,create_count:0})'),true);
+assert.equal(run('importPreviewCanCommit({...importFixture,match_count:1})'),false);
 assert.equal(run('importPreviewCanCommit({...importFixture,errors:[{line:2,message:"手机号无效"}]})'),false);
 assert.equal(run('importPreviewCanCommit({...importFixture,rows:[{status:"error"}]})'),false);
 const importError=run('importPreviewMarkup({...importFixture,can_commit:false,errors:[{line:2,message:"手机号无效"}],rows:[{line:2,name:"王五",status:"error",error:"手机号无效"}]})');

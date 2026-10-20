@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-20 · Robot connections and roster review
+
+- Separate robot settings from a responsive group connection graph; edit optional sending/receiving addresses on each edge and manage groups alongside it.
+- Review duplicate roster candidates by identity-bearing fields, with individual or single-candidate bulk confirmation. Preserve original records and phone-only account linking.
+- Persist the source of personal applications so approval receipts use the applicant’s bot. Unavailable source bots wait; already sent or uncertain deliveries are not replayed.
+
 ## v1.0 — 2026-10-20 · Personal approval notifications
 
 - Route membership, profile, level and group results through registration bots; keep management-role changes on management bots.

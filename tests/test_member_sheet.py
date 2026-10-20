@@ -48,7 +48,8 @@ class SheetTests(unittest.TestCase):
 
     def test_missing_phones_multiple_people_not_name_matched_and_manual_completion(self):
         content='姓名,备注\n同名,甲\n同名,乙\n'.encode()
-        preview=self.imports.preview(content);assert preview['create_count']==2
+        preview=self.imports.preview(content);assert preview['create_count']==1 and preview['match_count']==1
+        preview=self.imports.resolve(preview['token'],[{'source_key':preview['rows'][1]['source_key'],'target':'new'}])
         self.imports.commit(preview['token'])
         assert self.imports.preview(content)['skip_count']==2
         self.member().apply('同名',gender='male')

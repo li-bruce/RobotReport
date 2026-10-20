@@ -152,6 +152,10 @@ class Members:
             if phone:
                 from .member_imports import registration_match
                 imported = registration_match(db, self.ctx.scope_id, phone, user_id)
+            from .identity_notifications import remember_request_source
+            remember_request_source(db, self.ctx, user_id, 'membership', self.clock())
+            if level is not None:
+                remember_request_source(db, self.ctx, user_id, 'level', self.clock())
             if imported:
                 return self._link_import(db, user_id, imported, gender, name, level)
             member = self._touch(db, user_id, name, source)
@@ -307,6 +311,8 @@ class Members:
                 return member
             db.execute("UPDATE member_records SET requested_level=?,level_status='pending',level_note='',updated_at=? WHERE chat_id=? AND user_id=?", (level, stamp(self.clock()), self.ctx.scope_id, self.ctx.actor))
             audit(db, self.ctx.actor, 'member.level_request', {'level': level, 'chat_id': self.ctx.scope_id})
+            from .identity_notifications import remember_request_source
+            remember_request_source(db, self.ctx, self.ctx.actor, 'level', self.clock())
             return self._record(db, self.ctx.actor)
 
     @staticmethod

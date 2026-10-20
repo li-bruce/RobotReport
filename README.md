@@ -14,7 +14,7 @@ Current application version: **v1.0**. The interface and bot commands are curren
 
 | Area | Capabilities |
 | --- | --- |
-| Members | Personal registration links, application review, Excel/CSV pre-registration with automatic column matching, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
+| Members | Personal registration links, application review, Excel/CSV pre-registration with automatic column matching and reviewed duplicate candidates, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
 | Profile changes | Request changes to name, gender, phone, level or groups through a bot or personal form; review in the admin page or chat, retain history and notify the member. |
 | Registration | Book today's or future sessions; add named guests or `+N` guests; cancel yourself or selected guests; configure regular, substitute and waiting places. |
 | Venues and schedules | Multiple venues, recurring rules, date-specific plans, individual holiday plans, event reservations and other occupancy. |
@@ -22,7 +22,7 @@ Current application version: **v1.0**. The interface and bot commands are curren
 | Daily competitions | Select an eligible format from session participants, generate draws, record scores and resume unfinished competitions. |
 | Large events | Registration windows and keywords, staff, groups, draws, schedules, results, photo/file archives and notifications through selected bots. |
 | Match history | Casual singles/doubles records, personal results, partner combinations and opponent statistics. |
-| Bots and groups | Multiple bots in one group; **one current group per bot**. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
+| Bots and groups | Multiple bots in one group; **one current group per bot**. Separate robot settings and a bot-to-group connection graph with optional sending/receiving addresses. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
 | Messages | Compose, preview and send text, images and file links; schedule reminders by message type, bot, date, workday/weekend/holiday conditions and time. |
 | Optional AI | Natural-language business requests, multi-step plans, numbered previews and simple `确认` confirmation before changes. |
 

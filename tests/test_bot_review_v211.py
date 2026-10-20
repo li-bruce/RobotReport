@@ -189,7 +189,8 @@ class BotCapabilityReviewTests(CoreFixture):
     def test_management_robot_approves_but_registration_robot_notifies_applicant(self):
         self.platform.save_channel(self.admin, self.ctx.id, {'webhook_url':
             'https://xz.wps.cn/api/v1/webhook/send?key=review-management-notice'}, self.ctx.channel_id)
-        applicant = self.platform.context_for_channel(self.ctx.channel_id, 'new-student', False, 'callback')
+        registration_channel = self.platform.context(self.admin,self.bots[1]['id']).channel_id
+        applicant = self.platform.context_for_channel(registration_channel, 'new-student', False, 'callback')
         Members(applicant, self.clock).touch('新会员')
         Members(applicant, self.clock).apply('新会员', gender='男')
         People(self.ctx, self.clock).set_roles('1001', ['member_manager'])

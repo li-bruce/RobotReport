@@ -835,6 +835,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         if not isinstance(content, str) or not 0 < len(content) <= 4000 or not re.fullmatch(r'\d{1,20}', ctime):
             raise ValueError('回调字段无效')
         ctx = platform.callback_context(bot_id, token, body)
+        channel = platform.channel(ctx.channel_id)
+        receive_only = not channel['webhook_url'] and not channel['robot_key']
         from .bot_connection import record_callback
         record_callback(platform,bot_id,token,ctx.channel_id,body)
         # Identical to the old service hash, enabling imported dedupe continuity.
@@ -843,6 +845,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             event_id = hashlib.sha256(('json:' + ctx.id + ':' + body['_event_id']).encode()).hexdigest()
         with connect(ctx.transport_db_path, True) as db:
             if not db.execute("INSERT OR IGNORE INTO inbox(event_id,status,created_at,channel_id) VALUES(?,'processing',?,?)", (event_id, stamp(clock()),ctx.channel_id)).rowcount:
+                if receive_only:
+                    prior = db.execute('SELECT status,reply FROM inbox WHERE event_id=?',(event_id,)).fetchone()
+                    if prior and prior['status']=='completed':
+                        return {'result':'ok','reply':prior['reply']}
                 return {'result': 'ok'}
         try:
             message = body['_message'] if generic else message_input(content, 'legacy')
@@ -854,9 +860,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
                 db.execute("UPDATE inbox SET status='unknown',error='业务执行异常，禁止自动重放' WHERE event_id=?", (event_id,))
             raise
         with connect(ctx.transport_db_path, True) as db:
-            Outbox(ctx).enqueue(reply, 'callback:' + event_id, db)
+            if not receive_only:
+                Outbox(ctx).enqueue(reply, 'callback:' + event_id, db)
             db.execute("UPDATE inbox SET status='completed',reply=? WHERE event_id=?", (reply, event_id))
-        return {'result': 'ok'}
+        return {'result':'ok','reply':reply} if receive_only else {'result':'ok'}
 
     @app.get('/webhooks/{bot_id}/{token}')
     @app.get('/kingsoft/callback/{bot_id}/{token}')

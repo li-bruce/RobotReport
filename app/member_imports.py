@@ -59,7 +59,7 @@ def ensure_schema(db):
             db.execute('ROLLBACK TO nullable_prereg_phone')
             db.execute('RELEASE nullable_prereg_phone')
             raise
-    for column, definition in (('source_key', "TEXT NOT NULL DEFAULT ''"), ('review_required', 'INTEGER NOT NULL DEFAULT 0')):
+    for column, definition in (('source_key', "TEXT NOT NULL DEFAULT ''"), ('review_required', 'INTEGER NOT NULL DEFAULT 0'), ('identity_attributes', "TEXT NOT NULL DEFAULT '{}'")):
         if column not in columns:
             db.execute(f'ALTER TABLE pre_registered_members ADD COLUMN {column} {definition}')
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS prereg_source ON pre_registered_members(scope_id,source_key) WHERE source_key<>''")
@@ -139,6 +139,7 @@ class MemberImports:
             row['group_ids']=json.loads(row['group_ids'])
             row['groups']=[{'id':gid,'name':groups.get(gid,'已移除分组')} for gid in row['group_ids']]
             row.pop('scope_id');row.pop('created_by')
+            row.pop('identity_attributes', None)
             result.append(row)
         return result
 
@@ -150,6 +151,10 @@ class MemberImports:
             item = {key: raw[key] for key in ('line','sheet','source_key')}
             item.update(name='', phone='', level=None, gender='unknown', groups=[])
             try:
+                extra = raw.get('identity_attributes', {})
+                if any(len(v)>160 or any(ord(c)<32 for c in v) or v.startswith(('=','+','@')) for v in extra.values()):
+                    raise ValueError('身份属性最多160字，不得包含公式或控制字符')
+                item['identity_attributes'] = extra
                 if any(str(raw.get(k, '')).startswith('=') for k in ('name','phone','gender','level','groups')):
                     raise ValueError('资料列含公式，请粘贴为数值后导入')
                 name = raw.get('name', '').strip()
@@ -177,7 +182,7 @@ class MemberImports:
             result.append(item)
         return result, metadata
 
-    def _classify(self,db,items):
+    def _classify(self,db,items,decisions=None):
         groups={r['id']:r['name'] for r in db.execute('SELECT id,name FROM member_groups WHERE chat_id=?',(self.ctx.scope_id,))}
         seen={};result=[]
         for original in items:
@@ -212,7 +217,62 @@ class MemberImports:
                 if account['status']=='approved' and (account['name'],account['level'],account_groups)==identity and (item.get('gender', 'unknown') == 'unknown' or account.get('gender', 'unknown') == item['gender']):item['status']='skip'
                 else:item.update(status='error',error='手机号已存在账号资料，请先在会员管理中核实，不能直接覆盖')
             result.append(item)
-        return result
+        from .member_matching import classify_duplicates
+        return classify_duplicates(db,self.ctx.scope_id,result,decisions)
+
+    @staticmethod
+    def _visible(rows, metadata, token, expires):
+        from .member_matching import masked_value
+        errors=[{'line':r['line'],'message':r['error']} for r in rows if r['status']=='error']
+        visible=[]
+        for row in rows:
+            item={k:v for k,v in row.items() if k not in ('phone','identity_attributes','match_signature')}
+            item['phone_masked']=masked(row['phone'])
+            item['identity_attributes']={k:masked_value(k,v) for k,v in row.get('identity_attributes',{}).items()}
+            item['matches']=[{k:v for k,v in candidate.items() if k!='fingerprint'} for candidate in row.get('matches',[])]
+            visible.append(item)
+        pending=sum(r['status']=='match' for r in rows)
+        return {'token':token,'expires_at':expires if token else None,**metadata,'total':len(rows),
+                'create_count':sum(r['status']=='create' for r in rows),'skip_count':sum(r['status']=='skip' for r in rows),
+                'match_count':pending,'can_commit':not errors and not pending,'errors':errors,'rows':visible}
+
+    def _preview_record(self,db,token):
+        if not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{40,60}',token):
+            raise ValueError('导入预览已失效，请重新上传')
+        row=db.execute('SELECT * FROM member_import_previews WHERE token_hash=? AND scope_id=? AND admin_id=? AND expires_at>?',
+            (hashlib.sha256(token.encode()).hexdigest(),self.ctx.scope_id,self.ctx.actor,stamp(self.clock()))).fetchone()
+        if not row:raise ValueError('导入预览已失效或不属于当前管理员，请重新上传')
+        return row
+
+    @staticmethod
+    def _payload(preview):
+        value=json.loads(preview['payload'])
+        return {'items':value,'metadata':{},'decisions':{}} if isinstance(value,list) else value
+
+    def resolve(self,token,choices):
+        self._admin()
+        if not isinstance(choices,list) or not choices or len(choices)>MAX_ROWS:
+            raise ValueError('请选择要确认的匹配记录')
+        with connect(self.path,True) as db:
+            ensure_schema(db)
+            preview=self._preview_record(db,token)
+            if preview['status']!='pending':raise ValueError('本次导入已完成，请重新上传')
+            payload=self._payload(preview);decisions=payload.setdefault('decisions',{})
+            seen=set()
+            rows={r['source_key']:r for r in self._classify(db,payload['items'],decisions)}
+            for choice in choices:
+                if not isinstance(choice,dict) or set(choice)!={'source_key','target'}:raise ValueError('匹配选择无效')
+                key,target=choice['source_key'],choice['target']
+                if not isinstance(key,str) or not isinstance(target,str) or key in seen:raise ValueError('匹配选择无效')
+                seen.add(key)
+                row=rows.get(key)
+                if not row or not row.get('matches'):raise ValueError('匹配候选已变化，请重新预览')
+                if target!='new' and not any(c['target']==target for c in row['matches']):raise ValueError('请选择当前提供的候选档案')
+                decisions[key]={'target':target,'signature':row['match_signature']}
+            rows=self._classify(db,payload['items'],decisions)
+            db.execute('UPDATE member_import_previews SET payload=? WHERE token_hash=?',(dumps(payload),preview['token_hash']))
+            audit(db,self.ctx.actor,'member_import.match',{'decisions':choices,'scope_id':self.ctx.scope_id})
+            return self._visible(rows,payload['metadata'],token,preview['expires_at'])
 
     def preview(self,content,filename='members.csv'):
         self._admin()
@@ -227,10 +287,8 @@ class MemberImports:
             if not errors:
                 token=secrets.token_urlsafe(32)
                 db.execute('INSERT INTO member_import_previews(token_hash,scope_id,admin_id,payload,expires_at,created_at) VALUES(?,?,?,?,?,?)',
-                           (hashlib.sha256(token.encode()).hexdigest(),self.ctx.scope_id,self.ctx.actor,dumps(parsed),expires,stamp(self.clock())))
-        visible=[{k:v for k,v in r.items() if k!='phone'}|{'phone_masked':masked(r['phone'])} for r in rows]
-        return {'token':token,'expires_at':expires if token else None,**metadata,'total':len(rows),'create_count':sum(r['status']=='create' for r in rows),
-                'skip_count':sum(r['status']=='skip' for r in rows),'can_commit':not errors,'errors':errors,'rows':visible}
+                           (hashlib.sha256(token.encode()).hexdigest(),self.ctx.scope_id,self.ctx.actor,dumps({'items':parsed,'metadata':metadata,'decisions':{}}),expires,stamp(self.clock())))
+        return self._visible(rows,metadata,token,expires)
 
     def commit(self,token):
         self._admin()
@@ -242,9 +300,12 @@ class MemberImports:
             if not preview:raise ValueError('导入预览已失效或不属于当前管理员，请重新上传')
             if preview['status']=='committed':return json.loads(preview['result'])|{'already_committed':True}
             if preview['status']!='pending':raise ValueError('导入预览已失效，请重新上传')
-            items=self._classify(db,json.loads(preview['payload']))
+            payload=self._payload(preview)
+            items=self._classify(db,payload['items'],payload['decisions'])
             errors=[r for r in items if r['status']=='error']
             if errors:raise ValueError('预览后资料发生冲突，本次未导入任何记录，请重新预览：第'+str(errors[0]['line'])+'行 '+errors[0]['error'])
+            if any(r['status']=='match' for r in items):
+                raise ValueError('存在待确认的重复人员，本次未导入任何记录，请核对匹配；资料变化时需重新预览')
             count=0
             for row in items:
                 if row['status']=='skip':continue
@@ -252,8 +313,8 @@ class MemberImports:
                 for name in row['groups']:
                     found=db.execute('SELECT id FROM member_groups WHERE chat_id=? AND name=?',(self.ctx.scope_id,name)).fetchone()
                     ids.append(found[0] if found else db.execute('INSERT INTO member_groups(chat_id,name,created_at) VALUES(?,?,?)',(self.ctx.scope_id,name,stamp(self.clock()))).lastrowid)
-                db.execute('INSERT INTO pre_registered_members(scope_id,name,phone,level,gender,group_ids,created_by,created_at,source_key,review_required) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                           (self.ctx.scope_id,row['name'],row['phone'] or None,row['level'],row.get('gender','unknown'),dumps(sorted(ids)),self.ctx.actor,stamp(self.clock()),row.get('source_key',''),int(row.get('review_required',False))))
+                db.execute('INSERT INTO pre_registered_members(scope_id,name,phone,level,gender,group_ids,created_by,created_at,source_key,review_required,identity_attributes) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                           (self.ctx.scope_id,row['name'],row['phone'] or None,row['level'],row.get('gender','unknown'),dumps(sorted(ids)),self.ctx.actor,stamp(self.clock()),row.get('source_key',''),int(row.get('review_required',False)),dumps(row.get('identity_attributes',{}))))
                 count+=1
             result={'imported':count,'skipped':len(items)-count,'total':len(items),'already_committed':False}
             db.execute("UPDATE member_import_previews SET status='committed',payload=NULL,result=? WHERE token_hash=?",(dumps(result),preview['token_hash']))
@@ -269,7 +330,7 @@ class MemberImports:
         writer.writerow(['姓名','手机号','性别','级别','组别'])
         writer.writerow([data.get('name',''),data.get('phone',''),data.get('gender',''),data.get('level',data.get('requested_level')) or '',data.get('groups','')])
         preview=self.preview(stream.getvalue().encode())
-        if not preview['can_commit']:raise ValueError(preview['errors'][0]['message'])
+        if not preview['can_commit']:raise ValueError(preview['errors'][0]['message'] if preview['errors'] else '存在同名或重复人员，请在批量登记中核对匹配')
         return self.commit(preview['token'])
 
     def update(self, record_id, data):

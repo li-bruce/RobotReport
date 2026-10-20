@@ -122,6 +122,8 @@ class ProfileChanges:
                 (scope_id,user_id,member_name,before_json,changes_json,submitted_at) VALUES(?,?,?,?,?,?)''',
                 (self.ctx.scope_id, self.ctx.actor, member['name'], dumps(before), dumps(combined), stamp(self.clock()))).lastrowid
             audit(connection, self.ctx.actor, 'member.profile_request', {'request_id': request_id, 'fields': sorted(combined), 'scope_id': self.ctx.scope_id})
+            from .identity_notifications import remember_request_source
+            remember_request_source(connection, self.ctx, self.ctx.actor, 'profile_request', self.clock())
             return self._view(connection.execute('SELECT * FROM member_profile_requests WHERE id=?', (request_id,)).fetchone(), connection)
 
     def cancel(self):
