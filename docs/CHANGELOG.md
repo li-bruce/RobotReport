@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-20 · Personal approval notifications
+
+- Route membership, profile, level and group results through registration bots; keep management-role changes on management bots.
+- Preserve approval permissions, one notice per related group, current capability windows and no replay after a sent or uncertain result.
+- Recheck the recorded event and destination at delivery; disabling unrelated management features does not cancel a personal receipt.
+
 ## v1.0 — 2026-10-20 · Empty registration notices
 
 - Use a single “暂时无人报名” line for empty roster queries and daily reminders, without venue, session, or time headings.

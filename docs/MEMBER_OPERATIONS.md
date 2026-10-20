@@ -10,6 +10,8 @@ A row needs a name or a phone number. Missing information does not prevent pre-r
 
 Only an exact normalized phone match associates an imported record. If an imported row has no phone, an administrator first adds it through **Complete details**. A matched incomplete record is reserved for that account and submitted for normal membership review. Self-supplied ratings remain pending review. Complete, already reviewed imports retain the existing direct-association behavior. Neither import path grants management roles. Already approved members submit changes through the profile approval queue.
 
+Membership, profile-review, level and group results are sent by a registration-enabled bot in the member's related group. Management-role changes use management-enabled bots. Performing an approval still requires member-management permission, and group approval commands require the management capability.
+
 ## Scheduled announcements
 
 Open **Settings → Scheduled messages**. Add rules selecting:

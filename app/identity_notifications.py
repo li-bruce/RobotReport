@@ -13,6 +13,35 @@ from .messages import Outbox, escape, mention
 from .bot_capabilities import supports
 
 
+def notification_capability(kind):
+    """A personal result uses registration; role grants use management."""
+    if kind in ('membership', 'level', 'groups', 'profile_request'):
+        return 'registration'
+    if kind == 'roles':
+        return 'management'
+    raise ValueError('身份通知类型无效')
+
+
+def notification_feature(event):
+    return '会员注册' if notification_capability(event['kind']) == 'registration' else '群内管理'
+
+
+def delivery_capability(db, ctx, dedupe_key):
+    """Resolve the trusted event and its chosen destination before transport."""
+    prefix = (ctx.channel_id or ctx.chat_id) + ':identity:'
+    if not dedupe_key.startswith(prefix):
+        return None
+    event_id = dedupe_key[len(prefix):].rsplit(':', 1)[0]
+    event = db.execute('SELECT * FROM identity_notification_events WHERE id=? AND scope_id=?',
+                       (event_id, ctx.scope_id)).fetchone()
+    delivery = db.execute('''SELECT channel_id FROM identity_notification_deliveries
+        WHERE event_id=? AND chat_id=?''', (event_id, ctx.chat_id)).fetchone()
+    if (not event or not delivery or delivery['channel_id'] != ctx.channel_id
+            or ctx.chat_id not in json.loads(event['recipient_chats'])):
+        raise ValueError('身份通知记录与目的群不匹配')
+    return notification_capability(event['kind'])
+
+
 def ensure_schema(db):
     # Do not use executescript here: hooks run inside the business transaction.
     db.execute('''CREATE TABLE IF NOT EXISTS identity_notification_events(
@@ -177,7 +206,7 @@ class IdentityNotifications:
             # Identity membership is shared across venues: activity slot limits
             # do not hide an identity notice in the person's own related group.
             rows = [r for r in rows if self.platform.channel(r['id'])['webhook_url']]
-            rows = [r for r in rows if self._can_notify(self._context(r['id']))]
+            rows = [r for r in rows if self._can_notify(self._context(r['id']), event)]
             rows.sort(key=lambda r: (r['id'] != event['preferred_channel_id'], r['id']))
             if rows:
                 selected[chat] = rows[0]['id']
@@ -203,7 +232,7 @@ class IdentityNotifications:
                 db.execute('''INSERT OR IGNORE INTO identity_notification_deliveries
                     (event_id,chat_id,channel_id,status,last_error,updated_at) VALUES(?,?,?,?,?,?)''',
                     (event['id'],chat,cid,'pending' if cid else 'blocked',
-                     None if cid else '关联群暂无可发送管理通知的机器人，请开启群内管理并检查发送配置',at))
+                     None if cid else '关联群暂无可发送通知的机器人，请开启'+notification_feature(event)+'并检查发送配置',at))
                 if cid:
                     db.execute('''UPDATE identity_notification_deliveries SET channel_id=?,status='pending',
                         last_error=NULL,updated_at=? WHERE event_id=? AND chat_id=? AND channel_id=''
@@ -212,10 +241,8 @@ class IdentityNotifications:
         return chats
 
     @staticmethod
-    def _can_notify(ctx):
-        # Registration is a member-facing entry point, not permission to publish
-        # administrative decisions. Select one management robot in each group.
-        return supports(ctx, 'management')
+    def _can_notify(ctx, event):
+        return supports(ctx, notification_capability(event['kind']))
 
     def dispatch(self, event_id):
         event = self._event(event_id)
@@ -230,8 +257,8 @@ class IdentityNotifications:
                 continue
             try:
                 ctx = self._context(item['channel_id'])
-                if not self._can_notify(ctx):
-                    raise PermissionError('机器人未开启群内管理')
+                if not self._can_notify(ctx, event):
+                    raise PermissionError('机器人未开启'+notification_feature(event))
                 if ctx.chat_id != item['chat_id']:
                     raise ValueError('群绑定已变更')
                 if not self.platform.channel(item['channel_id'])['webhook_url']:
@@ -239,7 +266,7 @@ class IdentityNotifications:
                 ids = Outbox(ctx).enqueue(event_text(event), 'identity:' + event_id)
                 state, error = 'queued', None
             except (ValueError, PermissionError):
-                ids, state, error = [], 'blocked', '原通知机器人或群绑定不可用，请检查群内管理和发送配置后重试'
+                ids, state, error = [], 'blocked', '原通知机器人或群绑定不可用，请检查'+notification_feature(event)+'和发送配置后重试'
             except Exception:
                 # A crash after transport commit is safe: the same event key
                 # recovers the same outbox rows, never a new sender or message.
@@ -268,7 +295,7 @@ class IdentityNotifications:
                 invalid_destination = (not channel['active'] or not channel['bot_active'] or
                                        channel['chat_id'] != item['chat_id'])
                 invalid_sender = (not invalid_destination and not self._can_notify(
-                    self._context(item['channel_id'])))
+                    self._context(item['channel_id']), event))
                 if invalid_destination or invalid_sender:
                     # Disabled channels are absent from the scheduler's send
                     # loop. Mark their untouched rows visibly failed instead
@@ -277,7 +304,7 @@ class IdentityNotifications:
                         placeholders = ','.join('?' for _ in ids)
                         db.execute(f'''UPDATE outbox SET status='failed',last_error=?
                             WHERE channel_id=? AND id IN ({placeholders}) AND status='pending' ''',
-                            ['机器人未开启群内管理，管理通知未发送' if invalid_sender
+                            ['机器人未开启'+notification_feature(event)+'，通知未发送' if invalid_sender
                              else '身份通知目的群已停用或变更', item['channel_id']] + ids)
                 with connect(path) as db:
                     placeholders = ','.join('?' for _ in ids)
@@ -289,7 +316,7 @@ class IdentityNotifications:
                 error = {'failed': '消息未被平台接受，请检查消息队列', 'unknown': '发送结果待核实，禁止自动重发',
                          'cancelled': '消息已取消', 'partial': '消息部分发送，请检查消息队列'}.get(state)
                 if invalid_sender and state == 'failed':
-                    error = '原通知机器人已关闭群内管理，请检查消息队列'
+                    error = '原通知机器人已关闭'+notification_feature(event)+'，请检查消息队列'
             except (ValueError, PermissionError):
                 state, error = 'unknown', '原发送通道无法核对，请人工检查消息队列'
             item['status'], item['last_error'] = state, error

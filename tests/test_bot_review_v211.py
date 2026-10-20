@@ -186,7 +186,7 @@ class BotCapabilityReviewTests(CoreFixture):
         self.assertEqual(blocked['deliveries'][0]['status'], 'failed')
         self.assertEqual(blocked['deliveries'][0]['outbox_ids'], [])
 
-    def test_management_only_group_approval_mentions_applicant_without_registration_feature(self):
+    def test_management_robot_approves_but_registration_robot_notifies_applicant(self):
         self.platform.save_channel(self.admin, self.ctx.id, {'webhook_url':
             'https://xz.wps.cn/api/v1/webhook/send?key=review-management-notice'}, self.ctx.channel_id)
         applicant = self.platform.context_for_channel(self.ctx.channel_id, 'new-student', False, 'callback')
@@ -194,15 +194,18 @@ class BotCapabilityReviewTests(CoreFixture):
         Members(applicant, self.clock).apply('新会员', gender='男')
         People(self.ctx, self.clock).set_roles('1001', ['member_manager'])
         self.platform.update(self.admin, self.ctx.id, {'capabilities': ['management']})
-        self.platform.update(self.admin, self.bots[1]['id'], {'capabilities': []})
+        self.platform.update(self.admin, self.bots[1]['id'], {'capabilities': ['registration']})
+        second = self.platform.context(self.admin,self.bots[1]['id'])
+        self.platform.save_channel(self.admin,second.id,{'webhook_url':
+            'https://xz.wps.cn/api/v1/webhook/send?key=review-registration-notice'},second.channel_id)
         reply = asyncio.run(self.commands().run('审核通过 新会员'))
         self.assertIn('通过', reply)
         with connect(self.ctx.db_path) as db:
             event_id = db.execute("SELECT id FROM identity_notification_events WHERE user_id='new-student' AND kind='membership' ORDER BY rowid DESC").fetchone()[0]
         item = IdentityNotifications(self.platform, self.clock).dispatch(event_id)
         self.assertEqual(item['status'], 'queued')
-        self.assertEqual(item['deliveries'][0]['channel_id'], self.ctx.channel_id)
-        text = Outbox(self.ctx).list()[0]['payload']['markdown']['text']
+        self.assertEqual(item['deliveries'][0]['channel_id'], second.channel_id)
+        text = Outbox(second).list()[0]['payload']['markdown']['text']
         self.assertIn('<at user_id="new-student">新会员</at>', text)
         self.assertIn('注册审核已通过', text)
 

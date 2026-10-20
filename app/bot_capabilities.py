@@ -5,7 +5,7 @@ membership or management authority; those checks remain in the business modules.
 """
 
 _CATALOG = (
-    ('registration', '会员注册', '注册申请、补充资料和自评级别'),
+    ('registration', '会员注册', '注册申请、个人资料、等级与组别及审核结果通知'),
     ('enrollment', '活动报名', '活动报名、代报名、取消和报名名单'),
     ('daily_events', '每日赛事', '组织趣味比赛、查看赛程和记录比分'),
     ('large_events', '大型赛事', '大型赛事报名、组织、赛程和比赛记录'),
@@ -13,7 +13,7 @@ _CATALOG = (
     ('statistics', '报名统计', '查看个人报名汇总和管理报名统计'),
     ('messages', '消息发布', '后台向群发送文本、图片、文件和公告'),
     ('ai', 'AI 助手', '用自然语言调用本机器人已开启的业务'),
-    ('management', '群内管理', '办理管理操作，发布审核、角色、等级和组别变更通知'),
+    ('management', '群内管理', '办理群内审核等管理操作，发布管理角色变更通知'),
 )
 ALL_CAPABILITIES = tuple(item[0] for item in _CATALOG)
 REQUIRED_CAPABILITIES = ()

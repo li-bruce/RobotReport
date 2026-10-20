@@ -237,12 +237,17 @@ class Outbox:
                 return 'failed'
             from .time_rules import bind_clock
             current_ctx = bind_clock(platform.context_for_channel(self.ctx.channel_id),lambda:at)
-            # Also covers legacy identity notices queued before management-only
-            # routing, whose captured scope can still match the current robot.
-            from .bot_capabilities import supports
-            if (row['dedupe_key'].startswith((self.ctx.channel_id or self.ctx.chat_id) + ':identity:')
-                    and not supports(current_ctx, 'management')):
-                db.execute("UPDATE outbox SET status='failed',last_error='机器人未开启群内管理，管理通知未发送' WHERE id=?", (row['id'],))
+            # Personal receipts follow their recorded business, not unrelated
+            # activity scopes or the robot's ability to perform an approval.
+            from .bot_capabilities import require_capability
+            from .identity_notifications import delivery_capability
+            try:
+                with connect(self.ctx.db_path) as business:
+                    identity_capability = delivery_capability(business, current_ctx, row['dedupe_key'])
+                if identity_capability:
+                    require_capability(current_ctx, identity_capability)
+            except (ValueError, PermissionError) as error:
+                db.execute("UPDATE outbox SET status='failed',last_error=? WHERE id=?", (str(error),row['id']))
                 return 'failed'
             from .time_rules import broadcast_delivery_allowed
             from .service import Service
@@ -253,7 +258,7 @@ class Outbox:
             captured_scope=json.loads(row['scope_json'])
             if captured_scope:
                 captured_scope.setdefault('capabilities', None)
-            if (captured_scope and captured_scope!=current_scope) or (not captured_scope and any(v is not None for v in current_scope.values())):
+            if not identity_capability and ((captured_scope and captured_scope!=current_scope) or (not captured_scope and any(v is not None for v in current_scope.values()))):
                 db.execute("UPDATE outbox SET status='failed',last_error='机器人负责范围已变更，旧消息已取消发送' WHERE id=?",(row['id'],))
                 return 'failed'
             # Recheck the business notice against the destination's current scope.

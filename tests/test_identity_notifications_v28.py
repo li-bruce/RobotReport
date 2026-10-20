@@ -58,7 +58,7 @@ class IdentityNotificationTests(unittest.TestCase):
     def caps(self, index, values):
         self.platform.update(self.principal, self.bots[index]['id'], {'capabilities': values})
 
-    def test_all_administrative_notices_use_management_bot_in_same_group(self):
+    def test_personal_results_and_role_notices_use_their_own_business_bots(self):
         self.user((0,))
         self.caps(0, ['registration', 'messages'])
         self.caps(1, ['management'])
@@ -67,17 +67,18 @@ class IdentityNotificationTests(unittest.TestCase):
             ('roles', {'roles':[]}, {'roles':['member_manager']}),
             ('level', {'level_status':'pending'}, {'level_status':'approved','level':3}),
             ('groups', {'groups':[]}, {'groups':[{'id':1,'name':'会员组'}]}),
+            ('profile_request', {'request_id':1,'status':'pending'}, {'request_id':1,'status':'approved','fields':['姓名']}),
         ]
         for kind, before, after in cases:
             with self.subTest(kind=kind):
-                # Even a trusted origin preference cannot select the registration bot.
+                expected = 1 if kind == 'roles' else 0
                 event_id = self.event(self.ctx(0), kind, before, after)
                 item = self.notices.dispatch(event_id)
                 self.assertEqual(item['status'], 'queued')
                 self.assertEqual([(d['chat_id'],d['channel_id']) for d in item['deliveries']],
-                                 [('known-room',self.channels[1])])
-        self.assertEqual(len(self.outbox(1)), len(cases))
-        self.assertEqual(self.outbox(0), [])
+                                 [('known-room',self.channels[expected])])
+        self.assertEqual(len(self.outbox(1)), 1)
+        self.assertEqual(len(self.outbox(0)), len(cases)-1)
         self.assertEqual(self.outbox(2), [])
         self.assertEqual(self.outbox(3), [])
 
@@ -85,7 +86,7 @@ class IdentityNotificationTests(unittest.TestCase):
         self.user((0,))
         self.caps(0, ['registration'])
         self.caps(1, ['messages'])
-        event_id = self.event()
+        event_id = self.event(kind='roles',before={'roles':[]},after={'roles':['member_manager']})
         item = self.notices.dispatch(event_id)
         self.assertEqual(item['status'], 'blocked')
         self.assertIn('群内管理', item['last_error'])
@@ -104,15 +105,15 @@ class IdentityNotificationTests(unittest.TestCase):
         self.caps(0, ['registration', 'messages'])
         self.caps(1, ['management'])
         self.platform.save_channel(self.principal,self.bots[1]['id'],{'webhook_url':''},self.channels[1])
-        self.assertEqual(self.notices.dispatch(self.event())['status'], 'blocked')
+        event_id = self.event(kind='roles',before={'roles':[]},after={'roles':['member_manager']})
+        self.assertEqual(self.notices.dispatch(event_id)['status'], 'blocked')
         self.assertEqual(sum(len(self.outbox(i)) for i in range(4)), 0)
 
     def legacy_notice(self):
         self.user((0,))
         self.caps(0, ['registration'])
-        event_id = self.event(self.ctx(0))
-        # Reproduce a committed queue from the earlier registration-or-management
-        # policy without changing its captured scope or credentials afterwards.
+        event_id = self.event(self.ctx(0),kind='roles',before={'roles':[]},after={'roles':['member_manager']})
+        # A role notification on a registration-only sender must stay blocked.
         with patch.object(IdentityNotifications, '_can_notify', return_value=True):
             item = self.notices.dispatch(event_id)
         self.assertEqual(item['deliveries'][0]['channel_id'], self.channels[0])
@@ -147,7 +148,7 @@ class IdentityNotificationTests(unittest.TestCase):
 
     def test_management_revocation_after_enqueue_stops_notice(self):
         self.user((0,))
-        event_id = self.event(self.ctx(0))
+        event_id = self.event(self.ctx(0),kind='roles',before={'roles':[]},after={'roles':['member_manager']})
         self.notices.dispatch(event_id)
         self.caps(0, ['registration', 'messages'])
         item = self.notices.get(event_id)
@@ -155,6 +156,77 @@ class IdentityNotificationTests(unittest.TestCase):
         self.assertIn('群内管理', item['last_error'])
         self.assertEqual(self.outbox(0)[0]['attempts'], 0)
         self.assertEqual(self.outbox(1), [])
+
+    def test_registration_result_sends_after_management_is_disabled(self):
+        self.user((0,))
+        event_id = self.event(self.ctx(0))
+        self.notices.dispatch(event_id)
+        self.caps(0,['registration'])
+        self.assertEqual(self.notices.get(event_id)['status'],'queued')
+        calls=[]
+        async def send():
+            async def handler(request):
+                calls.append(json.loads(request.content))
+                return httpx.Response(200,json={'result':'ok'})
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await Outbox(self.ctx(0)).deliver_one(self.platform,live=True,client=client,at=self.at)
+        self.assertEqual(asyncio.run(send()),'sent')
+        self.assertEqual(len(calls),1)
+        self.assertIn('注册审核已通过',json.dumps(calls,ensure_ascii=False))
+        self.assertEqual(self.notices.get(event_id)['status'],'sent')
+        self.assertEqual(self.outbox(1),[])
+
+    def test_missing_registration_waits_then_recovers_without_management(self):
+        self.user((0,))
+        self.caps(0,['messages']);self.caps(1,['management'])
+        event_id=self.event()
+        self.assertEqual(self.notices.dispatch(event_id)['status'],'blocked')
+        self.assertIn('会员注册',self.notices.get(event_id)['last_error'])
+        self.caps(0,['registration'])
+        self.at+=timedelta(seconds=61)
+        self.notices.recover()
+        self.assertEqual(self.notices.get(event_id)['status'],'queued')
+        self.assertEqual(self.notices.get(event_id)['deliveries'][0]['channel_id'],self.channels[0])
+        self.notices.recover();self.assertEqual(len(self.outbox(0)),1)
+        self.assertEqual(self.outbox(1),[])
+
+    def test_registration_revocation_blocks_personal_receipt_before_any_send(self):
+        self.user((0,))
+        event_id=self.event(self.ctx(0));self.notices.dispatch(event_id)
+        self.caps(0,['management'])
+        self.assertEqual(asyncio.run(Outbox(self.ctx(0)).deliver_one(self.platform,at=self.at)),'failed')
+        self.assertEqual(self.outbox(0)[0]['attempts'],0)
+        self.assertIn('会员注册',self.outbox(0)[0]['last_error'])
+        self.assertEqual(self.notices.get(event_id)['status'],'failed')
+
+    def test_personal_receipt_respects_registration_time_window(self):
+        self.user((0,))
+        event_id=self.event(self.ctx(0));self.notices.dispatch(event_id)
+        self.platform.update(self.principal,self.bots[0]['id'],{'capability_rules':[
+            {'id':'off','name':'暂停注册','enabled':True,'capabilities':['registration'],'action':'closed',
+             'when':{'start_time':'12:00','end_time':'13:00'}}]})
+        self.assertEqual(asyncio.run(Outbox(self.ctx(0)).deliver_one(self.platform,at=self.at)),'failed')
+        self.assertEqual(self.outbox(0)[0]['attempts'],0)
+
+    def test_identity_key_cannot_bypass_ordinary_message_scope_without_record(self):
+        self.caps(0,['registration'])
+        Outbox(self.ctx(0)).enqueue('无有效通知记录','identity:missing-event')
+        self.assertEqual(asyncio.run(Outbox(self.ctx(0)).deliver_one(self.platform,at=self.at)),'failed')
+        self.assertEqual(self.outbox(0)[0]['attempts'],0)
+
+    def test_recorded_event_cannot_be_sent_by_a_different_or_unrelated_channel(self):
+        self.user((0,))
+        event_id=self.event(self.ctx(0));self.notices.dispatch(event_id)
+        for index in (1,3):
+            Outbox(self.ctx(index)).enqueue('错误发送通道','identity:'+event_id)
+            self.assertEqual(asyncio.run(Outbox(self.ctx(index)).deliver_one(self.platform,at=self.at)),'failed')
+            self.assertEqual(self.outbox(index)[0]['attempts'],0)
+
+    def test_activity_scope_change_does_not_hide_an_approved_personal_result(self):
+        self.user((0,))
+        event_id=self.event(self.ctx(0));self.notices.dispatch(event_id)
+        self.platform.update(self.principal,self.bots[0]['id'],{'venue_ids':[],'slot_keys':[]})
+        self.assertEqual(asyncio.run(Outbox(self.ctx(0)).deliver_one(self.platform,at=self.at)),'simulated')
 
     def test_legacy_sent_or_uncertain_notices_are_never_replayed_by_management_bot(self):
         self.user((0,))
