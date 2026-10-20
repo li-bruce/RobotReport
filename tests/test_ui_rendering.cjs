@@ -68,9 +68,9 @@ assert.match(run("roleTags({status:'approved',roles:[]})"),/无管理角色/);
 assert.ok(!source.includes('id="bot-select"'));
 assert.ok(!source.includes('admin_user_ids'));
 assert.ok(!source.includes("throw new Error('请先选择机器人')"));
-assert.match(run('registrationJourney()'),/提交申请/);
+assert.match(run('registrationJourney()'),/确认注册/);
 assert.match(run('registrationJourney()'),/独立授权/);
-assert.match(run('registrationJourney()'),/手机号匹配/);
+assert.match(run('registrationJourney()'),/姓名匹配/);
 const importPreview={token:'preview-token',expires_at:'2026-10-13T06:30:00Z',total:3,create_count:2,skip_count:1,can_commit:true,errors:[],rows:[
   {line:2,name:'张三',phone_masked:'138****0001',level:2,groups:['提高组','周末组'],status:'create'},
   {line:3,name:'<script>alert(1)</script>',phone_masked:'138****0002',level:null,groups:['<img src=x>'],status:'create'},
