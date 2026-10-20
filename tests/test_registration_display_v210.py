@@ -7,6 +7,18 @@ from app.help import command_help
 from app.messages import registration_gender, registration_name, registration_table, roster
 
 
+def test_empty_roster_omits_headers_times_and_ignores_cancelled_or_out_of_scope_people():
+    sessions=[dict(id=n, name=f'第{n}场', date='2026-10-20',start='17:30',end='20:30',
+                   capacity=8,substitute_capacity=4) for n in (1,2)]
+    rows=[dict(session_id=1,status='cancelled'),dict(session_id=99,status='active')]
+    assert roster(dict(sessions=sessions,registrations=rows))=='暂时无人报名'
+    assert roster(dict(sessions=[],registrations=[]))=='暂无场次安排。'
+    sessions[1].update(occupancies=[1],booking_notice='校队训练')
+    notice=roster(dict(sessions=sessions,registrations=rows))
+    assert '校队训练' in notice and '已占用' in notice
+    assert '第1场：暂时无人报名' in notice
+
+
 def test_roster_has_three_columns_no_rank_or_internal_identifier():
     rows = [
         dict(name='张三', user_id='internal-1', guest_index=0, level=3,

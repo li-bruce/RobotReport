@@ -92,14 +92,26 @@ def registration_table(rows):
     ])
 
 
+def empty_roster(data):
+    """An empty visible roster without an occupancy notice that needs showing."""
+    sessions = data['sessions']
+    ids = {session['id'] for session in sessions}
+    return bool(ids) and not any(session.get('occupancies') for session in sessions) and not any(
+        row['status'] == 'active' and row['session_id'] in ids for row in data['registrations'])
+
+
 def roster(data, venue_id=1):
+    if empty_roster(data):
+        return '暂时无人报名'
     lines = []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
         label = f"{session['date']} · 场地{venue_id} · {escape(session['name'])} {session['start']}–{session['end']}"
         if not rows:
-            state = '🔴 已占用：'+escape(session['booking_notice']) if session.get('occupancies') else '暂无报名'
-            lines.append(f'{label}：{state}')
+            if session.get('occupancies'):
+                lines.append(f"{label}：🔴 已占用：{escape(session['booking_notice'])}")
+            else:
+                lines.append(f"{escape(session['name'])}：暂时无人报名")
             continue
         lines.append(f"## {label}")
         if session.get('occupancies'):

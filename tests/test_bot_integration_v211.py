@@ -127,7 +127,7 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn('报名', messages[0]['text'])
         self.assertNotIn('发送 注册', messages[0]['text'])
-        self.assertEqual(asyncio.run(Outbox(self.ctx(1)).deliver_one(self.platform)), 'simulated')
+        self.assertEqual(asyncio.run(Outbox(self.ctx(1)).deliver_one(self.platform,at=self.at)), 'simulated')
 
     def test_manual_publish_uses_message_capability_not_group_management(self):
         self.caps([])

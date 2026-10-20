@@ -1,5 +1,10 @@
 # Changes
 
+## v1.0 — 2026-10-20 · Empty registration notices
+
+- Use a single “暂时无人报名” line for empty roster queries and daily reminders, without venue, session, or time headings.
+- Preserve populated rosters and occupancy notices; evaluate only sessions handled by the receiving bot.
+
 ## v1.0 — 2026-10-19 · Imports and availability
 
 - Recognize Excel/CSV roster columns and incomplete records; review personal completions while preserving phone-only account linking.

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from .db import now, TZ
 from .service import Service
-from .messages import Outbox, roster, escape
+from .messages import Outbox, roster, escape, empty_roster
 from .notifications import Notifications
 from .identity_notifications import IdentityNotifications
 from .scope import snapshot
@@ -56,11 +56,11 @@ class Scheduler:
                             except (ValueError,PermissionError):continue
                             shown=[item for item in sessions if item['id'] not in sent_sessions.get(allocation,set()) and (kind!='closing' or item['status']!='ended')]
                             if not shown:continue
-                            if kind=='roster':
-                                data=scoped.registrations(target.date().isoformat(),venue['id'])
-                                shown_ids={item['id'] for item in shown}
-                                data['sessions']=[item for item in data['sessions'] if item['id'] in shown_ids]
-                                data['registrations']=[item for item in data['registrations'] if item['session_id'] in shown_ids]
+                            data=scoped.registrations(target.date().isoformat(),venue['id'])
+                            shown_ids={item['id'] for item in shown}
+                            data['sessions']=[item for item in data['sessions'] if item['id'] in shown_ids]
+                            data['registrations']=[item for item in data['registrations'] if item['session_id'] in shown_ids]
+                            if kind=='roster' or empty_roster(data):
                                 text=roster(data,venue['id'])
                             else:
                                 title='报名即将结束' if kind=='closing' else '今日报名'

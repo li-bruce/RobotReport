@@ -215,7 +215,7 @@ class CoreTests(CoreFixture):
         reboot.tick()
         self.assertEqual(len(delivered()), 1)
         self.assertEqual(delivered()[0]['channel_id'], original_channel)
-        self.assertIn('20:30', delivered()[0]['text'])
+        self.assertEqual('暂时无人报名', delivered()[0]['text'])
 
     def test_outbox_rate_limit_unknown_no_retry_and_chunking(self):
         out = Outbox(self.ctx)

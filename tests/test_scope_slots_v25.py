@@ -141,6 +141,7 @@ class ScopeAndSlotsTests(CoreFixture):
 
     def test_scheduler_only_composes_responsible_sessions(self):
         self.platform.update(self.admin,self.bots[1]['id'],{'active':False})
+        self.s.enroll('1001','小李',session_id=self.s.sessions()[1]['id'])
         rows=self.s.slots()
         self.restrict(slot_keys=[rows[1]['slot_key']])
         self.now=self.now.replace(hour=9,minute=29)
