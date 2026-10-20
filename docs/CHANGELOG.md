@@ -1,5 +1,12 @@
 # Changes
 
+## v1.0 — 2026-10-20 · Illustrated member and administrator manuals
+
+- Align registration instructions with current pages: imported roster approval, personal account confirmation, duplicate review, normal applications, profile/level review, renewals, and source-bot notifications.
+- Update robot/group, activity, tournament, notification and role instructions to match their current navigation and buttons.
+- Add responsive, expandable screenshots captured from the actual UI with synthetic data; export the same guides to Markdown for repository readers.
+- Replace stale manual entry points and keep public help and personal form links consistent.
+
 ## v1.0 — 2026-10-20 · Registration invitation recovery
 
 - Generate invitation request IDs on the server so preview and sending work on HTTP admin pages without browser UUID support.
@@ -9,7 +16,7 @@
 ## v1.0 — 2026-10-20 · Robot connections and roster review
 
 - Separate robot settings from a responsive group connection graph; edit optional sending/receiving addresses on each edge and manage groups alongside it.
-- Review duplicate roster candidates by identity-bearing fields, with individual or single-candidate bulk confirmation. Preserve original records and phone-only account linking.
+- Review duplicate roster candidates by identity-bearing fields, with individual or single-candidate bulk confirmation. Preserve original records. Account linking in this earlier release was phone-only; the current registration guide describes the later name-first confirmation workflow.
 - Persist the source of personal applications so approval receipts use the applicant’s bot. Unavailable source bots wait; already sent or uncertain deliveries are not replayed.
 
 ## v1.0 — 2026-10-20 · Personal approval notifications

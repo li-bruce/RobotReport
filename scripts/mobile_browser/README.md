@@ -1,5 +1,11 @@
 # 手机页面浏览器验收
 
+## 更新操作说明截图
+
+运行 `python scripts/mobile_browser/run.py --suite guide`，用当前页面和隔离的虚构名册生成 `app/static/guide-images/` 中的截图。可用 `ROBORT_BROWSER_EXECUTABLE` 指定本机 Chromium / Edge。不会访问生产数据或发送通知；截取前等待页面内容加载完成。更新 UI 后重新采集，并检查所有图片的实际内容。
+
+运行 `python scripts/mobile_browser/check_guide_editions.py` 检查两版说明的搜索、锚点、复制、截图加载和不同屏幕宽度。截图说明中的姓名、手机号、群和赛事均是示例。
+
 使用隔离的本地测试数据检查管理后台、注册表单和使用说明。默认覆盖
 320×740、360×800、390×844、768×1024、844×390（横屏）、1280×900。
 

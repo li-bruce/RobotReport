@@ -83,7 +83,7 @@ def wait_ready(process: subprocess.Popen, origin: str, run_id: str, output: Path
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=9888, help='Loopback port (default: 9888).')
-    parser.add_argument('--suite', choices=('all', 'proxy', 'bots', 'availability', 'activity', 'schedule', 'profile', 'operations', 'confirmation'), default='all', help='Full mobile checks or focused business workflows.')
+    parser.add_argument('--suite', choices=('all', 'proxy', 'bots', 'availability', 'activity', 'schedule', 'profile', 'operations', 'confirmation', 'guide'), default='all', help='Full mobile checks, focused workflows, or synthetic guide screenshots.')
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error('--port must be between 1024 and 65535')
@@ -112,7 +112,7 @@ def main() -> int:
             server = start('fixture.py', env, stdout=log, stderr=log)
             # Wait for the new service before reading this run's fixture metadata.
             wait_ready(server, f'http://127.0.0.1:{args.port}', run_id, output)
-            browser = start({'all':'check.py','proxy':'check_proxy.py','bots':'check_bot_onboarding.py','availability':'check_availability.py','activity':'check_activity.py','schedule':'check_schedule.py','profile':'check_profile.py','operations':'check_operations.py','confirmation':'check_confirmation.py'}[args.suite], env)
+            browser = start({'all':'check.py','proxy':'check_proxy.py','bots':'check_bot_onboarding.py','availability':'check_availability.py','activity':'check_activity.py','schedule':'check_schedule.py','profile':'check_profile.py','operations':'check_operations.py','confirmation':'check_confirmation.py','guide':'capture_guide.py'}[args.suite], env)
             return browser.wait()
         finally:
             stop_tree(browser)

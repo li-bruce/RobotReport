@@ -76,7 +76,7 @@ async function channelDialog(botId,id){return editChannelScope(botId,id);}
 async function renderGuide(epoch){
   if(!isCurrent(epoch))return;
   const chapters=[['/guide','users','普通用户版','注册报名、每日趣味赛、大型赛事参赛、对局与个人统计。'],['/guide/admin','settings','管理员版','机器人接入与分工、会员活动管理、大型赛事从筹备到归档。']];
-  $('#main').innerHTML=head('操作说明','按读者选择，可分别分享链接。','<a class="btn primary" href="/guide/admin">打开管理员版 ↗</a>','QUICK START')+`<div class="guide-entry-grid">${chapters.map(([url,symbol,title,description])=>`<a class="guide-entry" href="${url}"><span class="icon-tile">${icon(symbol)}</span><h2>${title}</h2><p>${description}</p><span class="guide-entry-action">查看说明 ${icon('arrow')}</span></a>`).join('')}</div><div class="stack">${aiNavigatorMarkup()}${panel('群内快速开始',`<dl class="command-guide"><div><dt><code>@机器人 注册</code></dt><dd>打开本人链接填写资料，提交后等待审核。</dd></div><div><dt><code>@机器人 帮助</code></dt><dd>查看这台机器人的常用指令和分类帮助。</dd></div></dl>`)}</div>`;
+  $('#main').innerHTML=head('操作说明','按读者选择，可分别分享链接。','<a class="btn primary" href="/guide/admin">打开管理员版 ↗</a>','QUICK START')+`<div class="guide-entry-grid">${chapters.map(([url,symbol,title,description])=>`<a class="guide-entry" href="${url}"><span class="icon-tile">${icon(symbol)}</span><h2>${title}</h2><p>${description}</p><span class="guide-entry-action">查看说明 ${icon('arrow')}</span></a>`).join('')}</div><div class="stack">${aiNavigatorMarkup()}${panel('群内快速开始',`<dl class="command-guide"><div><dt><code>@机器人 注册</code></dt><dd>打开本人链接确认姓名和性别；匹配已导入名册直接注册，未匹配则提交审核。</dd></div><div><dt><code>@机器人 帮助</code></dt><dd>查看这台机器人的常用指令和分类帮助。</dd></div></dl>`)}</div>`;
   bindAINavigator(epoch);
 }
 

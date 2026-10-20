@@ -26,7 +26,7 @@ def width(page,label):check(label+' no overflow',page.evaluate('document.documen
 def intercept(route):
     if route.request.url.startswith(origin+'/'):route.continue_()
     else:report['external_requests'].append(route.request.url);route.abort()
-editions=[('/guide','普通用户版',6,['取消报名','混双','AI 计划执行中止'],'competitions'),('/guide/admin','管理员版',7,['Robot Key','分组','结果待确认'],'large-events')]
+editions=[('/guide','普通用户版',6,['取消报名','混双','姓名匹配'],'competitions'),('/guide/admin','管理员版',7,['群关联','审核资料','结果待确认'],'large-events')]
 try:
     with sync_playwright() as p:
         browser=p.chromium.launch(executable_path=r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',headless=True)
@@ -46,6 +46,13 @@ try:
                     if w in (390,1280):page.screenshot(path=str(output/f'{"admin" if path.endswith("admin") else "member"}-{w}.png'))
                     for detail in page.locator('.response-example').all():
                         detail.locator('summary').click();check(label+' example open',detail.get_attribute('open') is not None);width(page,label+' example')
+                    for detail in page.locator('.screen-guide').all():
+                        detail.locator('summary').click()
+                        for shot in detail.locator('img').all():
+                            shot.scroll_into_view_if_needed()
+                            shot.evaluate('(img)=>img.decode()')
+                            check(label+' screenshot '+shot.get_attribute('alt'),shot.evaluate('img=>img.naturalWidth>0 && img.naturalHeight>0'))
+                        width(page,label+' screenshots')
                     for query in queries:
                         page.locator('#search-input').fill(query)
                         check(label+' search '+query,page.locator('[data-guide-item]:visible').count()>0);width(page,label+' search')

@@ -53,7 +53,13 @@ def test_guide_routes_and_anchors_are_complete_without_javascript():
     assert all(link[1:] in page.ids for link in page.links if link.startswith('#'))
     assert page.viewports == ['width=device-width, initial-scale=1']
     assert not any('user-scalable=no' in value or 'maximum-scale=1' in value for value in page.viewports)
-    assert all(resource.startswith('/static/guide.') for resource in page.resources)
+    assert all(resource.startswith(('/static/guide.', '/static/guide-images/')) for resource in page.resources)
+    for filename in ('guide.html', 'guide-admin.html'):
+        guide = GuideDocument((STATIC / filename).read_text(encoding='utf-8'))
+        for resource in guide.resources:
+            if resource.startswith('/static/guide-images/'):
+                asset = STATIC / resource.removeprefix('/static/')
+                assert asset.is_file() and asset.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
 
 
 def test_guide_competition_names_match_available_generators():

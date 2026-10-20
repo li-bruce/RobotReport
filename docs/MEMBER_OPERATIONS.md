@@ -1,4 +1,7 @@
-# Member imports and time rules
+# Member import and scheduling operations
+
+For task-by-task instructions with screenshots of the current Chinese interface, see the [member manual](MEMBER_GUIDE.zh-CN.md) and [administrator manual](ADMIN_GUIDE.zh-CN.md). The sections below retain the operational rules and integration fields.
+
 
 ## Import and registration
 

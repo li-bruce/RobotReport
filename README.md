@@ -54,6 +54,14 @@ Annual holiday data comes from [holiday-cn](https://github.com/NateScarlet/holid
 
 Event reservations and other configured occupancy block conflicting registrations. Future schedule edits synchronize applicable sessions; historical and already-started sessions keep their original times and registration snapshots. Conflicting changes affecting existing bookings are rejected.
 
+## Illustrated user manuals
+
+- [Member manual (Chinese)](docs/MEMBER_GUIDE.zh-CN.md): registration, identity confirmation, profile changes, booking, guests, daily games, and personal records.
+- [Administrator manual (Chinese)](docs/ADMIN_GUIDE.zh-CN.md): roster import and duplicate review, invitations, approvals, renewals, roles, robot connections, and tournament operations.
+
+Both manuals follow the current interface and include full-size screenshots made with synthetic data. The same guides are served at `/guide/member` and `/guide/admin`.
+
+
 ## Architecture
 
 ```mermaid

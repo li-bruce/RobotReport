@@ -7,6 +7,7 @@ from dataclasses import replace
 base=Path(os.environ['ROBORT_MOBILE_RUN_DIR']).resolve()
 project=Path(__file__).resolve().parents[2]
 run_id=os.environ['ROBORT_MOBILE_RUN_ID']
+guide_mode=os.environ.get('ROBORT_MOBILE_SUITE')=='guide'
 port=int(os.environ['ROBORT_MOBILE_PORT'])
 origin=f'http://127.0.0.1:{port}'
 sys.path.insert(0,str(project))
@@ -70,12 +71,15 @@ Service(admin,clock).update_config({'public_base_url':origin})
 from app.bot_capabilities import ALL_CAPABILITIES
 bots=[p.create(principal,{'name':name,'capabilities':list(ALL_CAPABILITIES),'chat_id':'mobile-fixture-group','robot_key':'synthetic-only-'+str(i)}) for i,name in enumerate(('每日羽毛球活动与报名助手','大型赛事组织与比分记录助手'))]
 ctx=p.context(principal,bots[0]['id'])
-group=People(admin,clock).save_group('周三晚间提高组与混双练习小队')
+group=People(admin,clock).save_group('提高组' if guide_mode else '周三晚间提高组与混双练习小队')
 users=[]
 for i in range(12):
     user='mobile-fixture-'+str(i)
     actor=replace(ctx,actor=user,source='callback',is_admin=False)
-    name=('张三','李四','王小明','陈羽','赵晨','刘阳','周宁','林雨','吴可','孙悦','长姓名演示会员周三羽球活动报名','待审核会员林雨')[i]
+    names=['张三','李四','王小明','陈羽','赵晨','刘阳','周宁','林雨','吴可','孙悦','长姓名演示会员周三羽球活动报名','待审核会员林雨']
+    if guide_mode:
+        names[-2:]=['何安','许晴']
+    name=names[i]
     Members(actor,clock).apply(name,level=i%9+1,gender='male' if i%2==0 else 'female',phone='13800138'+str(i).zfill(3))
     if i<10:
         People(admin,clock).review(user,'approved')
@@ -85,7 +89,7 @@ for i in range(12):
     users.append(user)
 People(admin,clock).set_roles(users[0],['club_admin','member_manager'])
 People(admin,clock).set_roles(users[1],['member_manager','event_manager'])
-event=Tournaments(admin,clock).create({'kind':'large','format':'round_robin','title':'第十二届周末羽球交流赛与混合双打友谊联赛',
+event=Tournaments(admin,clock).create({'kind':'large','format':'round_robin','title':'秋季羽球交流赛' if guide_mode else '第十二届周末羽球交流赛与混合双打友谊联赛',
    'keyword':'周末杯','date':'2026-10-18','venue_id':1,'registration_open':'2026-10-14T09:00:00+08:00','registration_close':'2026-10-17T18:00:00+08:00'})
 EventManagement(admin,clock).save_channels(event['id'],[b['channels'][0]['id'] for b in bots],lambda ids,vid:None)
 # Proxy-specific fixtures contain only synthetic identities. Each viewport gets
@@ -101,7 +105,7 @@ Tournaments(owner,clock).enroll(proxy_event['id'],users[0],'张三',len(proxy_na
 proxy_targets={str(width):{'id':users[0]+':'+str(index+1),'name':proxy_names[index]} for index,width in enumerate(proxy_widths)}
 forms={str(width):create_form(replace(ctx,actor='mobile-registration-'+str(width),source='callback',is_admin=False),clock) for width in (320,360,390,768,844,1280)}
 profile_forms={}
-if os.environ.get('ROBORT_MOBILE_SUITE')=='profile':
+if os.environ.get('ROBORT_MOBILE_SUITE') in ('profile','guide'):
     for i,width in enumerate((320,390,844,1280)):
         profile_forms[str(width)]=create_form(replace(ctx,actor=users[i+3],source='callback',is_admin=False),clock,purpose='profile')
 activity_second=None
@@ -115,13 +119,13 @@ if os.environ.get('ROBORT_MOBILE_SUITE')=='activity':
     operations.enroll(users[0],'张三',day='2026-10-16')
     Service(admin,lambda:datetime(2026,10,13,16,0,tzinfo=TZ)).enroll(users[0],'张三',day='2026-10-13')
 # Synthetic future calendar for editing tests; never contacts a public provider.
-if os.environ.get('ROBORT_MOBILE_SUITE') in ('activity','availability','schedule'):
+if os.environ.get('ROBORT_MOBILE_SUITE') in ('activity','availability','schedule','guide'):
     from app.db import connect, dumps
     payload={'year':2027,'papers':['https://www.gov.cn/fixture-only'],'days':[{'date':'2027-01-01','name':'浏览器验收假期','isOffDay':True}]}
     with connect(admin.db_path,True) as db:
         db.execute('INSERT INTO holiday_calendars VALUES(?,?,?,?)',(2027,dumps(payload),'fixture://synthetic',clock().isoformat()))
 confirmation={};confirmation_bulk=''
-if os.environ.get('ROBORT_MOBILE_SUITE')=='confirmation':
+if os.environ.get('ROBORT_MOBILE_SUITE') in ('confirmation','guide'):
     from app.member_imports import ensure_schema
     from app.db import connect,stamp
     for bot in bots:
@@ -130,7 +134,7 @@ if os.environ.get('ROBORT_MOBILE_SUITE')=='confirmation':
     with connect(admin.db_path,True) as db:
         ensure_schema(db)
         for index,width in enumerate((320,390,844,1280)):
-            name='确认会员'+str(width)
+            name=({320:'沈禾',390:'方宁',844:'程可',1280:'陆青'}[width] if guide_mode else '确认会员'+str(width))
             db.execute("INSERT INTO pre_registered_members(scope_id,name,gender,created_by,created_at) VALUES(?,?,'male',?,?)",(admin.scope_id,name,'fixture',stamp(clock())))
             member=Members(admin,clock).get(users[index])
             db.execute("INSERT INTO pre_registered_members(scope_id,name,created_by,created_at) VALUES(?,?,?,?)",(admin.scope_id,member['name'],'fixture',stamp(clock())))
