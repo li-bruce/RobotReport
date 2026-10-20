@@ -168,7 +168,11 @@ class RegistrationConfirmationTests(unittest.TestCase):
         self.assertIn('注册确认',preview['text'])
         self.assertIn('张三',preview['text'])
         self.assertNotIn('<at',preview['text'])
-        payload={**data,'signature':preview['signature'],'request_id':'a'*32}
+        self.assertRegex(preview['request_id'],r'^[a-f0-9]{32}$')
+        next_preview=invitations.preview(data)
+        self.assertNotEqual(next_preview['request_id'],preview['request_id'])
+        self.assertEqual(next_preview['signature'],preview['signature'])
+        payload={**data,'signature':preview['signature'],'request_id':preview['request_id']}
         first=invitations.send(payload);second=invitations.send(payload)
         self.assertEqual(first,second)
         with connect(self.owner.transport_db_path) as db:

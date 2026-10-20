@@ -2,6 +2,7 @@
 import hashlib
 import json
 import re
+import uuid
 from html import escape as html_escape
 
 from .db import connect, now
@@ -52,7 +53,8 @@ class RegistrationInvites:
             else:names.append(escape(row['name'] or '待补姓名'))
         text='**请确认会员资料**\n\n'+'、'.join(names)+'\n\n请 @本机器人 发送 **注册确认**，打开链接确认本人姓名和资料。'
         signature=hashlib.sha256(json.dumps([target.channel_id,rows],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
-        return {'text':text,'count':len(rows),'signature':signature,'channel_id':target.channel_id}
+        return {'text':text,'count':len(rows),'signature':signature,'channel_id':target.channel_id,
+                'request_id':uuid.uuid4().hex}
 
     def send(self,data):
         request_id=data.get('request_id','')

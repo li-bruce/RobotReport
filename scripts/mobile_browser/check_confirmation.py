@@ -7,8 +7,9 @@ from playwright.sync_api import sync_playwright
 
 base=Path(os.environ['ROBORT_MOBILE_RUN_DIR'])
 meta=json.loads((base/'fixture.json').read_text(encoding='utf-8'))
-origin=meta['origin']
+origin=meta['origin'].replace('127.0.0.1','robort.test')
 report={'checks':[],'failures':[],'errors':[],'external_requests':[]}
+reject_stale_preview=True
 
 
 def check(name,passed):
@@ -21,13 +22,19 @@ def fit(page,label):
 
 
 def intercept(route):
-    if route.request.url.startswith(origin+'/'):route.continue_()
-    else:report['external_requests'].append(route.request.url);route.abort()
+    global reject_stale_preview
+    if not route.request.url.startswith(origin+'/'):
+        report['external_requests'].append(route.request.url);route.abort();return
+    if reject_stale_preview and route.request.url.endswith('/api/member-imports/invite') and route.request.method=='POST':
+        reject_stale_preview=False
+        route.fulfill(status=400,json={'detail':'名单已变化，请重新预览后发送'});return
+    route.continue_()
 
 
 try:
     with sync_playwright() as pw:
-        browser=pw.chromium.launch(executable_path=os.environ.get('ROBORT_BROWSER_EXECUTABLE'),headless=True)
+        browser=pw.chromium.launch(executable_path=os.environ.get('ROBORT_BROWSER_EXECUTABLE'),headless=True,
+                                  args=['--host-resolver-rules=MAP robort.test 127.0.0.1','--no-proxy-server'])
         for index,(width,height) in enumerate(((320,740),(390,844),(844,390),(1280,900))):
             label=str(width)
             context=browser.new_context(viewport={'width':width,'height':height},is_mobile=width<1000,has_touch=width<1000)
@@ -36,6 +43,7 @@ try:
             page.on('pageerror',lambda error:report['errors'].append(str(error)))
             page.clock.install(time=datetime.fromisoformat(meta['clock']))
             page.goto(origin+'/admin#member-imports')
+            check(label+' insecure HTTP without randomUUID',page.evaluate("!isSecureContext && typeof crypto.randomUUID==='undefined'"))
             page.get_by_label('管理员密码',exact=True).fill(meta['password'])
             page.get_by_role('button',name='登录工作台',exact=True).click()
             page.locator('#member-import-records').wait_for()
@@ -49,6 +57,12 @@ try:
             check(label+' invitation concise',target['name'] in page.locator('#invite-preview').inner_text() and '注册确认' in page.locator('#invite-preview').inner_text())
             fit(page,label+' invite')
             page.get_by_role('button',name='发送确认通知',exact=True).click()
+            if index==0:
+                page.get_by_role('button',name='预览通知',exact=True).wait_for()
+                check('stale preview returns to preview','名单已变化' in page.locator('#prereg-invite .inline-error').inner_text())
+                check('stale preview is cleared',not page.locator('#invite-preview').inner_text())
+                page.get_by_role('button',name='预览通知',exact=True).click()
+                page.get_by_role('button',name='发送确认通知',exact=True).click()
             page.locator('#modal').wait_for(state='hidden')
             existing=page.locator('#member-import-records tr').filter(has_text=target['existing_name'])
             existing.get_by_role('button',name='补全资料',exact=True).click()
@@ -59,7 +73,7 @@ try:
             check(label+' existing account linked', '已关联' in existing.inner_text())
             fit(page,label+' import')
             page.screenshot(path=str(base/f'confirmation-admin-{label}.png'),full_page=True)
-            page.goto(meta['forms'][label])
+            page.goto(meta['forms'][label].replace(meta['origin'],origin))
             page.locator('#registration').wait_for(state='visible')
             with page.expect_response(lambda r:r.url.endswith('/lookup')) as lookup:
                 page.locator('[name=name]').fill(target['name'])

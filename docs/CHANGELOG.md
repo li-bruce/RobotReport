@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-20 · Registration invitation recovery
+
+- Generate invitation request IDs on the server so preview and sending work on HTTP admin pages without browser UUID support.
+- Mark a preview ready only after validation and rendering succeed; keep the same request ID when retrying a failed send to avoid duplicate notifications.
+- Return to preview when the server rejects a stale roster, instead of repeatedly submitting an invalid preview.
+
 ## v1.0 — 2026-10-20 · Robot connections and roster review
 
 - Separate robot settings from a responsive group connection graph; edit optional sending/receiving addresses on each edge and manage groups alongside it.

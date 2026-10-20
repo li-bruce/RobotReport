@@ -18,20 +18,30 @@ async function inviteImportedMembers(){
   if(epoch!==state.epoch)return;
   if(!channels.length)throw Error('请先配置可收发消息、已开启会员注册的机器人。');
   openModal('通知本人确认',`<form id="prereg-invite">${selectfield('发送机器人 / 群','channel_id',channels.map(row=>[row.id,`${row.bot_name} · ${row.name}`]),channels[0].id)}<p>已选 ${nf(selected.length)} 人。未取得账号 ID 或邮箱的人员以姓名列出。</p><div id="invite-preview"></div>${formFooter('预览通知')}</form>`);
-  let preview=null, requestId=null;
+  let preview=null;
   const selector=$('#f-channel_id');
-  selector.addEventListener('change',()=>{preview=null;$('#invite-preview').replaceChildren();const submit=$('#prereg-invite button[type="submit"]');submit.dataset.idleLabel='预览通知';submit.textContent='预览通知';});
+  const previewBox=$('#invite-preview'),submit=$('#prereg-invite button[type="submit"]');
+  const resetPreview=()=>{preview=null;previewBox.replaceChildren();submit.dataset.idleLabel='预览通知';submit.textContent='预览通知';};
+  selector.addEventListener('change',resetPreview);
   bindForm('prereg-invite',async(data,form,serial)=>{
     const body={channel_id:data.get('channel_id'),record_ids:selected};
     if(!preview){
       const result=await api('/api/member-imports/invite-preview',{method:'POST',body});
       if(serial!==state.epoch||!form.isConnected||selector.value!==body.channel_id)return;
-      preview=result;requestId=crypto.randomUUID();
-      $('#invite-preview').innerHTML=`<div class="notice">${markdown(result.text)}</div>`;
+      if(!result||!/^([a-f0-9]{32}|[a-f0-9-]{36})$/i.test(result.request_id||'')||!result.signature){
+        throw Error('通知预览未完成，请重试。');
+      }
+      form.querySelector('#invite-preview').innerHTML=`<div class="notice">${markdown(result.text)}</div>`;
       form.querySelector('button[type="submit"]').dataset.idleLabel='发送确认通知';
+      preview=result;
       return;
     }
-    await api('/api/member-imports/invite',{method:'POST',body:{...body,signature:preview.signature,request_id:requestId}});
+    try{
+      await api('/api/member-imports/invite',{method:'POST',body:{...body,signature:preview.signature,request_id:preview.request_id}});
+    }catch(error){
+      if([400,409,422].includes(error.status)&&serial===state.epoch&&form.isConnected)resetPreview();
+      throw error;
+    }
     if(serial===state.epoch){closeModal();toast('确认通知已加入发送队列。');}
   });
 }
