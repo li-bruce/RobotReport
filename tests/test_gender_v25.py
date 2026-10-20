@@ -124,7 +124,7 @@ class GenderMemberTests(CoreFixture):
         self.assertTrue(preview['can_commit'], preview)
         imports.commit(preview['token'])
         for uid, phone, gender in [('csv-female', '13800000001', 'female'), ('csv-male', '13800000002', 'male')]:
-            result = Members(replace(self.member, actor=uid), self.clock).apply('填写名', phone=phone, gender='male')
+            result = Members(replace(self.member, actor=uid), self.clock).apply('预登记甲' if uid=='csv-female' else '预登记乙', phone=phone, gender='male')
             self.assertEqual(result['gender'], gender)
         bad = imports.preview('姓名,手机号,性别\n错误,13800000003,猜测\n'.encode())
         self.assertFalse(bad['can_commit'])

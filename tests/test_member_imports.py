@@ -132,9 +132,9 @@ class MemberImportTests(unittest.TestCase):
         self.import_rows('王五,13700000003,,\n')
         self.assertEqual(self.imports.commit(same['token'])['skipped'], 1)
 
-    def test_link_uses_only_phone_and_preserves_imported_approved_tags(self):
+    def test_unique_name_link_preserves_imported_approved_tags(self):
         self.import_rows('管理员实名,13800000001,2,周一组;进阶\n')
-        result = self.member().apply('表单填写名', 3, '+86 138-0000-0001', gender='male')
+        result = self.member().apply('管理员实名', 3, '+86 138-0000-0001', gender='male')
         self.assertEqual((result['registration_result'],result['status'],result['name']), ('linked','approved','管理员实名'))
         self.assertEqual((result['level'],result['requested_level'],result['level_status']), (2,2,'approved'))
         self.assertEqual(sorted(g['name'] for g in result['groups']), ['周一组','进阶'])
@@ -155,25 +155,25 @@ class MemberImportTests(unittest.TestCase):
     def test_blank_import_level_is_not_overridden_by_self_rating(self):
         self.import_rows('张三,13800000001,,\n')
         result = self.member().apply('张三', 3, '13800000001', gender='male')
-        self.assertEqual(result['registration_result'], 'submitted')
-        self.assertEqual(result['status'], 'pending')
+        self.assertEqual(result['registration_result'], 'linked')
+        self.assertEqual(result['status'], 'approved')
         self.assertIsNone(result['level'])
         self.assertEqual(result['requested_level'],3)
         self.assertEqual(result['level_status'], 'pending')
 
-    def test_same_name_never_links_and_unmatched_phone_requires_approval(self):
+    def test_unique_name_links_without_phone_and_unmatched_name_needs_approval(self):
         self.import_rows('张三,13800000001,2,进阶\n')
-        for user, phone in [('same-name', None), ('different-phone', '13900000002')]:
-            with self.subTest(user=user):
-                result = self.member(user).apply('张三', 1, phone, gender='male')
-                self.assertEqual((result['registration_result'], result['status']), ('submitted','pending'))
-                self.assertIsNone(result['level'])
-                self.assertEqual(result['groups'], [])
-        self.assertEqual(len(self.imports.list('unbound')), 1)
+        with self.assertRaisesRegex(ValueError,'手机号与已登记资料不一致'):
+            self.member('wrong-phone').apply('张三',1,'13900000002',gender='male')
+        result=self.member('same-name').apply('张三',gender='male')
+        self.assertEqual((result['registration_result'],result['status']),('linked','approved'))
+        other=self.member('new').apply('新人',gender='male')
+        self.assertEqual(other['status'],'pending')
+        self.assertEqual(other['groups'],[])
 
     def test_cross_group_repeated_registration_does_not_change_profile_or_history(self):
         self.import_rows('张三,13800000001,2,进阶\n')
-        original = self.member().apply('表单名', 1, '13800000001', gender='male')
+        original = self.member().apply('张三', 1, '13800000001', gender='male')
         member = self.member(chat_id='another-group', id='another-bot')
         result = member.apply('另一个姓名', 3, '13900000002', gender='male')
         self.assertEqual(result['registration_result'], 'already_registered')
@@ -206,13 +206,13 @@ class MemberImportTests(unittest.TestCase):
         def claim(user):
             barrier.wait()
             try:
-                return (user,self.member(user).apply('填写姓名',phone='13800000001', gender='male')['registration_result'])
+                return (user,self.member(user).apply('张三',phone='13800000001', gender='male')['registration_result'])
             except PermissionError:
                 return (user,'denied')
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = list(pool.map(claim,['alice','bob']))
-        self.assertEqual(sorted(r[1] for r in outcomes), ['denied','submitted'])
-        owner = next(user for user,result in outcomes if result=='submitted')
+        self.assertEqual(sorted(r[1] for r in outcomes), ['denied','linked'])
+        owner = next(user for user,result in outcomes if result=='linked')
         self.assertEqual(self.imports.list('linked')[0]['linked_user_id'], owner)
         self.assertEqual(len(self.manager.list()), 1)
         self.assertEqual(self.application_count(owner), 1)
@@ -240,17 +240,17 @@ class MemberImportTests(unittest.TestCase):
         self.import_rows('张三,13800000001,2,进阶\n')
         with self.assertRaisesRegex(RuntimeError, 'consume'):
             with connect(self.admin.db_path, True) as db:
-                self.assertEqual(self.member().apply('填写名',phone='13800000001',db=db, gender='male')['registration_result'], 'linked')
+                self.assertEqual(self.member().apply('张三',phone='13800000001',db=db, gender='male')['registration_result'], 'linked')
                 raise RuntimeError('consume failed')
         self.assertIsNone(self.member().get())
         self.assertEqual(self.application_count(), 0)
         self.assertEqual(len(self.imports.list('unbound')), 1)
-        self.assertEqual(self.member().apply('填写名',phone='13800000001', gender='male')['registration_result'], 'linked')
+        self.assertEqual(self.member().apply('张三',phone='13800000001', gender='male')['registration_result'], 'linked')
 
     def test_pending_application_is_superseded_when_matching_import_links(self):
         self.member().apply('旧申请姓名', 1, gender='male')
         self.import_rows('张三,13800000001,2,进阶\n')
-        self.member().apply('新申请姓名', 3, '13800000001', gender='male')
+        self.member().apply('张三', 3, '13800000001', gender='male')
         with connect(self.admin.db_path) as db:
             self.assertEqual([r[0] for r in db.execute('SELECT status FROM membership_applications ORDER BY id')], ['superseded','approved'])
 
@@ -279,10 +279,11 @@ class MemberImportTests(unittest.TestCase):
 
     def test_existing_account_csv_never_overwrites_or_grants_roles(self):
         self.member().apply('张三',phone='13800000001', gender='male')
-        self.assertFalse(self.preview('张三,13800000001,,\n')['can_commit'])
+        self.assertEqual(self.preview('张三,13800000001,,\n')['skip_count'],1)
+        self.assertEqual(self.member().get()['status'],'pending')
         self.manager.review('alice','approved')
         self.assertEqual(self.preview('张三,13800000001,,\n')['skip_count'], 1)
-        self.assertFalse(self.preview('张三,13800000001,3,\n')['can_commit'])
+        self.assertEqual(self.preview('张三,13800000001,3,\n')['skip_count'],1)
         self.assertEqual(self.member().get()['roles'], [])
         self.assertIsNone(self.member().get()['level'])
         self.assertEqual(self.imports.list(), [])
@@ -297,7 +298,7 @@ class MemberImportTests(unittest.TestCase):
         self.assertEqual(self.member('ordinary').get(), before)
         self.assertEqual(len(self.imports.list('unbound')), 1)
         # Rejection did not reserve the imported phone for the edited account.
-        linked = self.member('owner').apply('报名表姓名',phone='13800000001', gender='male')
+        linked = self.member('owner').apply('预登记姓名',phone='13800000001', gender='male')
         self.assertEqual(linked['registration_result'], 'linked')
         self.assertEqual(linked['name'], '预登记姓名')
         with self.assertRaisesRegex(PermissionError, '已关联其他账号'):

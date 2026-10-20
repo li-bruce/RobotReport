@@ -103,8 +103,8 @@ class Commands:
             require_capability(self.ctx, 'management')
         if text in ('场地占用','占用查询','场地安排'):
             require_capability(self.ctx, 'enrollment')
-        if (text in ('补全资料','注册','注册申请','注册资料','会员状态','我的资料','我的会籍','续费记录','会员有效期','性别','补充性别')
-                or re.match(r'^(?:注册|设置姓名|确认注册)\s+', text)
+        if (text in ('补全资料','注册','注册确认','注册申请','注册资料','会员状态','我的资料','我的会籍','续费记录','会员有效期','性别','补充性别')
+                or re.match(r'^(?:注册|注册确认|设置姓名|确认注册)\s+', text)
                 or re.fullmatch(r'(?:补充)?性别\s*[:：]?\s*(?:男|女)', text)
                 or re.fullmatch(r'自评\s*(?:\d+|[一二三四五六七八九])\s*级', text)):
             require_capability(self.ctx, 'registration')
@@ -167,9 +167,11 @@ class Commands:
         member = members.touch(name=name if name and name != self.ctx.actor else None)
         if text=='补全资料':
             text='修改资料' if member['status']=='approved' else '注册'
-        if text in ('注册','注册申请'):
+        confirmation_name = re.fullmatch(r'注册确认(?:\s+(.+))?',text)
+        if text in ('注册','注册申请') or confirmation_name:
             if member['status']=='approved':
-                if member.get('gender') not in ('male','female') or not member.get('phone') or not member.get('level'):
+                members.apply(member['name'])
+                if not confirmation_name and member.get('gender') not in ('male','female'):
                     from .registration import create_form
                     link=create_form(self.ctx,self.clock,purpose='profile')
                     if link:return f"**{escape(member['name'])} · 已注册**\n\n[补全个人资料]({link})"
@@ -177,10 +179,11 @@ class Commands:
             if member['status']=='suspended':
                 return '会员已停用，请联系管理员处理，无需重复注册。'
             from .registration import create_form
-            url = create_form(self.ctx, self.clock)
+            hint=(confirmation_name[1] if confirmation_name else None) or name or member.get('name')
+            url = create_form(self.ctx, self.clock, hint_name=hint)
             intro = '姓名、性别必填；级别、手机号选填。'
             if url:
-                return mention(self.ctx.actor) + f'\n\n[填写注册资料]({url})'
+                return mention(self.ctx.actor) + f'\n\n[确认本人资料]({url})'
             return intro + '\n\n发送：注册 张三 男 2级；也可发送 注册 张三 男。'
         register = re.fullmatch(r'(?:注册|设置姓名)\s+(.+)', text)
         if register:

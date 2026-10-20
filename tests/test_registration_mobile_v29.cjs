@@ -14,6 +14,7 @@ function page(responses,hash='#'+reference){
     focus(){activeElement=selector;},reset(){this.didReset=true;},addEventListener(type,handler){this[type]=handler;}});
   const context=vm.createContext({encodeURIComponent,location:{hash},document:{querySelector:node},FormData:class{constructor(form){this.fields=form.fields;}get(key){return this.fields[key]??null;}},
     fetch:async(url,options)=>{requests.push({url,...options});const result=responses.shift();if(result instanceof Error)throw result;if(typeof result==='function')return result();return {ok:result.ok!==false,json:async()=>result.body};}});
+  const form=node('#registration');form.elements=Object.fromEntries(Object.keys(form.fields).map(key=>[key,{get value(){return form.fields[key];},set value(value){form.fields[key]=value;},addEventListener(type,handler){this[type]=handler;}}]));
   vm.runInContext(source,context);
   return {node,requests,context,get activeElement(){return activeElement;},submit:()=>node('#registration').submit({preventDefault(){}})};
 }

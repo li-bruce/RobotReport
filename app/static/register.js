@@ -4,6 +4,18 @@ const endpoint='/public/registration/'+encodeURIComponent(ref);
 const submitButton=form.querySelector('button');
 const retryButton=document.querySelector('#retry');
 let submitting=false, purpose='registration';
+let lookupVersion=0, suggestedValues=null, registrationSubmitLabel='提交注册申请';
+function importSuggestion(result){
+  const hint=result.import_hint;
+  registrationSubmitLabel=hint?'确认注册':'提交注册申请';
+  submitButton.textContent=registrationSubmitLabel;
+  form.elements.phone.required=Boolean(hint?.phone_required);
+  document.querySelector('#phone-help').textContent=hint?hint.message:'手机号、级别选填。重名时请填写登记手机号区分。';
+  if(result.profile)for(const key of ['name','gender','level']){
+    if(Object.prototype.hasOwnProperty.call(result.profile,key))form.elements[key].value=result.profile[key]??'';
+  }
+  suggestedValues=hint?Object.fromEntries(['gender','level'].map(key=>[key,form.elements[key].value])):null;
+}
 function profileForm(result){
   purpose='profile';
   document.title='资料调整申请';
@@ -25,9 +37,9 @@ function profileForm(result){
   }
   if(!result.groups.length)fieldset.append(document.createTextNode('暂无可选分组'));
 }
-async function call(method,data){
+async function call(method,data,suffix=''){
   let response;
-  try{response=await fetch(endpoint,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});}
+  try{response=await fetch(endpoint+suffix,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined,cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});}
   catch{throw Error('连接失败，请检查网络后重试。');}
   let result;
   try{result=await response.json();}catch{throw Error('服务暂时无法响应，请稍后重试。');}
@@ -63,13 +75,28 @@ async function initialize(){
     const result=await call('GET');
     if(result.status==='completed'){showResult(result);return;}
     if(result.purpose==='profile')profileForm(result);
-    else if(result.profile)for(const key of ['name','gender','level'])form.elements[key].value=result.profile[key]??'';
+    else importSuggestion(result);
     form.hidden=false;submitButton.disabled=false;status.textContent='';
   }catch(error){form.hidden=true;status.textContent=error.message;retryButton.hidden=false;}
 }
 retryButton.addEventListener('click',initialize);
+form.elements.name.addEventListener('change',async()=>{
+  if(purpose!=='registration'||submitting)return;
+  const name=form.elements.name.value.trim(), version=++lookupVersion;
+  if(suggestedValues)for(const key of ['gender','level'])if(form.elements[key].value===suggestedValues[key])form.elements[key].value='';
+  suggestedValues=null;
+  const before=Object.fromEntries(['gender','level'].map(key=>[key,form.elements[key].value]));
+  if(!name)return;
+  try{
+    const result=await call('POST',{name},'/lookup');
+    if(version===lookupVersion&&!submitting&&form.elements.name.value.trim()===name){
+      for(const key of ['gender','level'])if(form.elements[key].value!==before[key]&&result.profile)delete result.profile[key];
+      importSuggestion(result);
+    }
+  }catch(error){if(version===lookupVersion&&!submitting)status.textContent=error.message;}
+});
 form.addEventListener('submit',async event=>{
-  event.preventDefault();if(submitting)return;submitting=true;form.setAttribute('aria-busy','true');submitButton.disabled=true;submitButton.textContent='正在提交…';status.textContent='';
+  event.preventDefault();if(submitting)return;submitting=true;++lookupVersion;form.setAttribute('aria-busy','true');submitButton.disabled=true;submitButton.textContent='正在提交…';status.textContent='';
   try{
     const data=new FormData(form),payload={name:data.get('name'),gender:data.get('gender'),level:data.get('level')?Number(data.get('level')):null,phone:data.get('phone')};
     if(!payload.phone.trim())delete payload.phone;
@@ -77,6 +104,6 @@ form.addEventListener('submit',async event=>{
     const result=await call('POST',payload);
     showResult(result,true);
   }catch(error){status.textContent=error.message;status.focus();}
-  finally{submitting=false;form.removeAttribute('aria-busy');submitButton.disabled=false;submitButton.textContent=purpose==='profile'?'提交资料申请':'提交注册申请';}
+  finally{submitting=false;form.removeAttribute('aria-busy');submitButton.disabled=false;submitButton.textContent=purpose==='profile'?'提交资料申请':registrationSubmitLabel;}
 });
 initialize();

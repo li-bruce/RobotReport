@@ -80,8 +80,8 @@ class NineLevelTests(unittest.TestCase):
         self.assertEqual(imports.commit(preview['token'])['imported'], 4)
         for index, value in enumerate((1, 4, 9, None), 1):
             person = self.member('imported-' + str(index))
-            result = person.apply('提交姓名', phone=f'1380000000{index}', gender='male')
-            self.assertEqual(result['status'], 'approved' if value is not None else 'pending')
+            result = person.apply(f'导入球友{index}', phone=f'1380000000{index}', gender='male')
+            self.assertEqual(result['status'], 'approved')
             self.assertEqual(result['level'], value)
         for value in ('0', '10', '-1', 'true', '9.5'):
             with self.subTest(value=value):

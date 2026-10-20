@@ -28,7 +28,7 @@ Current application version: **v1.0**. The interface and bot commands are curren
 
 Membership approval, club roles and event-specific staff roles are separate. Approved members share their identity across this backend's bots and venues. Expired membership prevents new registrations while preserving access to history.
 
-New registration requires a **name and gender**; self-rating and phone are optional. Imports accept incomplete profiles with at least a name or phone; members complete missing information through a personal link for administrator review. Internal IDs are generated automatically. Account linking uses exact normalized phone matching, never name-only matching. This matches administrator-entered records; **SMS ownership verification is not implemented**.
+New registration requires a **name and gender**; self-rating and phone are optional. Importing a roster approves membership in advance. Members send `注册确认` and confirm their information through an account-bound link. A unique imported name links directly; duplicate names require a matching phone, and existing account bindings never transfer automatically. Unmatched people apply for review. Empty ratings or groups do not block registration. **Members → Pending applications** combines registration, rating and profile reviews with their history.
 
 See [member imports and time rules](docs/MEMBER_OPERATIONS.md) for setup and integration fields.
 

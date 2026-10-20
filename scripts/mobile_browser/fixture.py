@@ -120,8 +120,25 @@ if os.environ.get('ROBORT_MOBILE_SUITE') in ('activity','availability','schedule
     payload={'year':2027,'papers':['https://www.gov.cn/fixture-only'],'days':[{'date':'2027-01-01','name':'浏览器验收假期','isOffDay':True}]}
     with connect(admin.db_path,True) as db:
         db.execute('INSERT INTO holiday_calendars VALUES(?,?,?,?)',(2027,dumps(payload),'fixture://synthetic',clock().isoformat()))
+confirmation={};confirmation_bulk=''
+if os.environ.get('ROBORT_MOBILE_SUITE')=='confirmation':
+    from app.member_imports import ensure_schema
+    from app.db import connect,stamp
+    for bot in bots:
+        channel=bot['channels'][0]
+        p.save_channel(principal,bot['id'],{'webhook_url':'https://xz.wps.cn/api/v1/webhook/send?key=synthetic-only-'+bot['id']},channel['id'])
+    with connect(admin.db_path,True) as db:
+        ensure_schema(db)
+        for index,width in enumerate((320,390,844,1280)):
+            name='确认会员'+str(width)
+            db.execute("INSERT INTO pre_registered_members(scope_id,name,gender,created_by,created_at) VALUES(?,?,'male',?,?)",(admin.scope_id,name,'fixture',stamp(clock())))
+            member=Members(admin,clock).get(users[index])
+            db.execute("INSERT INTO pre_registered_members(scope_id,name,created_by,created_at) VALUES(?,?,?,?)",(admin.scope_id,member['name'],'fixture',stamp(clock())))
+            confirmation[str(width)]={'name':name,'existing_name':member['name'],'existing_phone':member['phone']}
+        member=Members(admin,clock).get(users[5]);confirmation_bulk=member['name']
+        db.execute("INSERT INTO pre_registered_members(scope_id,name,phone,created_by,created_at) VALUES(?,?,?,?,?)",(admin.scope_id,member['name'],member['phone'],'fixture',stamp(clock())))
 (base/'fixture.json').write_text(json.dumps({'run_id':run_id,'origin':origin,'clock':clock().isoformat(),'state':str(state),'password':password,'forms':forms,'event_id':event['id'],'users':users,'bot_ids':[b['id'] for b in bots],
-    'activity_second':activity_second,'profile_forms':profile_forms,'proxy_event_id':proxy_event['id'],'proxy_targets':proxy_targets,'proxy_owner_id':users[0]+':0','proxy_keep_id':users[0]+':7'},ensure_ascii=False),encoding='utf-8')
+    'activity_second':activity_second,'profile_forms':profile_forms,'confirmation':confirmation,'confirmation_bulk':confirmation_bulk,'proxy_event_id':proxy_event['id'],'proxy_targets':proxy_targets,'proxy_owner_id':users[0]+':0','proxy_keep_id':users[0]+':7'},ensure_ascii=False),encoding='utf-8')
 
 @app.get('/__mobile_fixture_ready')
 def fixture_ready():

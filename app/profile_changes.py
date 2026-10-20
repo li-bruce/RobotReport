@@ -88,17 +88,22 @@ class ProfileChanges:
         groups = {r['id']: r['name'] for r in db.execute('SELECT id,name FROM member_groups WHERE chat_id=?', (self.ctx.scope_id,))}
         return self._public(row, groups)
 
-    def list(self, *, all_users=False, status=None):
+    def list(self, *, all_users=False, status=None, user_id=None):
         if status is not None and status not in STATUSES:
             raise ValueError('申请状态无效')
+        if user_id is not None:
+            from .security import identifier
+            user_id=identifier(user_id)
+            if not all_users and user_id!=self.ctx.actor:raise PermissionError('只能查看本人的资料申请')
         with connect(self.ctx.db_path) as db:
             if all_users:
                 self._manager(db)
             else:
                 self.members.require_approved(db=db, allow_admin=False, bot_access=False)
             rows = db.execute('''SELECT * FROM member_profile_requests WHERE scope_id=?
-                AND (? OR user_id=?) AND (? IS NULL OR status=?) ORDER BY id DESC LIMIT 200''',
-                (self.ctx.scope_id, int(all_users), self.ctx.actor, status, status))
+                AND (? OR user_id=?) AND (? IS NULL OR status=?) AND (? IS NULL OR user_id=?)
+                ORDER BY id DESC LIMIT 1000''',
+                (self.ctx.scope_id, int(all_users), self.ctx.actor, status, status,user_id,user_id))
             return [self._view(r, db) for r in rows]
 
     def submit(self, changes, db=None):

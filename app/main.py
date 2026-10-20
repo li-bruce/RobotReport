@@ -285,9 +285,9 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         return svc(ctx).update_config(data)
 
     @app.get('/api/profile-requests')
-    def profile_requests(status: str = None, ctx=Depends(context)):
+    def profile_requests(status: str = None, user_id: str = None, ctx=Depends(context)):
         from .profile_changes import ProfileChanges
-        return ProfileChanges(ctx, clock).list(all_users=True, status=status)
+        return ProfileChanges(ctx, clock).list(all_users=True, status=status,user_id=user_id)
 
     @app.post('/api/profile-requests/{request_id}/review')
     def profile_request_review(request_id: int, data: dict, ctx=Depends(context)):
@@ -715,6 +715,13 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         ctx, token = public_context(reference)
         if ctx.id == 'workspace':raise PermissionError('注册链接无效')
         return JSONResponse(submit_form(ctx, token, data, clock), headers={'Cache-Control': 'no-store'})
+
+    @app.post('/public/registration/{reference}/lookup')
+    def registration_lookup(reference: str, data: dict):
+        from .registration import lookup_form
+        ctx, token = public_context(reference)
+        if ctx.id == 'workspace':raise PermissionError('注册链接无效')
+        return JSONResponse(lookup_form(ctx,token,data,clock),headers={'Cache-Control':'no-store'})
 
     @app.get('/public/tables/{reference}')
     def table_image(reference: str):

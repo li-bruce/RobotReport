@@ -38,3 +38,9 @@
 
 - Handle complete bot display names containing spaces when parsing legacy registration messages.
 - Add reviewed member-profile changes, configurable compatible Webhook/AI integrations, and private local environment configuration.
+
+## 2026-10-20 · Registration confirmation and member review
+
+- Imported membership is pre-approved. Personal confirmation links prefer unique names, disambiguate duplicate names with phone numbers and prevent account transfers. Optional rating/groups no longer block registration.
+- Completing an imported phone reconciles matching approved accounts. Bulk reconciliation and explicit registration-robot invitations provide a complete pending-roster workflow.
+- Profile requests join registration and rating requests under member pending applications; review history stays with the member.

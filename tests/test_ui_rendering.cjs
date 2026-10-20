@@ -98,7 +98,7 @@ assert.equal(run('state.page.importRequest'),2);assert.equal(run('state.page.imp
 const importRecordsElement={innerHTML:''},importStatusElement={value:''},importSearchElement={value:''};
 context.document={querySelector:selector=>({'#member-import-records':importRecordsElement,'#import-record-status':importStatusElement,'#import-record-search':importSearchElement}[selector]||null)};
 run('state.page.importRecords=[{name:"张三",phone_masked:"138****0001",level:2,groups:[{id:1,name:"提高组"}],status:"unbound"},{name:"李四",phone_masked:"138****0002",level:null,groups:[],status:"linked",linked_user_id:"hidden-account-id"}];renderImportRecords()');
-assert.match(importRecordsElement.innerHTML,/待关联/);assert.match(importRecordsElement.innerHTML,/已关联/);assert.match(importRecordsElement.innerHTML,/提高组/);assert.ok(!importRecordsElement.innerHTML.includes('hidden-account-id'));
+assert.match(importRecordsElement.innerHTML,/待本人确认/);assert.match(importRecordsElement.innerHTML,/已关联/);assert.match(importRecordsElement.innerHTML,/提高组/);assert.ok(!importRecordsElement.innerHTML.includes('hidden-account-id'));
 importStatusElement.value='linked';run('renderImportRecords()');assert.match(importRecordsElement.innerHTML,/李四/);assert.ok(!importRecordsElement.innerHTML.includes('张三'));
 importStatusElement.value='';importSearchElement.value='张';run('renderImportRecords()');assert.match(importRecordsElement.innerHTML,/张三/);assert.ok(!importRecordsElement.innerHTML.includes('李四'));
 importSearchElement.value='找不到';run('renderImportRecords()');assert.match(importRecordsElement.innerHTML,/没有符合条件/);
@@ -130,8 +130,9 @@ async function registrationPageChecks(){
     const button={disabled:true,textContent:''}, listeners={},requests=[];
     const fields={name:'张三',gender:'male',level:'9',phone:'13800000001'};
     const form={hidden:true,attributes:{},setAttribute(name,value){this.attributes[name]=value;},removeAttribute(name){delete this.attributes[name];},reset(){this.resetCount=(this.resetCount||0)+1;},querySelector:()=>button,addEventListener:(name,handler)=>{listeners[name]=handler;}};
+    form.elements=Object.fromEntries(Object.keys(fields).map(key=>[key,{get value(){return fields[key];},set value(value){fields[key]=value;},addEventListener(type,handler){listeners[key+'-'+type]=handler;}}]));
     const focusable=()=>({textContent:'',focus(){this.focused=true;}});
-    const elements={'#registration':form,'#status':focusable(),'#result':{hidden:true},'#result-title':focusable(),'#summary':{textContent:''},'#result-message':{textContent:''},'#next-step':{textContent:''},'#retry':{hidden:true,addEventListener:(name,handler)=>{listeners['retry-'+name]=handler;}}};
+    const elements={'#registration':form,'#phone-help':focusable(),'#status':focusable(),'#result':{hidden:true},'#result-title':focusable(),'#summary':{textContent:''},'#result-message':{textContent:''},'#next-step':{textContent:''},'#retry':{hidden:true,addEventListener:(name,handler)=>{listeners['retry-'+name]=handler;}}};
     const responses=[first];
     const context=vm.createContext({location:{hash},document:{querySelector:selector=>elements[selector]},FormData:class{get(name){return fields[name];}},fetch:async(url,options)=>{requests.push({url,options});const response=responses.shift();return typeof response==='function'?response():{ok:true,json:async()=>response};}});
     vm.runInContext(registrationScript,context);

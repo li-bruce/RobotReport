@@ -42,7 +42,7 @@ def masked_value(key, value):
 
 def directory(db, scope):
     result = {}
-    prereg = [dict(r) for r in db.execute('SELECT * FROM pre_registered_members WHERE scope_id=?',(scope,))]
+    prereg = [dict(r) for r in db.execute('SELECT * FROM pre_registered_members WHERE scope_id=? AND merged_into_id IS NULL',(scope,))]
     linked = {r['linked_user_id']:r for r in prereg if r['linked_user_id']}
     for row in db.execute('''SELECT m.*,p.name FROM member_records m JOIN profiles p
             ON p.chat_id=m.chat_id AND p.user_id=m.user_id WHERE m.chat_id=?''',(scope,)):

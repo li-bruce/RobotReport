@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>会员注册 · 羽协</title><link rel="stylesheet" href="/static/register.css?v=1.0-ops20261019"><script src="/static/register.js?v=1.0-ops20261019" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>会员注册 · 羽协</title><link rel="stylesheet" href="/static/register.css?v=1.0-confirm20261020"><script src="/static/register.js?v=1.0-confirm20261020" defer></script></head>
 <body><main>
   <div class="brand">羽协 · 会员注册</div>
-  <h1>一起上场</h1>
-  <p>填写姓名和性别，提交后等待审核。管理员已为你登记过？填写登记手机号即可关联。</p>
+  <h1>确认本人资料</h1>
+  <p>核对姓名和性别后提交。已登记姓名匹配后直接注册；未匹配则提交审核。</p>
   <form id="registration" hidden>
     <label><span class="field-title">姓名 <span>必填</span></span><input name="name" required maxlength="80" autocomplete="name" placeholder="请输入个人姓名"></label>
     <label><span class="field-title">性别 <span>必填</span></span><select name="gender" required><option value="">请选择</option><option value="male">男</option><option value="female">女</option></select></label>
     <label><span class="field-title">自评级别 <span>选填</span></span><select name="level"><option value="">暂不自评</option><option value="1">1级</option><option value="2">2级</option><option value="3">3级</option><option value="4">4级</option><option value="5">5级</option><option value="6">6级</option><option value="7">7级</option><option value="8">8级</option><option value="9">9级</option></select></label>
-    <label><span class="field-title">手机号 <span>选填</span></span><input name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" placeholder="用于关联已登记资料" aria-describedby="phone-help"></label>
-    <p id="phone-help">已预登记请填写登记手机号；补全资料后待管理员审核。</p>
+    <label><span class="field-title">手机号 <span>选填</span></span><input name="phone" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" placeholder="重名时填写登记手机号" aria-describedby="phone-help"></label>
+    <p id="phone-help">手机号、级别选填。重名时请填写登记手机号区分。</p>
     <button type="submit" disabled>提交注册申请</button>
   </form>
   <section id="result" hidden aria-live="polite">

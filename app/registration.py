@@ -98,7 +98,7 @@ def _active_member(members, db=None):
     return member
 
 
-def create_form(ctx, clock=now, *, purpose='registration'):
+def create_form(ctx, clock=now, *, purpose='registration', hint_name=None):
     if purpose not in ('registration', 'profile'):
         raise ValueError('资料表用途无效')
     if ctx.platform_root and ctx.channel_id:
@@ -120,8 +120,10 @@ def create_form(ctx, clock=now, *, purpose='registration'):
         db.execute('DELETE FROM registration_forms WHERE expires_at<=?', (stamp(clock()),))
         db.execute("UPDATE registration_forms SET status='superseded',payload=NULL,code=NULL WHERE chat_id=? AND user_id=? AND status IN ('draft','submitted')", (ctx.chat_id, ctx.actor))
         token = secrets.token_urlsafe(32)
-        db.execute('INSERT INTO registration_forms(token_hash,chat_id,user_id,expires_at,channel_id,purpose) VALUES(?,?,?,?,?,?)',
-                   (digest(token), ctx.chat_id, ctx.actor, stamp(clock() + timedelta(minutes=20)), ctx.channel_id, purpose))
+        hint = str(hint_name or '').strip()[:80]
+        db.execute('INSERT INTO registration_forms(token_hash,chat_id,user_id,expires_at,channel_id,purpose,payload) VALUES(?,?,?,?,?,?,?)',
+                   (digest(token), ctx.chat_id, ctx.actor, stamp(clock() + timedelta(minutes=20)), ctx.channel_id, purpose,
+                    dumps({'hint_name':hint}) if hint else None))
     return f'{base}/register#{ctx.id}.{token}'
 
 
@@ -150,11 +152,45 @@ def form_status(ctx, token, clock=now):
         return {'status': row['status'], 'purpose': 'profile', 'profile': values, 'groups': changes.groups()}
     if row['status'] == 'confirmed' and member:
         return _result(member | {'registration_result': 'already_registered' if member['status'] == 'approved' else 'submitted'}, bound)
+    hint = json.loads(row['payload'] or '{}').get('hint_name','')
+    suggestion = _import_suggestion(bound, hint or (member or {}).get('name',''))
+    if suggestion:
+        return {'status':row['status'], **suggestion}
     if not member:
-        return {'status':row['status']}
+        return {'status':row['status'], **({'profile':{'name':hint,'gender':'','level':None}} if hint else {})}
     values={key:member.get(key) for key in ('name','gender','requested_level')}
     if values.get('name')==bound.actor:values['name']=''
     return {'status':row['status'],'profile':{'name':values.get('name',''),'gender':values.get('gender',''),'level':values.get('requested_level')}}
+
+
+def _import_suggestion(ctx, name):
+    from .member_imports import ensure_schema, masked
+    from .registration_reconciliation import name_candidate
+    with connect(ctx.db_path) as db:
+        ensure_schema(db)
+        candidate = name_candidate(db,ctx.scope_id,name)
+    if not candidate:
+        return None
+    return {'profile':{'name':candidate['name'],'gender':candidate['gender'] if candidate['gender']!='unknown' else '',
+                       'level':candidate['level']},
+            'import_hint':{'phone_required':False,'phone_masked':masked(candidate['phone']),
+                           'message':'已找到管理员登记资料，确认后直接完成注册。'
+                                     + ('已登记手机号 '+masked(candidate['phone'])+'，无需重复填写。' if candidate['phone']
+                                        else '可补充本人手机号。')}}
+
+
+def lookup_form(ctx, token, data, clock=now):
+    """A personal token can suggest a unique roster name, without exposing a phone."""
+    platform = _platform(ctx)
+    with connect(ctx.transport_db_path) as db:
+        schema(db)
+        row=db.execute("""SELECT * FROM registration_forms WHERE token_hash=? AND expires_at>?
+            AND status='draft' AND purpose='registration'""",(digest(token),stamp(clock()))).fetchone()
+    if not row:raise ValueError('请重新发送 注册确认 获取本人链接')
+    bound=_bound_context(ctx,row,platform,clock)
+    if not isinstance(data,dict):raise ValueError('请填写姓名')
+    name=display_name(data.get('name'),bound.actor)
+    return _import_suggestion(bound,name) or {'profile':{'name':name},'import_hint':None}
 
 
 def _apply_form(bound, row, data, clock):

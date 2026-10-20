@@ -135,6 +135,8 @@ class Members:
             # Registration is not a member-profile editor. Repeated submissions,
             # including those from another connected group, are read-only.
             if source == 'self' and existing and existing['status'] == 'approved':
+                from .registration_reconciliation import confirm_existing_member
+                confirm_existing_member(db,self.ctx,existing,self.clock())
                 return existing | {'registration_result': 'already_registered'}
             gender = normalize_gender(gender, required=source == 'self')
             name = display_name(name, user_id)
@@ -149,15 +151,14 @@ class Members:
                 if phone and phone!=bound['phone']:raise PermissionError('当前申请已关联预登记手机号，不能换绑；请审核后再申请调整')
                 phone=bound['phone']
             imported = None
-            if phone:
-                from .member_imports import registration_match
-                imported = registration_match(db, self.ctx.scope_id, phone, user_id)
+            from .member_imports import registration_match
+            imported = registration_match(db, self.ctx.scope_id, phone, user_id, name=name)
             from .identity_notifications import remember_request_source
             remember_request_source(db, self.ctx, user_id, 'membership', self.clock())
             if level is not None:
                 remember_request_source(db, self.ctx, user_id, 'level', self.clock())
             if imported:
-                return self._link_import(db, user_id, imported, gender, name, level)
+                return self._link_import(db, user_id, imported, gender, name, level, phone)
             member = self._touch(db, user_id, name, source)
             db.execute('UPDATE member_records SET gender=? WHERE chat_id=? AND user_id=?', (gender, self.ctx.scope_id, user_id))
             if phone is not None:
@@ -174,18 +175,17 @@ class Members:
             result = 'submitted' if member['status'] != 'approved' else 'already_registered'
             return self._record(db, user_id) | {'registration_result': result}
 
-    def _link_import(self, db, user_id, imported, gender='unknown', name='', level=None):
+    def _link_import(self, db, user_id, imported, gender='unknown', name='', level=None, phone=None):
         """Attach an imported, admin-reviewed profile in the caller's transaction."""
-        pending = bool(imported.get('review_required'))
         imported = dict(imported)
         imported['name'] = imported['name'] or name
+        imported['phone'] = imported['phone'] or phone or ''
         requested_level = imported['level'] if imported['level'] is not None else level
         before = self._record(db, user_id) or {'status': 'unregistered', 'name': ''}
         group_ids = self.validate_group_ids(json.loads(imported['group_ids']), db)
         timestamp = stamp(self.clock())
-        # Keep imported labels even if the registration form supplied different
-        # names or self-ratings. The submitted phone is an exact lookup key, not
-        # a claim of SMS verification.
+        # Imported membership was approved by the importing administrator.
+        # Self-reported new levels remain a separate review, not a registration gate.
         self._touch(db, user_id, imported['name'], 'admin')
         gender = normalize_gender(imported.get('gender')) if imported.get('gender') in ('male', 'female') else gender
         level = imported['level']
@@ -195,14 +195,14 @@ class Members:
             level_status=?,name_source='admin',review_note=?,level_note=?,reviewed_at=?,
             level_reviewed_at=?,updated_at=? WHERE chat_id=? AND user_id=?''',
             (imported['phone'],level,level,gender,'approved' if level is not None else 'none',
-             '手机号与管理员预登记档案一致，已关联', '沿用管理员导入级别' if level is not None else '',
+             '姓名与管理员预登记档案一致，已确认关联', '沿用管理员导入级别' if level is not None else '',
              timestamp,timestamp if level is not None else None,timestamp,self.ctx.scope_id,user_id))
         db.execute('DELETE FROM member_group_links WHERE chat_id=? AND user_id=?', (self.ctx.scope_id,user_id))
         db.executemany('INSERT INTO member_group_links(chat_id,user_id,group_id) VALUES(?,?,?)',
                        [(self.ctx.scope_id,user_id,gid) for gid in group_ids])
-        changed = db.execute('''UPDATE pre_registered_members SET linked_user_id=?,linked_at=?
+        changed = db.execute('''UPDATE pre_registered_members SET linked_user_id=?,linked_at=?,phone=?,gender=?,name=?
             WHERE id=? AND scope_id=? AND linked_user_id IS NULL''',
-            (user_id,timestamp,imported['id'],self.ctx.scope_id)).rowcount
+            (user_id,timestamp,imported['phone'] or None,gender,imported['name'],imported['id'],self.ctx.scope_id)).rowcount
         if changed != 1:
             raise PermissionError('预登记档案已关联其他账号，请联系管理员核实')
         db.execute("UPDATE membership_applications SET status='superseded' WHERE scope_id=? AND user_id=? AND status='pending'",
@@ -210,19 +210,17 @@ class Members:
         application_id=db.execute('''INSERT INTO membership_applications(scope_id,user_id,name,requested_level,phone,gender,status,
             submitted_at,reviewed_at,reviewed_by,note) VALUES(?,?,?,?,?,?,'approved',?,?,?,?)''',
             (self.ctx.scope_id,user_id,imported['name'],level,imported['phone'],gender,timestamp,timestamp,
-             imported['created_by'],'手机号精确关联管理员预登记档案')).lastrowid
+             imported['created_by'],'本人确认管理员预登记档案')).lastrowid
         audit(db,self.ctx.actor,'member.import_link',{'user_id':user_id,'scope_id':self.ctx.scope_id,'pre_registration_id':imported['id']})
-        if pending:
-            db.execute("UPDATE member_records SET status='pending',requested_level=?,level_status=?,reviewed_at=NULL,review_note='' WHERE chat_id=? AND user_id=?",
-                       (requested_level,'pending' if requested_level is not None else 'none',self.ctx.scope_id,user_id))
-            db.execute("UPDATE membership_applications SET status='pending',requested_level=?,reviewed_at=NULL,reviewed_by=NULL,note='预登记资料已补全，待审核' WHERE id=? AND scope_id=? AND user_id=?",
-                       (requested_level,application_id,self.ctx.scope_id,user_id))
+        if imported['level'] is None and requested_level is not None:
+            db.execute("UPDATE member_records SET requested_level=?,level_status='pending' WHERE chat_id=? AND user_id=?",
+                       (requested_level,self.ctx.scope_id,user_id))
         result = self._record(db,user_id)
         from .identity_notifications import record_identity_change
         record_identity_change(db, self.ctx, user_id, kind='membership',
                                before={key: before[key] for key in ('status', 'name')},
                                after={key: result[key] for key in ('status', 'name')}, at=self.clock())
-        return result | {'registration_result':'submitted' if pending else 'linked'}
+        return result | {'registration_result':'linked'}
 
     def update_details(self, user_id, phone=None, requested_level=None, db=None, gender=None):
         self._admin()

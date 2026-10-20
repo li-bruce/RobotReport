@@ -50,7 +50,7 @@ class RegistrationImportFlow(unittest.TestCase):
         self.assertEqual(records[0]['status'],'unbound')
         start=self.sim('alice','注册')['reply']
         reference=start.split('/register#')[1].split(')')[0]
-        response=self.client.post('/public/registration/'+reference,json={'gender': 'male', 'name':'本次填写名','phone':'+86 138-0000-0001','level':3})
+        response=self.client.post('/public/registration/'+reference,json={'gender': 'male', 'name':'登记姓名','phone':'+86 138-0000-0001','level':3})
         self.assertEqual(response.status_code,200,response.text)
         result=response.json()
         self.assertEqual(result['status'],'completed')
@@ -72,13 +72,11 @@ class RegistrationImportFlow(unittest.TestCase):
         self.assertEqual(self.call('GET','/api/registration-applications'),before)
         self.assertEqual(self.call('GET','/api/member-imports/records')[0]['status'],'linked')
         again=self.preview(self.csv());self.assertEqual(again['skip_count'],1)
-    def test_name_never_matches_and_bound_phone_cannot_be_taken(self):
+    def test_name_matches_but_bound_account_cannot_be_taken(self):
         preview=self.preview(self.csv());self.call('POST','/api/member-imports/commit',{'token':preview['token']})
-        self.sim('same-name','注册 登记姓名 男')
-        self.assertEqual(self.call('GET','/api/members/same-name')['status'],'pending')
-        self.assertEqual(self.call('GET','/api/member-imports/records')[0]['status'],'unbound')
-        self.assertIn('关联',self.sim('owner','注册 任意姓名 男 13800000001')['reply'])
-        self.sim('other','注册 另一个人 男 13800000001',status=403)
+        self.assertIn('关联',self.sim('owner','注册 登记姓名 男')['reply'])
+        self.assertEqual(self.call('GET','/api/members/owner')['status'],'approved')
+        self.sim('other','注册 登记姓名 男 13800000001',status=403)
         self.assertNotEqual(self.call('GET','/api/members/other')['status'],'approved')
         self.assertEqual(self.call('GET','/api/member-imports/records')[0]['linked_user_id'],'owner')
     def test_csv_permissions_limits_and_invalid_rows(self):

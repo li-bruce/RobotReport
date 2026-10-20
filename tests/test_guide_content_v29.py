@@ -84,7 +84,7 @@ def test_public_guide_does_not_fetch_private_records_or_include_deployment_crede
     assert not re.search(r'https?://|\bsk-[a-zA-Z0-9]{12,}|81\.70\.37\.17', html + admin + script)
     assert '管理员密码' in admin
     assert '不是各自的网页登录账号' in admin
-    assert '只按手机号匹配' in html
+    assert '重名时填写登记手机号区分' in html and '确认同名资料即可注册' in html
 
 
 def test_guide_admin_links_resolve_to_existing_navigation():

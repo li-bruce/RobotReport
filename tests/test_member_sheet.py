@@ -31,33 +31,34 @@ class SheetTests(unittest.TestCase):
         assert preview['mappings'][0]['ignored']==['序号','管理员']
         assert '13800000001' not in json.dumps(preview)
         self.imports.commit(preview['token'])
-        member=self.member().apply('输入名',9,'13800000001',gender='male')
+        member=self.member().apply('张三',9,'13800000001',gender='male')
         assert member['status']=='approved' and member['name']=='张三' and member['level']==3 and not member['roles']
 
-    def test_missing_fields_pending_then_admin_approval_and_repeated_submission(self):
+    def test_missing_fields_confirmed_and_optional_level_separately_reviewed(self):
         preview=self.imports.preview(workbook([['手机号码'],[13800000001]]),'x.xlsx')
         assert preview['can_commit']
         self.imports.commit(preview['token'])
         member=self.member().apply('补全姓名',7,'13800000001',gender='female')
-        assert member['status']=='pending' and member['name']=='补全姓名'
+        assert member['status']=='approved' and member['name']=='补全姓名'
         assert member['level'] is None and member['requested_level']==7
         assert member['roles']==[]
         with pytest.raises(PermissionError):self.member('other').apply('他人',phone='13800000001',gender='male')
         self.manager.review('alice','approved');self.manager.review_level('alice',True,7)
         assert self.member().get()['level']==7
 
-    def test_missing_phones_multiple_people_not_name_matched_and_manual_completion(self):
+    def test_duplicate_names_require_phone_disambiguation(self):
         content='姓名,备注\n同名,甲\n同名,乙\n'.encode()
         preview=self.imports.preview(content);assert preview['create_count']==1 and preview['match_count']==1
         preview=self.imports.resolve(preview['token'],[{'source_key':preview['rows'][1]['source_key'],'target':'new'}])
         self.imports.commit(preview['token'])
         assert self.imports.preview(content)['skip_count']==2
-        self.member().apply('同名',gender='male')
+        with pytest.raises(ValueError,match='重名'):
+            self.member().apply('同名',gender='male')
         assert len(self.imports.list('unbound'))==2
         record=self.imports.list()[0]
         self.imports.update(record['id'],{'phone':'13800000001'})
         applied=self.member().apply('同名',phone='13800000001',gender='male')
-        assert applied['status']=='pending'
+        assert applied['status']=='approved'
         assert len(self.imports.list('linked'))==1
 
     def test_multisheet_mapping_duplicates_and_formula_errors(self):
@@ -96,9 +97,9 @@ class SheetTests(unittest.TestCase):
         self.member().apply('原申请',gender='male')
         preview=self.imports.preview('姓名,手机号\n预登记,13800000001\n'.encode())
         self.imports.commit(preview['token'])
-        self.member().apply('补全申请',phone='13800000001',gender='female')
+        self.member().apply('预登记',phone='13800000001',gender='female')
         with connect(self.admin.db_path) as db:
             rows=db.execute('SELECT name,status FROM membership_applications ORDER BY id').fetchall()
-            assert [tuple(r) for r in rows]==[('原申请','superseded'),('预登记','pending')]
+            assert [tuple(r) for r in rows]==[('原申请','superseded'),('预登记','approved')]
 
 

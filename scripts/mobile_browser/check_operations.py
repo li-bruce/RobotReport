@@ -45,9 +45,9 @@ try:
             page.locator('#prereg-edit [name=phone]').fill('1370013'+str(width).zfill(4));page.locator('#prereg-edit [type=submit]').click();page.locator('#modal').wait_for(state='hidden')
             page.goto(meta['forms'][str(width)]);page.wait_for_load_state('networkidle');page.locator('#registration:not([hidden])').wait_for()
             check(f'{width} public form no ID',page.locator('[name=user_id]').count()==0)
-            page.locator('[name=name]').fill('自行填写'+str(width));page.locator('[name=gender]').select_option('female');page.locator('[name=level]').select_option('5');page.locator('[name=phone]').fill('1390013'+str(width).zfill(4))
-            page.locator('#registration [type=submit]').click();page.get_by_role('heading',name='申请已提交',exact=True).wait_for()
-            check(f'{width} incomplete import waits approval','待' in page.locator('#result-message').inner_text());fit(page,f'{width} registration result fits')
+            page.locator('[name=name]').fill('导入新人'+str(width));page.locator('[name=gender]').select_option('female');page.locator('[name=level]').select_option('5');page.locator('[name=phone]').fill('1390013'+str(width).zfill(4))
+            page.locator('#registration [type=submit]').click();page.get_by_role('heading',name='资料已关联，注册成功',exact=True).wait_for()
+            check(f'{width} incomplete import confirmed without second review','审核' not in page.locator('#result-message').inner_text());fit(page,f'{width} registration result fits')
             page.goto(origin+'/admin#reminders');page.locator('#broadcast-rules').wait_for()
             page.locator('#broadcast-rules [data-add-rule]').click();rule=page.locator('[data-time-rule]').last
             rule.locator('[data-rule-field=name]').fill('周末播报'+str(width));rule.locator('[data-rule-field=time]').fill('12:30')

@@ -9,7 +9,7 @@ class CapabilityCatalogTests(unittest.TestCase):
         rows = features()
         self.assertGreaterEqual(len(rows), 50)
         self.assertEqual(len(rows), len({row['feature_id'] for row in rows}))
-        expected_routes = {'dashboard', 'members', 'applications', 'profile-requests', 'member-imports',
+        expected_routes = {'dashboard', 'members', 'applications', 'member-imports',
                            'guests', 'roles', 'calendar', 'venues', 'sessions', 'occupancies', 'holidays',
                            'daily', 'stats', 'reminders', 'tournaments', 'messages',
                            'bots', 'settings', 'ai', 'audit', 'guide', 'simulator', 'casual'}

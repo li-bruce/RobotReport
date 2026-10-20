@@ -78,6 +78,27 @@ def management_router(platform, principal, context, clock):
         from .member_imports import MemberImports
         return MemberImports(ctx,clock).list(status)
 
+    @router.post('/api/member-imports/reconcile')
+    def reconcile_imported_records(data:dict,ctx=Depends(context)):
+        from .member_imports import MemberImports
+        if type(data.get('commit',False)) is not bool:raise ValueError('确认参数无效')
+        return MemberImports(ctx,clock).reconcile(data.get('record_ids'),commit=data.get('commit',False))
+
+    @router.get('/api/member-imports/invite-channels')
+    def registration_invite_channels(ctx=Depends(context)):
+        from .registration_invites import RegistrationInvites
+        return RegistrationInvites(platform,ctx,clock).channels()
+
+    @router.post('/api/member-imports/invite-preview')
+    def registration_invite_preview(data:dict,ctx=Depends(context)):
+        from .registration_invites import RegistrationInvites
+        return RegistrationInvites(platform,ctx,clock).preview(data)
+
+    @router.post('/api/member-imports/invite')
+    def registration_invite(data:dict,ctx=Depends(context)):
+        from .registration_invites import RegistrationInvites
+        return RegistrationInvites(platform,ctx,clock).send(data)
+
     @router.patch('/api/member-imports/records/{record_id}')
     def update_imported_record(record_id:int,data:dict,ctx=Depends(context)):
         from .member_imports import MemberImports
