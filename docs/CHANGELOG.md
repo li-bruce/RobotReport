@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-22 · Direct venue connections and glass login
+
+- Give the login illustration six direct branches from its central hub to four sports venues and two chat groups.
+- Refine badminton markings and player orientation using a court-layout reference; keep separate desktop and mobile compositions.
+- Keep the login panel in place and apply translucent glass styling with a readable fallback.
+
 ## 2026-10-22 · 登录场景与场地属性
 
 - 登录页采用独立桌面、手机背景，羽毛球作为左下前景；登录窗避让群与机器人画面。

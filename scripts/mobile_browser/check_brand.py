@@ -57,7 +57,7 @@ try:
             portrait = width <= 760 or (width <= 1000 and height >= width)
             asset = 'gatherspace-login-mobile.png' if portrait else 'gatherspace-login-desktop.png'
             check(f'{width} selects dedicated background', asset in page.locator('.gather-login').evaluate('el=>getComputedStyle(el).backgroundImage'))
-            safe = page.evaluate("() => {const scene=document.querySelector('.gather-login').getBoundingClientRect(), form=document.querySelector('.gather-login-access').getBoundingClientRect();const mobile=matchMedia('(max-width:760px),(max-width:1000px) and (orientation:portrait)').matches;return mobile? form.top >= Math.min(innerWidth,560)*(1672/941)*.69 : form.bottom < scene.bottom-innerWidth*(941/1672)*.42;}")
+            safe = page.evaluate("() => {const scene=document.querySelector('.gather-login').getBoundingClientRect(), form=document.querySelector('.gather-login-access').getBoundingClientRect();const mobile=matchMedia('(max-width:760px),(max-width:1000px) and (orientation:portrait)').matches;const illustrationTop=form.left<innerWidth*.75?.81:.60;return mobile? form.top >= Math.min(innerWidth,560)*(1672/941)*.69 : form.bottom < scene.bottom-innerWidth*(941/1672)*illustrationTop;}")
             check(f'{width} form clears sports and group illustration',safe)
             check('login product name','聚场' in page.title())
             check('login intro only title and core line',''.join(page.locator('.gather-login-title').inner_text().split())=='聚场GatherSpace场地安排·活动报名·赛事组织·机器人与群')
