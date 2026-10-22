@@ -245,6 +245,16 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     def update_bot(bot_id: str, data: dict, user=Depends(principal)):
         return platform.update(user, bot_id, data)
 
+    @app.get('/api/bots/{bot_id}/broadcasts')
+    def bot_broadcasts(bot_id: str, user=Depends(principal)):
+        from .bot_broadcasts import settings
+        return settings(platform, user, bot_id)
+
+    @app.put('/api/bots/{bot_id}/broadcasts')
+    def save_bot_broadcasts(bot_id: str, data: dict, user=Depends(principal)):
+        from .bot_broadcasts import settings
+        return settings(platform, user, bot_id, data)
+
     @app.delete('/api/bots/{bot_id}')
     def delete_bot(bot_id: str, user=Depends(principal)):
         return platform.remove(user,bot_id)

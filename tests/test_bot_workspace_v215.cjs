@@ -4,8 +4,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
 class Fields{constructor(values){this.values=values;}get(key){return this.values[key]??null;}getAll(key){const v=this.values[key];return Array.isArray(v)?v:v==null?[]:[v];}has(key){return Object.hasOwn(this.values,key);}}
 const node=s=>nodes[s]||(nodes[s]={value:'',innerHTML:'',textContent:'',isConnected:true,hidden:false,addEventListener(){},querySelector:()=>({}),querySelectorAll:()=>[]});
-const ctx=vm.createContext({structuredClone,URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});
-vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js','bot-relations.js','time-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
+const ctx=vm.createContext({structuredClone,URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},window:{addEventListener(){}},document:{querySelector:node,querySelectorAll:()=>[]}});
+vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js','bot-relations.js','time-workspace.js','bot-settings.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
 const run=code=>vm.runInContext(code,ctx),plain=value=>JSON.parse(JSON.stringify(value));
 ctx.catalog=[{id:'daily_events',name:'每日赛事',default_enabled:true},{id:'registration',name:'会员注册',default_enabled:true},{id:'enrollment',name:'活动报名',default_enabled:true},{id:'ai',name:'AI 助手',default_enabled:false},{id:'large_events',name:'大型赛事',default_enabled:false},{id:'management',name:'群内管理',default_enabled:false}];
 ctx.bots=[{id:'student',name:'学生机器人',capabilities:['registration'],active:true,venue_ids:[1],slot_keys:['slot:1']},{id:'other',name:'另一机器人',capabilities:['enrollment'],active:true,venue_ids:[1]}];
@@ -17,9 +17,9 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
 (async()=>{
   assert.equal(run("channelSupportsBusiness({capabilities:['daily_events']},'messages')"),false);
   await run('renderBotWorkspace(3)');let html=node('#main').innerHTML;
-  for(const action of ['bot-new','bot-help','bot-delete'])assert.match(html,new RegExp('data-action="'+action+'"'));
+  for(const action of ['bot-new'])assert.match(html,new RegExp('data-action="'+action+'"'));
   assert.doesNotMatch(html,/data-action="bot-callback"|已移除的群|连接详情与维护|removed-group|<script>旧群/);
-  assert.match(html,/工作日 第一场 17:30–20:30/);assert.match(html,/aria-label="业务组合"/);
+  assert.match(html,/周一至周五 · 第一场 17:30–20:30/);assert.match(html,/aria-label="业务组合"/);
   assert.match(html,/<summary class="robot-card-summary">[\s\S]*?会员注册[\s\S]*?<\/summary>/);
   assert.doesNotMatch(html,/<details class="robot-card"[^>]* open/);assert.match(html,/href="\/guide\/admin#robots"/);
   run("state.route='bot-links'");await run('renderBotWorkspace(3)');html=node('#main').innerHTML;for(const action of ['group-new','group-delete','channel-edit'])assert.match(html,new RegExp('data-action=\"'+action+'\"'));assert.match(html,/relation-viewport/);assert.match(html,/class=\"relation-node relation-bot/);run("state.route='bots'");

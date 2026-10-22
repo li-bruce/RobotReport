@@ -82,3 +82,11 @@
 - Imported membership is pre-approved. Personal confirmation links prefer unique names, disambiguate duplicate names with phone numbers and prevent account transfers. Optional rating/groups no longer block registration.
 - Completing an imported phone reconciles matching approved accounts. Bulk reconciliation and explicit registration-robot invitations provide a complete pending-roster workflow.
 - Profile requests join registration and rating requests under member pending applications; review history stays with the member.
+
+
+## 2026-10-22 · Inline robot settings
+
+- Edit each robot's capabilities, venue/session scope, user conditions and function availability inside its expanded row.
+- Configure announcements in the same robot, without a separate robot selector. Per-robot writes preserve shared-rule recipients and reject stale edits.
+- Collapsed rows separate activity times from broadcast times and group repeated periods.
+- Updated the administrator guide and illustrated workflows; mobile forms retain unsaved drafts while other robots are saved.

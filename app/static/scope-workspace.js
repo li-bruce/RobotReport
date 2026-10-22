@@ -2,16 +2,16 @@
 async function scopeSlots(){const lists=await Promise.all(state.venues.map(async v=>{const [weekly,special,holiday]=await Promise.all([api(query('/api/slots',{venue_id:v.id})),api(query('/api/special-dates',{venue_id:v.id})),api(query('/api/holiday-schedule',{venue_id:v.id}))]);return {venue:v,slots:[...asList(weekly,'slots'),...asList(holiday.available_slots||holiday.slots).map(s=>({...s,holiday:true})),...asList(special).filter(day=>day.date>=today()).flatMap(day=>day.slots.filter(slot=>!asList(weekly,'slots').some(s=>s.slot_key===slot.slot_key)).map(slot=>({...slot,special_date:day.date})))]};}));return lists.flatMap(({venue,slots})=>slots.map(s=>({...s,venue_id:venue.id,venue_name:venue.name})));}
 function scopeControls(value,slots,{bot=false}={}){
   const venueIds=value.venue_ids,keys=value.slot_keys;
-  return `${bot?`<fieldset class="field"><legend>负责的场地</legend>${selectfield('场地范围','venue_mode',[['all','全部场地'],['selected','仅所选场地']],venueIds===null||venueIds===undefined?'all':'selected')}<div class="checks">${state.venues.map(v=>`<label class="check-label"><input type="checkbox" name="scope_venue_ids" value="${attr(v.id)}"${venueIds?.map(String).includes(String(v.id))?' checked':''}>${e(v.name)}</label>`).join('')}</div></fieldset>`:''}<fieldset class="field"><legend>负责的活动时段</legend>${selectfield('场次范围','slot_mode',[['all',bot?'全部时段':'机器人允许的全部时段'],['selected','仅所选时段']],keys===null||keys===undefined?'all':'selected')}<div class="scope-slot-options">${slots.map(s=>`<label class="check-label"><input type="checkbox" name="slot_keys" value="${attr(s.slot_key)}"${keys?.includes(s.slot_key)?' checked':''}><span>${e(s.venue_name)} · ${e(s.name)} ${e(s.start)}–${e(s.end)}<small>${s.holiday?'法定节假日':s.special_date?e(s.special_date):'周'+(s.weekdays||[]).map(d=>'一二三四五六日'[d]).join('、')}</small></span></label>`).join('')||'<p class="caption">暂无活动时段，请先在活动运营中配置。</p>'}</div><small>选择“仅所选”但不勾选时，停止负责任何场次。时段调整后自动跟随；大型赛事单独安排赛程，不受日常活动时段限制。</small></fieldset>`;
+  return `${bot?`<fieldset class="field"><legend>负责的场地</legend>${selectfield('场地范围','venue_mode',[['all','全部场地'],['selected','仅所选场地']],venueIds===null||venueIds===undefined?'all':'selected')}<div class="checks">${state.venues.map(v=>`<label class="check-label"><input type="checkbox" name="scope_venue_ids" value="${attr(v.id)}"${venueIds?.map(String).includes(String(v.id))?' checked':''}>${e(v.name)}</label>`).join('')}</div></fieldset>`:''}<fieldset class="field"><legend>负责的活动时段</legend>${selectfield('场次范围','slot_mode',[['all',bot?'全部时段':'机器人允许的全部时段'],['selected','仅所选时段']],keys===null||keys===undefined?'all':'selected')}<div class="scope-slot-options">${slots.map(s=>`<label class="check-label"><input type="checkbox" name="slot_keys" value="${attr(s.slot_key)}"${keys?.includes(s.slot_key)?' checked':''}><span>${e(s.venue_name)} · ${e(s.name)} ${e(s.start)}–${e(s.end)}<small>${s.holiday?'法定节假日':s.special_date?e(s.special_date):weekdaySummary(s.weekdays)}</small></span></label>`).join('')||'<p class="caption">暂无活动时段，请先在活动运营中配置。</p>'}</div><small>仅所选范围中未勾选任何项时，不负责日常场次。</small></fieldset>`;
 }
-function bindScopeControls(form){const refresh=()=>{const slotsAll=form.elements.slot_mode.value==='all';$$('[name=slot_keys]',form).forEach(el=>el.disabled=slotsAll);if(form.elements.venue_mode){const all=form.elements.venue_mode.value==='all';$$('[name=scope_venue_ids]',form).forEach(el=>el.disabled=all);}};form.elements.slot_mode.onchange=refresh;if(form.elements.venue_mode)form.elements.venue_mode.onchange=refresh;refresh();}
+function bindScopeControls(form){const refresh=()=>{const slotsAll=form.elements.slot_mode.value==='all';$$('[name=slot_keys]',form).forEach(el=>el.disabled=slotsAll);if(form.classList.contains('bot-inline-form'))$('.scope-slot-options',form).hidden=slotsAll;if(form.elements.venue_mode){const all=form.elements.venue_mode.value==='all';$$('[name=scope_venue_ids]',form).forEach(el=>el.disabled=all);if(form.classList.contains('bot-inline-form'))$('[name=scope_venue_ids]',form)?.closest('.checks')?.toggleAttribute('hidden',all);}};form.elements.slot_mode.onchange=refresh;if(form.elements.venue_mode)form.elements.venue_mode.onchange=refresh;refresh();}
 function scopeBody(data,bot=false){return {...(bot?{venue_ids:data.get('venue_mode')==='all'?null:data.getAll('scope_venue_ids').map(Number)}:{}),slot_keys:data.get('slot_mode')==='all'?null:data.getAll('slot_keys')};}
 
 function botCapabilityCatalog(){return state.page.botCapabilities||[];}
 function botCapabilities(bot){return bot.capabilities===undefined?botCapabilityCatalog().filter(c=>c.default_enabled).map(c=>c.id):(bot.capabilities||[]);}
 function botCapabilityBadges(bot){const enabled=new Set(botCapabilities(bot));return botCapabilityCatalog().filter(c=>enabled.has(c.id)).map(c=>`<span class="badge outline">${e(c.name)}</span>`).join('')||'<span class="caption">未开启业务</span>';}
 function slotScopeLabel(s){
-  const days=(s.weekdays||[]).join(','),period=s.holiday?'节假日':s.special_date||({'0,1,2,3,4':'工作日','5,6':'周末','0,1,2,3,4,5,6':'每天'}[days]||'周'+(s.weekdays||[]).map(d=>'一二三四五六日'[d]).join('、'));
+  const days=(s.weekdays||[]).join(','),period=s.holiday?'节假日':s.special_date||({'0,1,2,3,4':'周一至周五','5,6':'周末','0,1,2,3,4,5,6':'每天'}[days]||'周'+(s.weekdays||[]).map(d=>'一二三四五六日'[d]).join('、'));
   const name=s.name.replace(/^(?:工作日|周末|法定节假日|节假日)\s*/, '');
   return `${period} ${name} ${s.start}–${s.end}`;
 }
@@ -61,13 +61,13 @@ function compactBotCard({bot,channel,legacy}){
     </div></details>`;
 }
 async function renderBotWorkspace(epoch){
-  const [result,channels,catalog,known,slots]=await Promise.all([api('/api/bots'),loadChannels(),api('/api/bot-capabilities'),api('/api/groups'),scopeSlots()]);if(!isCurrent(epoch))return;
-  state.bots=asList(result,'bots');state.channels=channels;state.page.botCapabilities=asList(catalog,'capabilities');state.page.botGroups=asList(known,'groups');state.page.botScopeSlots=slots;
+  const [result,channels,catalog,known,slots,broadcastConfig]=await Promise.all([api('/api/bots'),loadChannels(),api('/api/bot-capabilities'),api('/api/groups'),scopeSlots(),api('/api/config')]);if(!isCurrent(epoch))return;
+  state.bots=asList(result,'bots');state.channels=channels;state.page.botCapabilities=asList(catalog,'capabilities');state.page.botGroups=asList(known,'groups');state.page.botScopeSlots=slots;state.page.botBroadcastConfig=broadcastConfig;
   if(state.botGroupFilter&&!state.page.botGroups.some(g=>g.id===state.botGroupFilter))state.botGroupFilter='';
   $('#main').innerHTML=robotWorkspaceTabs()+(state.route==='bot-links'?robotRelationsMarkup():robotManagerMarkup());
   state.botDisclosure??=new Map();
   $$('[data-disclosure-key]',$('#main')).forEach(detail=>detail.addEventListener('toggle',()=>{if(detail.isConnected)state.botDisclosure.set(detail.dataset.disclosureKey,detail.open);}));
-  if(state.route==='bot-links')bindRelationGraph();
+  if(state.route==='bot-links')bindRelationGraph();else bindInlineBotEditors();
 }
 function removeBotGroup(id){
   const group=(state.page.botGroups||[]).find(g=>g.id===id);if(!group)return;
@@ -95,10 +95,10 @@ function removeBot(id){
 }
 
 function botPolicyForm(policy){
-  return `<details class="robot-user-settings"><summary>用户使用条件 · ${policy?.enabled?`${policy.rules.length} 项`:'不限'}</summary><div class="robot-user-body"><label class="check-label"><input type="checkbox" name="policy_enabled"${policy?.enabled?' checked':''}>启用用户条件</label><p class="caption">限制使用本机器人的账号；注册、本人资料与帮助仍可使用。原有会员资格和管理权限要求继续生效。</p>${selectfield('条件组合','policy_match',[['all','全部满足'],['any','任一满足']],policy?.match||'all')}<div id="bot-policy-rules" class="stack"></div><button type="button" class="btn small" data-rule-add>添加条件</button></div></details>`;
+  return `<details class="robot-user-settings"><summary>用户使用条件 · ${policy?.enabled?`${policy.rules.length} 项`:'不限'}</summary><div class="robot-user-body"><label class="check-label"><input type="checkbox" name="policy_enabled"${policy?.enabled?' checked':''}>启用用户条件</label><p class="caption">限制使用本机器人的账号；注册、本人资料与帮助仍可使用。原有会员资格和管理权限要求继续生效。</p>${selectfield('条件组合','policy_match',[['all','全部满足'],['any','任一满足']],policy?.match||'all')}<div data-bot-policy-rules class="stack"></div><button type="button" class="btn small" data-rule-add>添加条件</button></div></details>`;
 }
 function bindBotPolicy(form,policy,attributes){
-  let rules=JSON.parse(JSON.stringify(policy?.rules||[]));const fields=attributes.fields,root=$('#bot-policy-rules',form);
+  let rules=JSON.parse(JSON.stringify(policy?.rules||[]));const fields=attributes.fields,root=$('[data-bot-policy-rules]',form);
   function collect(){return $$('[data-rule-index]',root).map(row=>{
     const fieldId=$('[data-rule-field]',row).value,f=fields.find(f=>f.id===fieldId),op=$('[data-rule-op]',row).value;
     let value=null;

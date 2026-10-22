@@ -41,9 +41,15 @@ def visit(page, route, ready):
     if page.locator('#modal[open]').count():
         page.keyboard.press('Escape')
         page.locator('#modal').wait_for(state='hidden')
-    page.goto(origin + '/admin#' + route)
-    page.reload()
-    page.locator(ready).first.wait_for()
+    # Force a document navigation; legacy #reminders redirects to #bots, so
+    # reloading after that redirect would discard its requested expansion.
+    page.goto(origin + '/admin?guide=' + route + '#' + route)
+    try:
+        page.locator(ready).first.wait_for()
+    except Exception:
+        page.screenshot(path=str(base/'guide-failure.png'),full_page=True)
+        (base/'guide-failure.txt').write_text(page.locator('body').inner_text(),encoding='utf8')
+        raise
     page.locator('#main .loading').wait_for(state='hidden')
     page.wait_for_load_state('networkidle')
 
@@ -102,7 +108,9 @@ try:
         page.set_viewport_size({'width': 1280, 'height': 900})
         capture(page, 'admin-roles')
         visit(page, 'bots', '.robot-card')
-        capture(page, 'admin-bots')
+        page.locator('.robot-card').first.locator(':scope>summary').click()
+        page.locator('.bot-inline-form').first.wait_for()
+        capture(page, 'admin-bots', '.bot-inline-form')
         visit(page, 'bot-links', '#main')
         capture(page, 'admin-bot-links')
         visit(page, 'calendar', '#main')
@@ -116,11 +124,11 @@ try:
         page.get_by_role('tab', name='组织与协调', exact=True).click()
         page.locator('#organization-form').wait_for()
         capture(page, 'admin-event-organization', '#tournament-content')
-        visit(page, 'reminders', '#broadcast-rules')
-        rule = page.locator('#broadcast-rules [data-time-rule]').first
+        visit(page, 'reminders', '[data-broadcast-rules]')
+        rule = page.locator('[data-broadcast-rules] [data-time-rule]').first
         rule.locator(':scope>summary').click()
         rule.locator('.time-conditions>summary').click()
-        capture(page, 'admin-reminders', '#main')
+        capture(page, 'admin-reminders', '.bot-broadcast-panel')
         visit(page, 'messages', '#main')
         page.locator('#composer-form [name=channel_ids]').first.check()
         page.get_by_label('消息标题', exact=True).fill('周末活动安排')
@@ -162,6 +170,11 @@ try:
         browser.close()
 except Exception as error:
     report['errors'].append(str(error))
+    try:
+        page.screenshot(path=str(base/'guide-failure.png'),full_page=True)
+        (base/'guide-failure.txt').write_text(page.locator('body').inner_text(),encoding='utf8')
+    except Exception:
+        pass
 finally:
     (base / 'guide-capture-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps({'output': str(base), **report}, ensure_ascii=False))

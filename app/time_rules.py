@@ -113,12 +113,12 @@ def effective_capabilities(ctx):
     return tuple(c for c in normalize_capabilities(ctx.capabilities) if capability_open(ctx,c))
 
 
-def normalize_broadcasts(value, bot_ids=None):
+def normalize_broadcasts(value, bot_ids=None, *, limit=50):
     if value is None:return None  # Preserve legacy three reminder defaults.
-    if not isinstance(value,list) or len(value)>50:raise ValueError('最多50条定时播报规则')
+    if not isinstance(value,list) or len(value)>limit:raise ValueError(f'最多{limit}条定时播报规则')
     result=[];ids=set()
     for rule in value:
-        if not isinstance(rule,dict) or set(rule)-{'id','name','enabled','kinds','bot_ids','time','when'}:raise ValueError('播报规则字段无效')
+        if not isinstance(rule,dict) or set(rule)-{'id','name','enabled','kinds','bot_ids','time','when','excluded_bot_ids'}:raise ValueError('播报规则字段无效')
         rid=rule.get('id');name=rule.get('name','')
         if not isinstance(rid,str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,64}',rid) or rid in ids:raise ValueError('播报规则标识重复或无效')
         if not isinstance(name,str) or not name.strip() or len(name)>80:raise ValueError('请填写规则名称，最多80字')
@@ -126,9 +126,12 @@ def normalize_broadcasts(value, bot_ids=None):
         kinds=rule.get('kinds');bots=rule.get('bot_ids');hhmm=rule.get('time')
         if not isinstance(kinds,list) or not kinds or any(k not in ('open','closing','roster') for k in kinds):raise ValueError('请选择播报类型')
         if not isinstance(bots,list) or not bots or len(bots)>100 or any(not isinstance(b,str) or (bot_ids is not None and b not in bot_ids) for b in bots):raise ValueError('请选择有效的执行机器人')
+        excluded=rule.get('excluded_bot_ids',[])
+        if not isinstance(excluded,list) or any(b not in bots for b in excluded):raise ValueError('播报排除范围无效')
         if not isinstance(hhmm,str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',hhmm):raise ValueError('播报时间格式为HH:MM')
         result.append({'id':rid,'name':name.strip(),'enabled':rule.get('enabled',True),'kinds':list(dict.fromkeys(kinds)),
                        'bot_ids':list(dict.fromkeys(bots)),'time':hhmm,'when':normalize_when(rule.get('when'),timed=False)})
+        if excluded:result[-1]['excluded_bot_ids']=list(dict.fromkeys(excluded))
         ids.add(rid)
     return result
 
@@ -142,7 +145,8 @@ def broadcast_rules(config, bot_ids):
 def rule_fingerprint(rule):
     import hashlib
     import json
-    return hashlib.sha256(json.dumps(rule,sort_keys=True,ensure_ascii=False).encode()).hexdigest()[:20]
+    content={k:v for k,v in rule.items() if k!='excluded_bot_ids'}
+    return hashlib.sha256(json.dumps(content,sort_keys=True,ensure_ascii=False).encode()).hexdigest()[:20]
 
 
 def broadcast_delivery_allowed(key, ctx, at, config):
@@ -159,8 +163,8 @@ def broadcast_delivery_allowed(key, ctx, at, config):
     else:bots=[ctx.id]
     rules=broadcast_rules(config,bots)
     rule=next((r for r in rules if r['id']==rid),None)
-    if not rule or not rule['enabled'] or ctx.id not in rule['bot_ids'] or kind not in rule['kinds']:return False
-    if config.get('broadcast_rules') is None:
+    if not rule or not rule['enabled'] or ctx.id not in rule['bot_ids'] or ctx.id in rule.get('excluded_bot_ids',[]) or kind not in rule['kinds']:return False
+    if config.get('broadcast_rules') is None or (rid=='legacy-'+kind and rule.get('when')=={} and rule.get('kinds')==[kind] and rule.get('name')==kind):
         # Legacy default recipients are intentionally all current robots.
         return rule['time'].replace(':','')==hhmm
     return rule_fingerprint(rule)==fingerprint and calendar_matches(rule['when'],at.astimezone(TZ).date(),ctx.db_path) is True

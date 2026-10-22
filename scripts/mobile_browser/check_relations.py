@@ -98,7 +98,7 @@ with sync_playwright() as pw:
             fits(page,label+' management')
             check(label+' cards initially collapsed',page.locator('.robot-card[open]').count()==0)
             check(label+' connection controls separated',page.locator('#main [data-action=channel-edit]').count()==0)
-            check(label+' scope and capabilities in header','17:30' in page.locator('.robot-summary-scope').first.inner_text() and page.locator('.robot-summary-business').first.is_visible())
+            check(label+' scope and capabilities in header','17:30' in page.locator('.robot-summary-times').first.inner_text() and page.locator('.robot-summary-business').first.is_visible())
             baseline=[c for c in get(context,'/api/channels') if c['bot_id'] in meta['bot_ids']]
             page.locator('#main').get_by_role('link',name='群关联',exact=True).click()
             page.locator('.relation-viewport').wait_for()

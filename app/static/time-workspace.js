@@ -6,7 +6,15 @@ const timeSelect=(label,key,options,value)=>`<label class="time-field"><span>${e
 const timeInput=(label,key,value,type='text',extra='')=>`<label class="time-field"><span>${e(label)}</span><input data-rule-field="${attr(key)}" type="${attr(type)}" value="${attr(value||'')}" ${extra}></label>`;
 const ruleChoices=(label,key,choices,values)=>`<fieldset class="time-choices"><legend>${e(label)}</legend><div>${choices.map(([id,name])=>`<label><input type="checkbox" data-rule-choice="${attr(key)}" value="${attr(id)}"${(values||[]).map(String).includes(String(id))?' checked':''}><span>${e(name)}</span></label>`).join('')}</div></fieldset>`;
 function timeConditionFields(when={},timed=false){return `<div class="time-fields">${timeInput('开始日期','start_date',when.start_date,'date')}${timeInput('结束日期','end_date',when.end_date,'date')}${timeSelect('日期类型','day_type',dayTypes,when.day_type||'all')}${timeSelect('节假日','holidays',holidayTypes,when.holidays||'any')}${timed?timeInput('开始时间','start_time',when.start_time,'time')+timeInput('结束时间','end_time',when.end_time,'time'):''}</div>${ruleChoices('指定星期 · 不选则不限','weekdays',[...Array(7)].map((_,i)=>[i,'周'+'一二三四五六日'[i]]),when.weekdays)}`;}
-function timeRuleSummary(rule,mode,choices){const when=rule.when||{},labels=(mode==='capabilities'?rule.capabilities:rule.kinds)||[];return [labels.map(id=>choices.find(c=>c[0]===id)?.[1]||id).join('、'),mode==='capabilities'?(rule.action==='open'?'开放':'关闭')+(when.start_time?` ${when.start_time}–${when.end_time}`:' 全天'):rule.time,(dayTypes.find(x=>x[0]===when.day_type)||dayTypes[0])[1]].filter(Boolean).join(' · ');}
+function weekdaySummary(days=[]){const key=[...new Set(days)].sort().join(',');return {'':'每天','0,1,2,3,4':'周一至周五','5,6':'周末','0,1,2,3,4,5,6':'每天'}[key]||days.map(d=>'周'+'一二三四五六日'[d]).join('、');}
+function timeRuleSummary(rule,mode,choices){
+ const when=rule.when||{},labels=(mode==='capabilities'?rule.capabilities:rule.kinds)||[];
+ const dates=when.start_date||when.end_date?(when.start_date===when.end_date?when.start_date:`${when.start_date||'即日起'} 至 ${when.end_date||'长期'}`):'';
+ const kind=(dayTypes.find(x=>x[0]===when.day_type)||dayTypes[0])[1];
+ const days=when.weekdays?.length?weekdaySummary(when.weekdays):'';
+ const period=mode==='capabilities'?(rule.action==='open'?'开放':'关闭')+(when.start_time?` ${when.start_time}–${when.end_time}${when.end_time<when.start_time?'（次日）':''}`:' 全天'):rule.time;
+ return [labels.map(id=>choices.find(c=>c[0]===id)?.[1]||id).join('、'),period,dates,kind==='每天'&&days?days:kind,kind!=='每天'?days:'',when.holidays&&when.holidays!=='any'?holidayTypes.find(x=>x[0]===when.holidays)?.[1]:''].filter(Boolean).join(' · ');
+}
 function bindTimeRules(root,initial,options){
   let rules=structuredClone(initial||[]);const mode=options.mode||'broadcast';
   const choices=()=>mode==='capabilities'?botCapabilityCatalog().filter(c=>options.capabilities().includes(c.id)).map(c=>[c.id,c.name]):broadcastKinds;
@@ -15,7 +23,7 @@ function bindTimeRules(root,initial,options){
     const when={start_date:val('start_date'),end_date:val('end_date'),day_type:val('day_type'),holidays:val('holidays'),weekdays:checked('weekdays').map(Number)};
     const base={id:card.dataset.timeRule,name:val('name').trim(),enabled:card.querySelector('[data-rule-field="enabled"]').checked,when};
     if(mode==='capabilities')return {...base,action:val('action'),capabilities:checked('capabilities').filter(c=>options.capabilities().includes(c)),when:{...when,start_time:val('start_time'),end_time:val('end_time')}};
-    return {...base,time:val('time'),kinds:checked('kinds'),bot_ids:checked('bot_ids')};
+    return {...base,time:val('time'),kinds:checked('kinds'),bot_ids:options.ownerId?[options.ownerId]:checked('bot_ids')};
   });
   function applyFilter(){
     if(mode!=='broadcast'||!options.botId)return;
@@ -26,7 +34,7 @@ function bindTimeRules(root,initial,options){
     const empty=root.querySelector('[data-time-empty]');if(empty){empty.hidden=shown>0;empty.textContent=selected?'此机器人尚无定时播报。':'尚无定时播报。';}
   }
   function render(openId=''){
-    root.innerHTML=`<div class="time-rule-list">${rules.map(rule=>`<details class="time-rule" data-time-rule="${attr(rule.id)}"${rule.id===openId?' open':''}><summary><span><strong>${e(rule.name||'新规则')}</strong><small>${e(timeRuleSummary(rule,mode,choices()))}</small></span><span class="badge ${rule.enabled?'green':''}">${rule.enabled?'启用':'停用'}</span></summary><div class="time-rule-body"><div class="time-fields">${timeInput('规则名称','name',rule.name,'text','required maxlength="80"')}${mode==='capabilities'?timeSelect('功能状态','action',[['open','仅这些时段开放'],['closed','这些时段关闭']],rule.action):timeInput('播报时间','time',rule.time,'time','required')}</div>${mode==='capabilities'?ruleChoices('功能','capabilities',choices(),rule.capabilities):ruleChoices('播报内容','kinds',broadcastKinds,rule.kinds)+ruleChoices('执行机器人','bot_ids',options.bots.map(b=>[b.id,b.name]),rule.bot_ids)}<details class="time-conditions"><summary>日期与${mode==='capabilities'?'时段':'星期'}条件</summary>${timeConditionFields(rule.when,mode==='capabilities')}${mode==='capabilities'?'<p class="caption">时间留空为全天；结束早于开始表示跨夜。</p>':''}</details><div class="time-rule-footer"><label class="check-label"><input type="checkbox" data-rule-field="enabled"${rule.enabled?' checked':''}>启用此规则</label><button class="btn small danger-quiet" type="button" data-remove-rule="${attr(rule.id)}">删除规则</button></div></div></details>`).join('')}</div><p class="caption" data-time-empty${rules.length?' hidden':''}>${mode==='capabilities'?'未设时间限制。':'尚无定时播报。'}</p><button type="button" class="btn small" data-add-rule>＋ 添加规则</button>`;
+    root.innerHTML=`<div class="time-rule-list">${rules.map(rule=>`<details class="time-rule" data-time-rule="${attr(rule.id)}"${rule.id===openId?' open':''}><summary><span><strong>${e(rule.name||'新规则')}</strong><small>${e(timeRuleSummary(rule,mode,choices()))}</small></span><span class="badge ${rule.enabled?'green':''}">${rule.enabled?'启用':'停用'}</span></summary><div class="time-rule-body"><div class="time-fields">${timeInput('规则名称','name',rule.name,'text','required maxlength="80"')}${mode==='capabilities'?timeSelect('功能状态','action',[['open','仅这些时段开放'],['closed','这些时段关闭']],rule.action):timeInput('播报时间','time',rule.time,'time','required')}</div>${mode==='capabilities'?ruleChoices('功能','capabilities',choices(),rule.capabilities):ruleChoices('播报内容','kinds',broadcastKinds,rule.kinds)+(options.ownerId?'':ruleChoices('执行机器人','bot_ids',options.bots.map(b=>[b.id,b.name]),rule.bot_ids))}<details class="time-conditions"><summary>日期与${mode==='capabilities'?'时段':'星期'}条件</summary>${timeConditionFields(rule.when,mode==='capabilities')}${mode==='capabilities'?'<p class="caption">时间留空为全天；结束早于开始表示跨夜。</p>':''}</details><div class="time-rule-footer"><label class="check-label"><input type="checkbox" data-rule-field="enabled"${rule.enabled?' checked':''}>启用此规则</label><button class="btn small danger-quiet" type="button" data-remove-rule="${attr(rule.id)}">删除规则</button></div></div></details>`).join('')}</div><p class="caption" data-time-empty${rules.length?' hidden':''}>${mode==='capabilities'?'未设时间限制。':'尚无定时播报。'}</p><button type="button" class="btn small" data-add-rule>＋ 添加规则</button>`;
     applyFilter();
   }
   root.addEventListener('click',event=>{
@@ -34,28 +42,18 @@ function bindTimeRules(root,initial,options){
     event.preventDefault();rules=read();
     if(remove){rules=rules.filter(r=>r.id!==remove.dataset.removeRule);render();return;}
     if(rules.length>=50){toast('最多50条规则。');return;}
-    const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join(''),rule={id,name:'新规则',enabled:true,when:{},...(mode==='capabilities'?{action:'open',capabilities:choices().slice(0,1).map(x=>x[0])}:{time:'09:30',kinds:['open'],bot_ids:options.botId?.()?[options.botId()]:options.bots.slice(0,1).map(b=>b.id)})};
+    const id=Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join(''),rule={id,name:'新规则',enabled:true,when:{},...(mode==='capabilities'?{action:'open',capabilities:choices().slice(0,1).map(x=>x[0])}:{time:'09:30',kinds:['open'],bot_ids:options.ownerId?[options.ownerId]:options.botId?.()?[options.botId()]:options.bots.slice(0,1).map(b=>b.id)})};
     rules.push(rule);render(id);root.querySelector(`[data-time-rule="${id}"] input`).focus();
   });
   root.addEventListener('input',event=>{const card=event.target.closest('[data-time-rule]');if(!card)return;const rule=read().find(r=>r.id===card.dataset.timeRule);const summary=card.querySelector('summary');summary.querySelector('strong').textContent=rule.name||'新规则';summary.querySelector('small').textContent=timeRuleSummary(rule,mode,choices());const badge=summary.querySelector('.badge');badge.textContent=rule.enabled?'启用':'停用';badge.classList.toggle('green',rule.enabled);});
   render();
   read.refresh=()=>{rules=read();render();};
-  read.filter=applyFilter;
+  read.filter=applyFilter;read.replace=value=>{rules=structuredClone(value);render();};
   return read;
 }
 async function renderReminders(epoch){
-  const [config,data]=await Promise.all([api('/api/config'),api('/api/bots')]);if(!isCurrent(epoch))return;
-  const bots=asList(data,'bots').filter(b=>botCapabilities(b).includes('enrollment'));
-  if(!bots.some(b=>b.id===state.broadcastBotId))state.broadcastBotId='';
-  const initial=config.broadcast_rules??Object.entries(config.reminders||{}).map(([kind,time])=>({id:'legacy-'+kind,name:broadcastKinds.find(x=>x[0]===kind)?.[1]||kind,enabled:true,kinds:[kind],bot_ids:bots.map(b=>b.id),time,when:{}}));
-  $('#main').innerHTML=robotWorkspaceTabs()+head('定时播报','设置机器人何时提醒活动、结束报名或发送名单。','','BOT SCHEDULES')+(bots.length?`<form id="reminder-form" class="panel"><div class="panel-body"><div class="broadcast-filter"><div class="field"><label for="broadcast-bot-filter">查看机器人</label><select id="broadcast-bot-filter"><option value="">全部机器人</option>${bots.map(b=>`<option value="${attr(b.id)}"${b.id===state.broadcastBotId?' selected':''}>${e(b.name)}</option>`).join('')}</select></div><p id="broadcast-filter-status"></p></div>${config.daily_enabled===false?'<p class="notice">播报总开关已关闭。可在下方“全局播报开关”中开启。</p>':''}<div id="broadcast-rules"></div><details class="broadcast-global"><summary>全局播报开关</summary><label class="check-label"><input type="checkbox" name="daily_enabled"${config.daily_enabled!==false?' checked':''}>启用全部机器人的定时播报</label></details><div class="inline-error" role="alert"></div><div class="form-footer"><button type="submit" class="btn primary">保存播报规则</button></div></div></form>`:empty('暂无可播报的机器人','先为机器人开启“活动报名”业务。',btn('配置机器人','go','primary','data-route="bots"')));
-  if(!bots.length)return;
-  const read=bindTimeRules($('#broadcast-rules'),initial,{bots,mode:'broadcast',botId:()=>state.broadcastBotId||''});
-  $('#broadcast-bot-filter').addEventListener('change',event=>{
-    if(!$('#reminder-form').reportValidity()){event.target.value=state.broadcastBotId||'';return;}
-    state.broadcastBotId=event.target.value;read.filter();
-  });
-  bindForm('reminder-form',async(data,form,context)=>{const rules=read();await api('/api/config',{method:'PATCH',body:{daily_enabled:data.has('daily_enabled'),broadcast_rules:rules}});if(context===state.epoch){toast('播报规则已保存。');await renderRoute();}});
+ state.route='bots';history.replaceState(null,'','#bots');await renderBotWorkspace(epoch);
+ if(isCurrent(epoch))await revealBotSettings(state.broadcastBotId,'broadcast');
 }
 
 function editImportedRecord(id){

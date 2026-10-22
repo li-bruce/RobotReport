@@ -155,7 +155,8 @@ class Service:
                 value = updated['ai'][field]
                 env_changes['ROBORT_AI_' + suffix] = ('1' if value else '0') if field == 'enabled' else value
         with env_settings.change(self.ctx.platform_root, env_changes), connect(self.path, True) as db:
-            for key, value in updated.items():
+            for key in data:
+                value = updated[key]
                 db.execute('UPDATE config SET value=? WHERE key=?', (dumps(value), key))
             audit(db, self.ctx.actor, 'config.update', {'fields': sorted(data)})
         return self.config()

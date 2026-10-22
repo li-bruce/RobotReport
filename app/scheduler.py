@@ -49,7 +49,7 @@ class Scheduler:
                     if not venue['active']:continue
                     for kind in rule['kinds']:
                         for channel in channels:
-                            if channel.id not in rule['bot_ids'] or not channel.daily_notifications or not supports(channel,'enrollment'):continue
+                            if channel.id not in rule['bot_ids'] or channel.id in rule.get('excluded_bot_ids',[]) or not channel.daily_notifications or not supports(channel,'enrollment'):continue
                             allocation=(target.date().isoformat(),rule['time'],kind,channel.chat_id)
                             scoped=Service(channel,lambda:at)
                             try:sessions=scoped.sessions(target.date().isoformat(),venue['id'])
