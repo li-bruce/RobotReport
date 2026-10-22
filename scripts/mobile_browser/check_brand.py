@@ -46,8 +46,8 @@ def new_rule(page,name,time,bot):
 try:
     with sync_playwright() as pw:
         browser=pw.chromium.launch(executable_path=os.environ.get('ROBORT_BROWSER_EXECUTABLE'),headless=True)
-        for width in (320,390,768,1280):
-            context=browser.new_context(viewport={'width':width,'height':900})
+        for width,height in ((320,740),(390,844),(768,1024),(844,390),(1280,900),(1920,1080)):
+            context=browser.new_context(viewport={'width':width,'height':height})
             context.route('**/*',intercept)
             page=context.new_page();page.on('pageerror',lambda e:report['errors'].append(str(e)))
             page.clock.install(time=datetime.fromisoformat(meta['clock']))
@@ -57,13 +57,22 @@ try:
             page.get_by_label('管理员密码',exact=True).fill(meta['password'])
             page.get_by_role('button',name='登录工作台',exact=True).click()
             page.locator('.gather-hero').wait_for()
-            page.wait_for_function("document.querySelector('.gather-scene img').complete && document.querySelector('.gather-scene img').naturalWidth===1536")
-            check('concept modules',page.locator('.gather-domains a').count()==4)
-            check('competition boundary visible','当前支持羽毛球' in page.locator('.gather-domains').inner_text())
+            page.locator('.gather-hero').evaluate("el=>new Promise((resolve,reject)=>{const image=new Image();image.onload=resolve;image.onerror=reject;image.src=getComputedStyle(el).backgroundImage.match(/url\([\"']?(.*?)[\"']?\)/)[1];})")
+            check('four core shortcuts',page.locator('.gather-core a').count()==4)
+            check('homepage only title and core shortcuts',''.join(page.locator('#main').inner_text().split())=='聚场GatherSpace场地安排活动报名赛事组织机器人与群')
+            check('no dashboard cards or explanations',page.locator('#main p,#main .panel,#main .metric-grid,#main .local-venue-bar,#main img').count()==0)
             check('workspace is generic','聚场管理后台' in page.locator('.workspace-label').inner_text())
+            check('background fills workspace',page.locator('.gather-hero').evaluate("el=>{const r=el.getBoundingClientRect(),w=document.querySelector('.workspace').getBoundingClientRect(),bar=document.querySelector('.topbar').getBoundingClientRect();return Math.abs(r.left-w.left)<1&&Math.abs(r.right-w.right)<1&&Math.abs(r.top-bar.bottom)<1&&Math.abs(r.bottom-innerHeight)<2;}"))
+            check('core shortcuts stay on one line',page.locator('.gather-core a').evaluate_all('(nodes)=>new Set(nodes.map(n=>Math.round(n.getBoundingClientRect().top))).size===1'))
             fit(page,f'{width} homepage fits')
             page.screenshot(path=str(base/f'homepage-{width}.png'),full_page=True)
-            page.locator('.gather-intro [data-route=bots]').click()
+            for route in ('venues','calendar','tournaments'):
+                page.locator(f'.gather-core [data-route={route}]').click()
+                page.locator('#main .loading').wait_for(state='hidden');page.wait_for_load_state('networkidle')
+                check('shortcut opens '+route,page.evaluate('location.hash')=='#'+route and page.locator('.gather-hero').count()==0)
+                check('workspace restores regular layout',page.locator('#main').evaluate('el=>parseFloat(getComputedStyle(el).paddingLeft)>0'))
+                page.goto(origin+'/admin#dashboard');page.locator('.gather-hero').wait_for()
+            page.locator('.gather-core [data-route=bots]').click()
             card=page.locator('.robot-card').first
             card.locator(':scope>summary').click()
             selected=card.get_attribute('data-bot-id')

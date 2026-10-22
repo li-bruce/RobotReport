@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-22 · Full-background home
+
+- Let the concept rendering fill the home workspace, with only the product title and one line of core shortcuts.
+- Remove explanatory copy and operational cards from the home page; venue, registration, competition and bot pages remain accessible through their navigation.
+- Adapt background framing, text contrast and shortcuts to phone, landscape and desktop layouts.
+
 ## v1.0 — 2026-10-22 · GatherSpace and robot broadcast settings
 
 - Rename the product to GatherSpace (聚场), with a rendered homepage concept connecting venues, activity registration, bots and groups.
