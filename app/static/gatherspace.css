@@ -3,13 +3,13 @@
 .brand-mark .icon{width:30px;height:30px}
 .brand small{letter-spacing:1.3px}
 /* The concept scene belongs to the sign-in screen; dashboards keep their operational layout. */
-.login.gather-login{position:relative;isolation:isolate;min-height:100svh;display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);align-items:center;gap:40px;padding:clamp(32px,5vw,80px);background:#e6f1f4 url('/static/brand/gatherspace-concept.png') center center/cover no-repeat}
-.gather-login:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#f4f9faf2 0%,#f4f9faad 19%,#f4f9fa00 42%)}
+.login.gather-login{position:relative;isolation:isolate;min-height:max(100svh,640px);display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);align-items:start;gap:40px;padding:clamp(32px,4vw,72px);background:#eaf9fc url('/static/brand/gatherspace-login-desktop.png') center bottom/100% auto no-repeat}
+.gather-login:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#f4f9fa80 0%,#f4f9fa00 20%)}
 .gather-login-title{align-self:start;min-width:0}
 .gather-login-title h1{display:flex;align-items:baseline;gap:20px;white-space:nowrap;font:650 clamp(42px,4.5vw,72px)/1.2 var(--display);letter-spacing:.06em;color:#123f4b}
 .gather-login-title h1 span{font:500 .38em/1.2 var(--display);letter-spacing:.015em}
 .gather-login-functions{white-space:nowrap;font-size:14px;font-weight:600;color:#1b4d59;margin-top:14px;line-height:1.8}
-.gather-login-access{width:100%;padding:30px;border:1px solid #ffffffd9;border-radius:16px;background:#fffffff0;box-shadow:0 16px 50px #103c4920;backdrop-filter:blur(16px)}
+.gather-login-access{width:100%;padding:28px;border:1px solid #ffffffd9;border-radius:16px;background:#fffffff0;box-shadow:0 16px 50px #103c4920;backdrop-filter:blur(16px)}
 .gather-login .login-form h2{font-size:23px;margin:0 0 24px}
 .gather-login .login-form .field{margin-bottom:8px}
 .gather-login .login-form .btn{min-height:44px}
@@ -22,6 +22,6 @@
 .broadcast-global .check-label{margin-top:12px}
 .time-rule[hidden]{display:none}
 @media(max-width:1000px){.login.gather-login{padding:32px;gap:24px;grid-template-columns:minmax(0,1fr) 320px}.gather-login-functions{font-size:12px}}
-@media(max-width:760px){.login.gather-login{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;gap:48px;padding:32px max(18px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));background-position:52% center}.gather-login-title h1{font-size:44px;gap:14px}.gather-login-functions{font-size:12px;margin-top:10px}.gather-login-access{max-width:360px;justify-self:center;align-self:end;padding:24px}.broadcast-filter .field{min-width:0;width:100%;max-width:none}.broadcast-filter{gap:8px}}
+@media(max-width:760px),(max-width:1000px) and (orientation:portrait){.login.gather-login{min-height:max(100svh,calc(min(100vw,560px)*1.25 + 340px));grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;gap:48px;padding:32px max(18px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));background-image:url('/static/brand/gatherspace-login-mobile.png');background-size:min(100%,560px) auto;background-position:center top}.gather-login-title h1{font-size:44px;gap:14px}.gather-login-functions{font-size:12px;margin-top:10px}.gather-login-access{max-width:360px;justify-self:center;align-self:end;padding:24px}.broadcast-filter .field{min-width:0;width:100%;max-width:none}.broadcast-filter{gap:8px}}
 @media(max-width:359px){.login.gather-login{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.gather-login-title h1{font-size:40px}.gather-login-functions{font-size:11.5px}.gather-login-access{padding:22px}}
 @media(max-height:500px) and (min-width:761px){.login.gather-login{padding:24px;gap:24px;grid-template-columns:minmax(0,1fr) 310px}.gather-login-title h1{font-size:38px}.gather-login-functions{font-size:12px}.gather-login-access{padding:20px 24px}.gather-login .login-form h2{font-size:21px;margin-bottom:16px}}

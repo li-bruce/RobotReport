@@ -1,5 +1,12 @@
 # Changes
 
+## 2026-10-22 · 登录场景与场地属性
+
+- 登录页采用独立桌面、手机背景，羽毛球作为左下前景；登录窗避让群与机器人画面。
+- 场地规划支持自定义名称与内容标注，可新增、修改、删除；旧场地自动兼容。
+- 管理员操作说明补充属性编辑步骤与截图。
+
+
 ## v1.0 — 2026-10-22 · Login background and dashboard restoration
 
 - Apply the full concept-image background, title and single core-feature line to the sign-in page, retaining password login and its guide link.

@@ -113,6 +113,18 @@ try:
         capture(page, 'admin-bots', '.bot-inline-form')
         visit(page, 'bot-links', '#main')
         capture(page, 'admin-bot-links')
+        visit(page, 'venues', '[data-venue-card]')
+        page.get_by_role('button', name='编辑场地', exact=True).first.click()
+        for label, value in (('运动类型','羽毛球、篮球'), ('配套设施','储物柜、饮水区')):
+            page.get_by_role('button', name='添加属性', exact=True).click()
+            row = page.locator('.venue-attribute-row').last
+            row.get_by_label('属性名称', exact=True).fill(label)
+            row.get_by_label('属性内容', exact=True).fill(value)
+        capture(page, 'admin-venue-attributes', '#modal')
+        page.get_by_role('button', name='保存场地', exact=True).click()
+        page.locator('#modal').wait_for(state='hidden')
+        visit(page, 'venues', '.venue-attributes')
+        capture(page, 'admin-venues', '#main')
         visit(page, 'calendar', '#main')
         capture(page, 'admin-calendar', 'section.panel:has(#activity-month-grid)')
         capture(page, 'admin-calendar-day', '#calendar-detail')

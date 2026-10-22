@@ -206,9 +206,10 @@ class Service:
             return False
 
     def venues(self):
+        from .venue_attributes import venue_record
         ctx = self.scope_context()
         with connect(self.path) as db:
-            return [dict(x) | {'active': bool(x['active'])} for x in db.execute('SELECT * FROM venues ORDER BY id')
+            return [venue_record(x) for x in db.execute('SELECT * FROM venues ORDER BY id')
                     if not (ctx.venue_restricted or ctx.venue_ids) or x['id'] in ctx.venue_ids]
 
     def venue(self, venue_id, active=False):
@@ -221,24 +222,27 @@ class Service:
             raise ValueError('场地不存在')
         if active and not row['active']:
             raise ValueError('场地已停用')
-        return dict(row)
+        from .venue_attributes import venue_record
+        return venue_record(row)
 
     def save_venue(self, data, venue_id=None):
+        from .venue_attributes import normalize_attributes
         self.require_admin('activity.manage')
-        if set(data) - {'name', 'description', 'active'}:
+        if set(data) - {'name', 'description', 'active', 'attributes'}:
             raise ValueError('场地字段不支持')
-        old = self.venue(venue_id) if venue_id else {'name': '', 'description': '', 'active': True}
+        old = self.venue(venue_id) if venue_id else {'name': '', 'description': '', 'active': True, 'attributes': []}
         old.update(data)
         old['name'] = clean_name(old['name'])
         if len(str(old['description'])) > 1000:
             raise ValueError('场地描述过长')
         if old['active'] not in (True, False, 0, 1):
             raise ValueError('场地开关无效')
+        attributes = dumps(normalize_attributes(old['attributes']))
         with connect(self.path, True) as db:
             if venue_id:
-                db.execute('UPDATE venues SET name=?,description=?,active=? WHERE id=?', (old['name'], old['description'], int(old['active']), venue_id))
+                db.execute('UPDATE venues SET name=?,description=?,active=?,attributes=? WHERE id=?', (old['name'], old['description'], int(old['active']), attributes, venue_id))
             else:
-                venue_id = db.execute('INSERT INTO venues(name,description,active) VALUES(?,?,?)', (old['name'], old['description'], int(old['active']))).lastrowid
+                venue_id = db.execute('INSERT INTO venues(name,description,active,attributes) VALUES(?,?,?,?)', (old['name'], old['description'], int(old['active']), attributes)).lastrowid
                 db.executemany('INSERT INTO slots(venue_id,definition) VALUES(?,?)', [(venue_id, dumps(s)) for s in DEFAULT_SLOTS])
             audit(db, self.ctx.actor, 'venue.save', {'venue_id': venue_id})
         return self.venue(venue_id)

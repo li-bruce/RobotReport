@@ -101,6 +101,8 @@ def initialize(path):
         from .holidays import ensure_schema as holiday_schema
         holiday_schema(db)
     with connect(path, True) as db:
+        if 'attributes' not in {r['name'] for r in db.execute('PRAGMA table_info(venues)')}:
+            db.execute("ALTER TABLE venues ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]'")
         columns = {r['name'] for r in db.execute('PRAGMA table_info(sessions)')}
         for column, definition in [('min_level', 'INTEGER'), ('max_level', 'INTEGER'), ('allowed_group_ids', "TEXT NOT NULL DEFAULT '[]'"), ('settings_overridden', 'INTEGER NOT NULL DEFAULT 0')]:
             if column not in columns:
