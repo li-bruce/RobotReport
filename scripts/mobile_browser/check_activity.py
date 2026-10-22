@@ -69,7 +69,7 @@ try:
             load(page,'venues');page.locator('[data-action=venue-edit]').first.click();page.locator('#f-description').fill('浏览器验收场地说明');submit(page,'#venue-form');page.locator('#main').get_by_text('浏览器验收场地说明',exact=True).wait_for();check(f'{w} edit venue details', '浏览器验收场地说明' in page.locator('#main').inner_text())
             for route in ('occupancies','holidays','daily','casual','stats','tournaments','dashboard'):
                 load(page,route);page.locator('#page-venue').wait_for();check(f'{w} {route} local venue',page.locator('#main #page-venue').count()==1);width(page,f'{w} {route}')
-            load(page,'reminders');check(f'{w} reminders under settings',page.locator('.nav a.active').get_attribute('data-route')=='settings');width(page,f'{w} reminders')
+            load(page,'reminders');check(f'{w} reminders under bots',page.locator('.nav a.active').get_attribute('data-route')=='bots');width(page,f'{w} reminders')
             context.close()
         browser.close()
 except Exception as error:

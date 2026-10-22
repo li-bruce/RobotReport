@@ -32,7 +32,7 @@ Application receipts return through the bot that received the registration, prof
 
 ## Scheduled announcements
 
-Open **Settings → Scheduled messages**. Add rules selecting:
+Open **Bots & Groups → Scheduled messages**, or use a robot's scheduled-message shortcut. Filter by robot and add rules selecting:
 
 - Activity reminder, closing reminder and/or roster.
 - One or more bots with enrollment capability.

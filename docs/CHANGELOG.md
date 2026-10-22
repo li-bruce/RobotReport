@@ -1,5 +1,12 @@
 # Changes
 
+## v1.0 — 2026-10-22 · GatherSpace and robot broadcast settings
+
+- Rename the product to GatherSpace (聚场), with a rendered homepage concept connecting venues, activity registration, bots and groups.
+- Move scheduled broadcasts into Bots & Groups, add shortcuts from robot settings and a robot filter that retains all other rules when saving.
+- Keep existing schedule and notification behavior, identify badminton as the current competition implementation, and document a staged path to reusable team and draw rules.
+- Update login, guides, screenshots and bilingual README for the broader venue/activity scope.
+
 ## v1.0 — 2026-10-22 · Administrator table row numbers
 
 - Add a shared leading row-number column to all admin data tables, including import previews, filtered lists and modal records.

@@ -133,9 +133,13 @@ def main():
         ('guide.html', 'MEMBER_GUIDE.zh-CN.md', '普通用户操作说明', '/guide/member'),
         ('guide-admin.html', 'ADMIN_GUIDE.zh-CN.md', '管理员操作说明', '/guide/admin'),
     ):
-        tree = Document((ROOT / 'app/static' / source).read_text(encoding='utf-8'))
+        html = (ROOT / 'app/static' / source).read_text(encoding='utf-8')
+        tree = Document(html)
+        updated = re.search(r'class="guide-updated"[^>]*>[^<]*?(\d{4}-\d{2}-\d{2})', html)
+        if not updated:
+            raise ValueError(f'{source}: missing guide update date')
         chapters = [c for c in walk(tree.root, 'section') if 'chapter' in c.attrs.get('class', '').split()]
-        text = f'# {title}\n\nv1.0 · 2026-10-20。服务中的网页版：`{url}`。\n\n按当前页面编写；截图均为隔离环境中的虚构数据。图片可点开查看原尺寸。示例姓名、日期、场次请按实际替换。\n\n'
+        text = f'# 聚场 · {title}\n\nv1.0 · {updated.group(1)}。服务中的网页版：`{url}`。\n\n按当前页面编写；截图均为隔离环境中的虚构数据。图片可点开查看原尺寸。示例姓名、日期、场次请按实际替换。\n\n'
         text += '\n'.join(render(chapter) for chapter in chapters)
         text = re.sub(r'\n[ \t]+', '\n', text)
         text = re.sub(r'\n{3,}', '\n\n', text).strip() + '\n'

@@ -16,7 +16,7 @@ def management_router(platform, principal, context, clock):
                       'applications':db.execute("SELECT COUNT(*) FROM member_records WHERE status='pending'").fetchone()[0],
                       'unregistered':db.execute("SELECT COUNT(*) FROM member_records WHERE status='unregistered'").fetchone()[0],
                       'venues':db.execute('SELECT COUNT(*) FROM venues').fetchone()[0]}
-        return {'name':'羽协管理后台','architecture_version':2,'counts':counts}
+        return {'name':'聚场管理后台','architecture_version':2,'counts':counts}
 
     @router.get('/api/roles')
     def roles(ctx=Depends(context)):

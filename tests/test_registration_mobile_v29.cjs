@@ -21,7 +21,7 @@ function page(responses,hash='#'+reference){
 const result=(extra={})=>({status:'completed',member_status:'pending',name:'李明',gender:'male',level:9,phone_masked:'',...extra});
 (async()=>{
   // The guide destination is fixed; it never inherits the identity-bound hash.
-  const anchor=html.match(/<a\b[^>]*href="\/guide#members"[^>]*>/)?.[0];
+  const anchor=html.match(/<a\b[^>]*href="\/guide#registration-flow"[^>]*>/)?.[0];
   assert.ok(anchor);assert.match(anchor,/rel="noreferrer"/);assert.match(anchor,/referrerpolicy="no-referrer"/);
   assert.match(html,/<meta name="referrer" content="no-referrer">/);
   assert.match(html,/name="name" required/);assert.match(html,/name="gender" required/);

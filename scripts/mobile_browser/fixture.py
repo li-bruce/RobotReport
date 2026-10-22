@@ -7,7 +7,7 @@ from dataclasses import replace
 base=Path(os.environ['ROBORT_MOBILE_RUN_DIR']).resolve()
 project=Path(__file__).resolve().parents[2]
 run_id=os.environ['ROBORT_MOBILE_RUN_ID']
-guide_mode=os.environ.get('ROBORT_MOBILE_SUITE') in ('guide', 'tables')
+guide_mode=os.environ.get('ROBORT_MOBILE_SUITE') in ('guide', 'tables', 'brand')
 port=int(os.environ['ROBORT_MOBILE_PORT'])
 origin=f'http://127.0.0.1:{port}'
 sys.path.insert(0,str(project))

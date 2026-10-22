@@ -1,10 +1,12 @@
-# Robort · Venue & Activity Management
+# GatherSpace · Venue, Activity & Bot Management
 
 English | [简体中文](README.zh-CN.md)
 
 A self-hosted platform built with **FastAPI, SQLite and a responsive web interface**. Manage members, venue bookings, activities, permissions and messages in one backend, with multiple **Webhook-connected bots** as chat entry points.
 
-**Currently used for badminton association management, and extensible to other venue reservation and activity organization scenarios.** Members, venues, schedules, registrations and notifications are general-purpose modules; badminton formats and scoring are provided as dedicated modules that can be adapted to other activities.
+**Manage venue schedules, activity registration and group-bot interactions for sports facilities, classrooms and community spaces.** Membership, time slots, enrollment and notifications are general-purpose. **Competition planning and scoring currently support badminton**; other sport-specific rules remain future work. See the [competition extension study (Chinese)](docs/COMPETITION_EXTENSION.zh-CN.md).
+
+![GatherSpace connects venues, activity registration, bots and groups](app/static/brand/gatherspace-concept.png)
 
 Current application version: **v1.0**. The interface and bot commands are currently in Chinese; the README, deployment guide and integration guide are available in both languages.
 

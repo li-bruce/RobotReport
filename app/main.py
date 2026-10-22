@@ -61,7 +61,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             except asyncio.CancelledError:
                 pass
 
-    app = FastAPI(title='Robort · 场地与活动管理', version='1.0.0', lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title='聚场 GatherSpace · 场地与活动管理', version='1.0.0', lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.platform = platform
     app.state.scheduler = scheduler
     app.state.live = live
