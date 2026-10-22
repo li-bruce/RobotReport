@@ -28,8 +28,8 @@ def width_check(page,label):
 
 def headers_check(table,label):
     headers=table.locator('thead th').all_inner_texts()
-    check(label+' name gender quota columns',headers[:3]==['姓名','性别','名额'],headers)
-    check(label+' no number or status column',not any(h.strip() in ('序号','状态','报名状态') for h in headers),headers)
+    check(label+' number name gender quota columns',headers[:4]==['序号','姓名','性别','名额'],headers)
+    check(label+' no registration status column',not any(h.strip() in ('状态','报名状态') for h in headers),headers)
 
 def api(context,path):
     response=context.request.get(origin+path)
@@ -64,9 +64,9 @@ with sync_playwright() as playwright:
             headers_check(table,label+' daily roster')
             proxy=table.locator('tbody tr').filter(has_text='随行甲（张三代报名）')
             check(label+' daily proxy sponsor',proxy.count()==1)
-            check(label+' guest gender unknown',proxy.locator('td').nth(1).inner_text()=='未填写')
+            check(label+' guest gender unknown',proxy.locator('td').nth(2).inner_text()=='未填写')
             owner=table.locator('tbody tr').filter(has=page.locator('button[data-name="张三"]'))
-            check(label+' member actual gender',owner.locator('td').nth(1).inner_text()=='男')
+            check(label+' member actual gender',owner.locator('td').nth(2).inner_text()=='男')
             check(label+' ranked quota visible',any(value in table.inner_text() for value in ('正式','替补')))
             width_check(page,label+' daily roster')
             if width in (320,390,844,1280):shot(page,f'proxy-daily-{label}.png')
@@ -79,7 +79,7 @@ with sync_playwright() as playwright:
             target=meta['proxy_targets'][str(width)]
             row=table.locator('tbody tr').filter(has_text=target['name']+'（张三代报名）')
             check(label+' event proxy sponsor',row.count()==1)
-            check(label+' event guest gender unknown',row.locator('td').nth(1).inner_text()=='未填写')
+            check(label+' event guest gender unknown',row.locator('td').nth(2).inner_text()=='未填写')
             check(label+' cancel action targets participant id',row.get_by_role('button',name='取消报名',exact=True).get_attribute('data-id')==target['id'])
             width_check(page,label+' event roster')
             if width in (320,390,844,1280):shot(page,f'proxy-event-before-{label}.png')

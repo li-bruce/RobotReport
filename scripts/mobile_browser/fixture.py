@@ -7,7 +7,7 @@ from dataclasses import replace
 base=Path(os.environ['ROBORT_MOBILE_RUN_DIR']).resolve()
 project=Path(__file__).resolve().parents[2]
 run_id=os.environ['ROBORT_MOBILE_RUN_ID']
-guide_mode=os.environ.get('ROBORT_MOBILE_SUITE')=='guide'
+guide_mode=os.environ.get('ROBORT_MOBILE_SUITE') in ('guide', 'tables')
 port=int(os.environ['ROBORT_MOBILE_PORT'])
 origin=f'http://127.0.0.1:{port}'
 sys.path.insert(0,str(project))
@@ -125,7 +125,7 @@ if os.environ.get('ROBORT_MOBILE_SUITE') in ('activity','availability','schedule
     with connect(admin.db_path,True) as db:
         db.execute('INSERT INTO holiday_calendars VALUES(?,?,?,?)',(2027,dumps(payload),'fixture://synthetic',clock().isoformat()))
 confirmation={};confirmation_bulk=''
-if os.environ.get('ROBORT_MOBILE_SUITE') in ('confirmation','guide'):
+if os.environ.get('ROBORT_MOBILE_SUITE') in ('confirmation','guide','tables'):
     from app.member_imports import ensure_schema
     from app.db import connect,stamp
     for bot in bots:

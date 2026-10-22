@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-22 · Administrator table row numbers
+
+- Add a shared leading row-number column to all admin data tables, including import previews, filtered lists and modal records.
+- Renumber each displayed table from 1 after filtering or reordering; keep business identifiers, rankings and source-file row references intact.
+- Keep the column compact on phones and update the illustrated administrator guide.
+
 ## v1.0 — 2026-10-20 · Illustrated member and administrator manuals
 
 - Align registration instructions with current pages: imported roster approval, personal account confirmation, duplicate review, normal applications, profile/level review, renewals, and source-bot notifications.

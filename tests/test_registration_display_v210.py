@@ -92,4 +92,5 @@ def test_help_and_public_guide_explain_append_and_selective_cancellation():
         assert '更新本人整组' not in text
     assert '春季联赛，报名，张三，李四' in guide
     assert '春季联赛，取消张三，李四' in guide
-    assert '?v=2.19' in guide
+    assert '/static/guide.css?v=' in guide
+    assert '/static/guide.js?v=' in guide
