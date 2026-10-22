@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-22 · Login background and dashboard restoration
+
+- Apply the full concept-image background, title and single core-feature line to the sign-in page, retaining password login and its guide link.
+- Restore the authenticated dashboard overview, pending applications, session lists and operational shortcuts.
+- Keep sign-in framing, error feedback and logout usable on phone, landscape and desktop screens.
+
 ## v1.0 — 2026-10-22 · Full-background home
 
 - Let the concept rendering fill the home workspace, with only the product title and one line of core shortcuts.

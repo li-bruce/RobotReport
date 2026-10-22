@@ -2,22 +2,18 @@
 .brand-mark{transform:none;border-radius:12px}
 .brand-mark .icon{width:30px;height:30px}
 .brand small{letter-spacing:1.3px}
-.workspace:has(> .main > .gather-hero){display:flex;flex-direction:column;height:100svh;min-height:340px}
-.workspace:has(> .main > .gather-hero)>.topbar{flex:none}
-.main:has(> .gather-hero){padding:0;max-width:none;margin:0;flex:1;min-height:0;display:grid}
-.gather-hero{position:relative;isolation:isolate;min-width:0;overflow:hidden;background:#e6f1f4 url('/static/brand/gatherspace-concept.png') center center/cover no-repeat}
-.gather-hero:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#f4f9faf5 0%,#f4f9fad9 17%,#f4f9fa40 34%,#f4f9fa00 50%)}
-.gather-home-content{padding:clamp(34px,5vh,64px) clamp(28px,4vw,72px);width:fit-content;max-width:100%}
-.gather-home-content h1{display:flex;align-items:baseline;gap:20px;white-space:nowrap;font:650 clamp(42px,4.5vw,72px)/1.2 var(--display);letter-spacing:.06em;color:#123f4b}
-.gather-home-content h1 span{font:500 .38em/1.2 var(--display);letter-spacing:.015em}
-.gather-core{display:flex;align-items:center;gap:0;margin-top:14px;white-space:nowrap}
-.gather-core a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;color:#1b4d59;text-decoration:none;font-size:14px;font-weight:600;position:relative}
-.gather-core a+a{margin-left:30px}
-.gather-core a+a:before{content:"·";position:absolute;left:-18px;color:#658b95;font-weight:400;pointer-events:none}
-.gather-core a:hover{text-decoration:underline;text-underline-offset:6px;color:#0c6e7e}
-.gather-core a:focus-visible{outline:2px solid #146777;outline-offset:4px;border-radius:2px}
-.login-brand{position:relative;overflow:hidden}
-.login-concept{display:block;width:min(100%,560px);height:auto;border-radius:16px;margin:20px auto;max-height:35vh;object-fit:contain}
+/* The concept scene belongs to the sign-in screen; dashboards keep their operational layout. */
+.login.gather-login{position:relative;isolation:isolate;min-height:100svh;display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);align-items:center;gap:40px;padding:clamp(32px,5vw,80px);background:#e6f1f4 url('/static/brand/gatherspace-concept.png') center center/cover no-repeat}
+.gather-login:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#f4f9faf2 0%,#f4f9faad 19%,#f4f9fa00 42%)}
+.gather-login-title{align-self:start;min-width:0}
+.gather-login-title h1{display:flex;align-items:baseline;gap:20px;white-space:nowrap;font:650 clamp(42px,4.5vw,72px)/1.2 var(--display);letter-spacing:.06em;color:#123f4b}
+.gather-login-title h1 span{font:500 .38em/1.2 var(--display);letter-spacing:.015em}
+.gather-login-functions{white-space:nowrap;font-size:14px;font-weight:600;color:#1b4d59;margin-top:14px;line-height:1.8}
+.gather-login-access{width:100%;padding:30px;border:1px solid #ffffffd9;border-radius:16px;background:#fffffff0;box-shadow:0 16px 50px #103c4920;backdrop-filter:blur(16px)}
+.gather-login .login-form h2{font-size:23px;margin:0 0 24px}
+.gather-login .login-form .field{margin-bottom:8px}
+.gather-login .login-form .btn{min-height:44px}
+.gather-login .login-guide{margin:12px 0 0;font-size:12px}
 .broadcast-filter{display:flex;align-items:end;gap:18px;flex-wrap:wrap;margin-bottom:20px}
 .broadcast-filter .field{min-width:230px;flex:1;max-width:420px;margin:0}
 .broadcast-filter>p{font-size:12px;color:var(--muted);margin-bottom:9px}
@@ -25,6 +21,7 @@
 .broadcast-global summary{cursor:pointer;font-size:12px;color:var(--muted)}
 .broadcast-global .check-label{margin-top:12px}
 .time-rule[hidden]{display:none}
-@media(max-width:760px){.gather-hero{background-position:52% center}.gather-home-content{padding:32px max(18px,env(safe-area-inset-left)) 0;max-width:100%}.gather-home-content h1{font-size:44px;gap:14px}.gather-core{margin-top:10px}.gather-core a{font-size:12px}.gather-core a+a{margin-left:18px}.gather-core a+a:before{left:-11px}.broadcast-filter .field{min-width:0;width:100%;max-width:none}.broadcast-filter{gap:8px}.login-concept{display:none}}
-@media(max-width:359px){.gather-home-content{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.gather-home-content h1{font-size:40px}.gather-core a+a{margin-left:16px}.gather-core a+a:before{left:-10px}}
-@media(max-height:500px) and (orientation:landscape){.gather-home-content{padding-top:20px}.gather-home-content h1{font-size:38px}.gather-core{margin-top:4px}.gather-hero{background-position:center 60%}}
+@media(max-width:1000px){.login.gather-login{padding:32px;gap:24px;grid-template-columns:minmax(0,1fr) 320px}.gather-login-functions{font-size:12px}}
+@media(max-width:760px){.login.gather-login{grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;gap:48px;padding:32px max(18px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));background-position:52% center}.gather-login-title h1{font-size:44px;gap:14px}.gather-login-functions{font-size:12px;margin-top:10px}.gather-login-access{max-width:360px;justify-self:center;align-self:end;padding:24px}.broadcast-filter .field{min-width:0;width:100%;max-width:none}.broadcast-filter{gap:8px}}
+@media(max-width:359px){.login.gather-login{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.gather-login-title h1{font-size:40px}.gather-login-functions{font-size:11.5px}.gather-login-access{padding:22px}}
+@media(max-height:500px) and (min-width:761px){.login.gather-login{padding:24px;gap:24px;grid-template-columns:minmax(0,1fr) 310px}.gather-login-title h1{font-size:38px}.gather-login-functions{font-size:12px}.gather-login-access{padding:20px 24px}.gather-login .login-form h2{font-size:21px;margin-bottom:16px}}
