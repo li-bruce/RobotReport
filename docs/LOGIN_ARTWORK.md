@@ -1,6 +1,6 @@
 # Login artwork
 
-Generated and edited with the built-in imagegen tool. The administrator form is live HTML with translucent glass styling, not part of the raster. Its position is retained. The authenticated dashboard keeps its operational layout.
+Generated and edited with the built-in imagegen tool. The administrator form is live HTML with mostly transparent glass styling, not part of the raster. It is vertically centered on the right on desktop and centered below the title on mobile. The illustration stays behind the form without adding space to avoid overlap. The authenticated dashboard keeps its operational layout.
 
 - [Desktop background](../app/static/brand/gatherspace-login-desktop.png): 1672 × 941.
 - [Mobile background](../app/static/brand/gatherspace-login-mobile.png): 941 × 1671.

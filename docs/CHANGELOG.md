@@ -1,5 +1,10 @@
 # Changes
 
+## v1.0 — 2026-10-23 · Transparent login layout
+
+- Center the desktop login panel vertically on the right and use a centered form below the title on mobile.
+- Use a mostly transparent glass surface and remove illustration-avoidance spacing.
+
 ## v1.0 — 2026-10-22 · Direct venue connections and glass login
 
 - Give the login illustration six direct branches from its central hub to four sports venues and two chat groups.
