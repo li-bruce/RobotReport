@@ -16,12 +16,22 @@
 <script src="/static/casual-workspace.js?v=1.0-confirm20261020" defer></script>
 <script src="/static/membership-workspace.js?v=1.0-confirm20261020" defer></script>
 <link rel="stylesheet" href="/static/schedule-workspace.css?v=1.0-confirm20261020">
-<link rel="stylesheet" href="/static/gatherspace.css?v=1.0-glass20261023">
+<link rel="stylesheet" href="/static/gatherspace.css?v=1.0-loading20261023">
 <link rel="stylesheet" href="/static/bot-settings.css?v=1.0-inline20261022">
 </head>
 <body>
   <a href="#main" class="skip-link">跳转到主要内容</a>
-  <div id="app"></div>
+  <div id="app"><div class="gather-boot">
+    <div class="gather-login-loader">
+      <div class="gather-loading-content">
+        <div class="gather-loading-symbol" aria-hidden="true"><div class="gather-loading-orbit"><i></i><i></i><i></i><i></i><i></i><i></i></div><span>聚</span></div>
+        <div class="gather-loading-brand">聚场 <span>GatherSpace</span></div>
+        <p class="gather-loading-status" role="status" aria-live="polite">正在加载</p>
+        <div class="gather-loading-track" aria-hidden="true"><span></span></div>
+        <div class="gather-loading-actions" hidden><button type="button" data-loading-retry>重试加载</button><button type="button" data-loading-continue>继续登录</button></div>
+      </div>
+    </div>
+  </div></div>
   <dialog id="modal" aria-labelledby="modal-title"></dialog>
   <div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
   <script src="/static/workspace.js?v=1.0-guide20261020" defer></script><script src="/static/event-workspace.js?v=1.0-confirm20261020" defer></script>
@@ -37,6 +47,7 @@
 <script src="/static/bot-settings.js?v=1.0-inline20261022" defer></script>
 <link rel="stylesheet" href="/static/venue-workspace.css?v=1.0-scene20261022">
 <script src="/static/venue-workspace.js?v=1.0-scene20261022" defer></script>
-<script src="/static/app.js?v=1.0-scene20261022" defer></script>
+<script src="/static/login-screen.js?v=1.0-loading20261023" defer></script>
+<script src="/static/app.js?v=1.0-loading20261023" defer></script>
 </body>
 </html>

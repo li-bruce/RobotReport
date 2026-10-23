@@ -1,5 +1,7 @@
 # 手机页面浏览器验收
 
+登录加载动画专项：`python scripts/mobile_browser/run.py --suite loading`。拦截并延迟本地图像请求，检查解码完成前隐藏表单、加载失败重试、慢速继续登录、切换屏幕时旧请求不误显示、已登录会话以及减少动态效果。结果保存为 `loading-report.json`。正常六尺寸登录布局使用 `--suite brand`。
+
 ## 更新操作说明截图
 
 运行 `python scripts/mobile_browser/run.py --suite guide`，用当前页面和隔离的虚构名册生成 `app/static/guide-images/` 中的截图。可用 `ROBORT_BROWSER_EXECUTABLE` 指定本机 Chromium / Edge。不会访问生产数据或发送通知；截取前等待页面内容加载完成。更新 UI 后重新采集，并检查所有图片的实际内容。

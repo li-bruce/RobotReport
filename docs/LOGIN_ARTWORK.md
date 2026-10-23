@@ -5,6 +5,7 @@ Generated and edited with the built-in imagegen tool. The administrator form is 
 - [Desktop background](../app/static/brand/gatherspace-login-desktop.png): 1672 × 941.
 - [Mobile background](../app/static/brand/gatherspace-login-mobile.png): 941 × 1671.
 - Responsive backgrounds and glass surface: `app/static/gatherspace.css`.
+- Loading lifecycle: `app/static/login-screen.js`. The initial HTML shows a small CSS-only brand animation while the selected responsive image loads and decodes, then fades into the login page. Loaded images are reused within the page. Slow or failed requests offer a plain-background login; failed requests can also be retried. Screen changes select the matching asset without clearing the form. Reduced-motion preferences disable the animation.
 
 One central management hub connects directly to four sports venues (badminton, table tennis, basketball and a gym) and two chat groups through six independent branches. Badminton remains the foreground scene on the left. The mobile version is separately composed with space for the title above and form below.
 

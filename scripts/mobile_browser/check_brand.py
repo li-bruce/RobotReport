@@ -53,6 +53,8 @@ try:
             page.clock.install(time=datetime.fromisoformat(meta['clock']))
             page.goto(origin+'/admin#dashboard')
             page.locator('.gather-login').wait_for()
+            page.locator('.gather-login.is-ready').wait_for()
+            page.locator('.gather-login-loader').wait_for(state='hidden')
             page.locator('.gather-login').evaluate("el=>new Promise((resolve,reject)=>{const image=new Image();image.onload=resolve;image.onerror=reject;image.src=getComputedStyle(el).backgroundImage.match(/url\([\"']?(.*?)[\"']?\)/)[1];})")
             portrait = width <= 760 or (width <= 1000 and height >= width)
             asset = 'gatherspace-login-mobile.png' if portrait else 'gatherspace-login-desktop.png'

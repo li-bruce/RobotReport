@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-23 · Login loading transition
+
+- Show a lightweight animated GatherSpace loading screen until the current desktop or mobile illustration is fully loaded and decoded.
+- Fade in the login form, reuse loaded artwork, and offer retry or plain-background login when loading fails or takes too long.
+- Respect reduced-motion preferences and keep keyboard focus and existing login sessions usable.
+
 ## v1.0 — 2026-10-23 · Transparent login layout
 
 - Center the desktop login panel vertically on the right and use a centered form below the title on mobile.

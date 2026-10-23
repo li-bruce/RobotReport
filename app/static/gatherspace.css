@@ -18,6 +18,38 @@
 .gather-login .login-form .field{margin-bottom:8px}
 .gather-login .login-form .btn{min-height:44px}
 .gather-login .login-guide{margin:12px 0 0;font-size:12px}
+/* Lightweight first paint; the illustration is revealed only after decoding. */
+.gather-boot{position:relative;min-height:100svh;background:#eaf9fc}
+.gather-login-loader{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 30% 30%,#d4f1f0 0,transparent 55%),radial-gradient(ellipse at 75% 75%,#dfedf8 0,transparent 55%),#eff9fb;opacity:1;visibility:visible;transition:opacity .38s ease,visibility 0s}
+.gather-loading-content{text-align:center;color:#174c59;max-width:100%}
+.gather-loading-symbol{position:relative;display:grid;place-items:center;width:132px;height:132px;margin:0 auto 26px}
+.gather-loading-symbol>span{display:grid;place-items:center;width:68px;height:68px;border-radius:22px;font:600 34px/1 var(--display);color:white;background:linear-gradient(145deg,#358e99,#155463);box-shadow:0 12px 30px #226b782b,inset 0 1px 1px #ffffff73;animation:gather-breathe 2.8s ease-in-out infinite}
+.gather-loading-orbit{position:absolute;inset:3px;border:1px solid #2e839e26;border-radius:50%;animation:gather-orbit 12s linear infinite}
+.gather-loading-orbit i{position:absolute;left:calc(50% - 4px);top:-4px;width:8px;height:8px;border-radius:50%;background:#408d98;transform-origin:4px 66px;box-shadow:0 0 0 5px #ffffff80}
+.gather-loading-orbit i:nth-child(2){transform:rotate(60deg);background:#74aaa7}
+.gather-loading-orbit i:nth-child(3){transform:rotate(120deg);background:#9cb7c6}
+.gather-loading-orbit i:nth-child(4){transform:rotate(180deg);background:#d2ad6c}
+.gather-loading-orbit i:nth-child(5){transform:rotate(240deg);background:#9cb7c6}
+.gather-loading-orbit i:nth-child(6){transform:rotate(300deg);background:#74aaa7}
+.gather-loading-brand{display:flex;align-items:baseline;justify-content:center;gap:12px;font:600 28px/1.4 var(--display);letter-spacing:.08em}
+.gather-loading-brand span{font:500 15px/1.4 var(--display);letter-spacing:.02em;color:#4b7883}
+.gather-loading-status{margin:16px 0 14px;font-size:13px;letter-spacing:.12em;color:#557782}
+.gather-loading-track{width:112px;height:3px;margin:0 auto;overflow:hidden;border-radius:3px;background:#2c7d8c17}
+.gather-loading-track span{display:block;width:45%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#318e9630,#318e96);animation:gather-travel 1.6s ease-in-out infinite}
+.gather-loading-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:24px}
+.gather-loading-actions[hidden],.gather-loading-actions button[hidden]{display:none}
+.gather-loading-actions button{min-height:44px;padding:10px 18px;border:1px solid #2c7d8c40;border-radius:12px;background:#ffffff88;color:#174c59;font:600 13px/1.4 var(--body);cursor:pointer}
+.gather-loading-actions button:hover{background:#fff}
+.gather-loading-actions button:focus-visible{outline:3px solid #197c8c;outline-offset:3px}
+.gather-login>.gather-login-title,.gather-login>.gather-login-access{transition:opacity .4s ease,transform .4s ease,visibility 0s}
+.gather-login.is-loading>.gather-login-title,.gather-login.is-loading>.gather-login-access{opacity:0;visibility:hidden;transform:translateY(8px)}
+.gather-login.is-ready>.gather-login-loader{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .38s ease,visibility 0s .38s}
+.gather-login.is-ready .gather-loading-orbit,.gather-login.is-ready .gather-loading-symbol>span,.gather-login.is-ready .gather-loading-track span{animation-play-state:paused}
+.gather-login[data-login-state=error] .gather-loading-track{visibility:hidden}
+@keyframes gather-orbit{to{transform:rotate(360deg)}}
+@keyframes gather-breathe{50%{transform:translateY(-3px);box-shadow:0 16px 34px #226b7836,inset 0 1px 1px #ffffff73}}
+@keyframes gather-travel{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
+@media(prefers-reduced-motion:reduce){.gather-loading-orbit,.gather-loading-symbol>span,.gather-loading-track span{animation:none}.gather-loading-track span{width:100%;opacity:.65}.gather-login-loader,.gather-login.is-ready>.gather-login-loader,.gather-login>.gather-login-title,.gather-login>.gather-login-access{transition:none}}
 .broadcast-filter{display:flex;align-items:end;gap:18px;flex-wrap:wrap;margin-bottom:20px}
 .broadcast-filter .field{min-width:230px;flex:1;max-width:420px;margin:0}
 .broadcast-filter>p{font-size:12px;color:var(--muted);margin-bottom:9px}
