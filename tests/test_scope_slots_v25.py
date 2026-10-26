@@ -150,8 +150,8 @@ class ScopeAndSlotsTests(CoreFixture):
         scheduler.tick()
         records=Outbox(self.ctx).list()
         self.assertEqual(len(records),1)
-        self.assertIn('第二场',records[0]['text'])
-        self.assertNotIn('第一场',records[0]['text'])
+        self.assertIn('第2场',records[0]['text'])
+        self.assertNotIn('第1场',records[0]['text'])
         self.now=self.now.replace(hour=17,minute=31)
         scheduler.tick()
         self.now=self.now.replace(hour=18,minute=1)
@@ -159,8 +159,27 @@ class ScopeAndSlotsTests(CoreFixture):
         records=Outbox(self.ctx).list()
         self.assertEqual(len(records),3)
         for row in records:
-            self.assertIn('第二场',row['text'])
-            self.assertNotIn('第一场',row['text'])
+            self.assertIn('第2场',row['text'])
+            self.assertNotIn('第1场',row['text'])
+
+    def test_empty_second_session_keeps_its_number_in_query_and_broadcast(self):
+        self.platform.update(self.admin,self.bots[1]['id'],{'active':False})
+        second=self.s.sessions()[1]
+        self.restrict(slot_keys=[second['slot_key']])
+        reply=asyncio.run(Commands(self.member,self.clock).run('名单'))
+        self.assertIn('第2场',reply)
+        self.assertIn('欢迎报名参与',reply)
+        self.assertNotIn('第1场',reply)
+        self.assertNotIn('第二场',reply)
+        self.now=self.now.replace(hour=17,minute=59)
+        scheduler=Scheduler(self.platform,clock=self.clock)
+        self.now=self.now.replace(hour=18,minute=1)
+        scheduler.tick()
+        records=Outbox(self.ctx).list()
+        self.assertEqual(len(records),1)
+        self.assertIn('第2场',records[0]['text'])
+        self.assertNotIn('第1场',records[0]['text'])
+        self.assertIn('欢迎报名参与',records[0]['text'])
 
     def test_event_scope_rechecks_current_limits(self):
         session=self.s.sessions()[0]
@@ -210,8 +229,8 @@ class ScopeAndSlotsTests(CoreFixture):
         self.s.enroll('1002','名字',session_id=sessions[1]['id'])
         self.restrict(slot_keys=[sessions[1]['slot_key']])
         reply=asyncio.run(Commands(self.member,self.clock).run('名单'))
-        self.assertIn('第二场',reply)
-        self.assertNotIn('第一场',reply)
+        self.assertIn('第2场',reply)
+        self.assertNotIn('第1场',reply)
         self.assertIn('球友1002',reply)
         self.assertNotIn('小李',reply)
 

@@ -100,22 +100,34 @@ def empty_roster(data):
         row['status'] == 'active' and row['session_id'] in ids for row in data['registrations'])
 
 
+def session_heading(session, venue_id=1, title=''):
+    """Use the day's actual session number, never the scheduling-rule name."""
+    number = session.get('number')
+    label = f'第{number}场' if isinstance(number, int) and not isinstance(number, bool) and number > 0 else '本场'
+    venue = session.get('venue_name') or f'场地{venue_id}'
+    heading = ' · '.join(escape(v) for v in (title, session['date'], venue, label) if v)
+    return f"## {heading}\n\n**{escape(session['start'])}–{escape(session['end'])}**"
+
+
+def empty_session_notice(session):
+    if session.get('status') == 'ended':
+        return '暂时无人报名 · 本场已结束。'
+    if session.get('can_enroll') is False:
+        return '暂时无人报名 · 本场暂不可报名。'
+    return '暂时无人报名，欢迎报名参与！'
+
+
 def roster(data, venue_id=1):
-    if empty_roster(data):
-        return '暂时无人报名'
     lines = []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
-        label = f"{session['date']} · 场地{venue_id} · {escape(session['name'])} {session['start']}–{session['end']}"
-        if not rows:
-            if session.get('occupancies'):
-                lines.append(f"{label}：🔴 已占用：{escape(session['booking_notice'])}")
-            else:
-                lines.append(f"{escape(session['name'])}：暂时无人报名")
-            continue
-        lines.append(f"## {label}")
+        lines.append(session_heading(session, venue_id))
         if session.get('occupancies'):
             lines.append('🔴 **已占用 · 不可报名** '+escape(session['booking_notice']))
+        if not rows:
+            if not session.get('occupancies'):
+                lines.append(empty_session_notice(session))
+            continue
         lines.append(f"**{len(rows)} 人** · 正式 {session['capacity']} · 替补 {session['substitute_capacity']}")
         lines.append(registration_table(rows))
     return '\n\n'.join(lines) if lines else '暂无场次安排。'

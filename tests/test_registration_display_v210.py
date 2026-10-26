@@ -7,16 +7,40 @@ from app.help import command_help
 from app.messages import registration_gender, registration_name, registration_table, roster
 
 
-def test_empty_roster_omits_headers_times_and_ignores_cancelled_or_out_of_scope_people():
-    sessions=[dict(id=n, name=f'第{n}场', date='2026-10-20',start='17:30',end='20:30',
+def test_empty_roster_identifies_each_session_and_invites_without_including_cancelled_or_foreign_people():
+    sessions=[dict(id=n, number=n, name=f'工作日 第{n}场', date='2026-10-20',start='17:30',end='20:30',
                    capacity=8,substitute_capacity=4) for n in (1,2)]
     rows=[dict(session_id=1,status='cancelled'),dict(session_id=99,status='active')]
-    assert roster(dict(sessions=sessions,registrations=rows))=='暂时无人报名'
+    text=roster(dict(sessions=sessions,registrations=rows))
+    assert text.count('暂时无人报名，欢迎报名参与！')==2
+    assert '第1场' in text and '第2场' in text and '工作日' not in text
+    assert '|' not in text and '正式' not in text
     assert roster(dict(sessions=[],registrations=[]))=='暂无场次安排。'
     sessions[1].update(occupancies=[1],booking_notice='校队训练')
     notice=roster(dict(sessions=sessions,registrations=rows))
     assert '校队训练' in notice and '已占用' in notice
-    assert '第1场：暂时无人报名' in notice
+    assert '第1场' in notice and notice.count('欢迎报名参与')==1
+
+
+def test_empty_history_and_closed_sessions_do_not_invite_new_registrations():
+    session=dict(id=41, number=2, name='工作日 第一场', date='2026-10-20', venue_name='东馆',
+                 start='17:30', end='20:30', capacity=8, substitute_capacity=4)
+    for change, expected in (({'status':'ended'}, '本场已结束'), ({'can_enroll':False}, '本场暂不可报名')):
+        text=roster(dict(sessions=[session|change],registrations=[]))
+        assert '第2场' in text and '第41场' not in text and '第一场' not in text
+        assert '东馆' in text and expected in text and '欢迎' not in text
+
+
+def test_roster_heading_uses_snapshot_context_and_separate_bold_time():
+    session=dict(id=1234, number=12, name='工作日 第一场', date='2026-10-20', venue_name='老馆',
+                 start='17:30', end='20:30', capacity=8, substitute_capacity=4)
+    row=dict(session_id=1234,status='active',name='张三',gender='male',category='formal')
+    text=roster(dict(sessions=[session],registrations=[row]))
+    blocks=text.split('\n\n')
+    assert '老馆' in blocks[0] and '第12场' in blocks[0]
+    assert blocks[1]=='**17:30–20:30**'
+    assert text.count('17:30')==1 and '工作日' not in text and '第一场' not in text
+    assert '| 张三 | 男 | 正式 |' in text
 
 
 def test_roster_has_three_columns_no_rank_or_internal_identifier():

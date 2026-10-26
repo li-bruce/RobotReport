@@ -8,7 +8,7 @@ import secrets
 from .time_rules import effective_capabilities
 from .db import connect, dumps, stamp, now
 from .service import Service, day_value, time_value, clean_name
-from .messages import escape, roster, tournament_text, table, mention, registration_table
+from .messages import escape, roster, tournament_text, table, mention, registration_table, session_heading
 from .members import Members
 from .planning import DailyPlanning, STRATEGIES
 from .score_parser import parse_score
@@ -362,8 +362,7 @@ class Commands:
             if match[2]:
                 return roster(data, venue_id)
             owned = [r for r in data['registrations'] if r['user_id'] == self.ctx.actor and r['status'] == 'active']
-            total_guests = sum(r['guest_index'] > 0 for r in owned)
-            return f"## 报名成功 · {session['date']}\n\n场地{venue_id} · {escape(session['name'])} {session['start']}–{session['end']}\n\n" + registration_table(owned)
+            return session_heading(session, venue_id, '报名成功') + '\n\n' + registration_table(owned)
         if text == '取消报名':
             result = self.service.cancel(self.ctx.actor, **selection)
             remaining = sum(r['user_id'] == self.ctx.actor and r['guest_index'] > 0 and r['status'] == 'active' for r in result['registrations'])

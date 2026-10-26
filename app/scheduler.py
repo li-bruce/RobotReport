@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from .db import now, TZ
 from .service import Service
-from .messages import Outbox, roster, escape, empty_roster
+from .messages import Outbox, roster, escape, empty_roster, session_heading, empty_session_notice
 from .notifications import Notifications
 from .identity_notifications import IdentityNotifications
 from .scope import snapshot
@@ -64,9 +64,15 @@ class Scheduler:
                                 text=roster(data,venue['id'])
                             else:
                                 title='报名即将结束' if kind=='closing' else '今日报名'
-                                text=f"## {escape(venue['name'])} · {title}\n\n"+'\n'.join(
-                                    f"{escape(item['name'])} {item['start']}–{item['end']}"+
-                                    (' · 🔴 已占用：'+escape(item['booking_notice']) if item.get('occupancies') else '') for item in shown)
+                                sections=[]
+                                for item in shown:
+                                    section=session_heading(item,venue['id'],title)
+                                    if item.get('occupancies'):
+                                        section+='\n\n🔴 **已占用 · 不可报名** '+escape(item['booking_notice'])
+                                    elif not any(row['session_id']==item['id'] and row['status']=='active' for row in data['registrations']):
+                                        section+='\n\n'+empty_session_notice(item)
+                                    sections.append(section)
+                                text='\n\n'.join(sections)
                             key=f"broadcast:{rule['id']}:{rule_fingerprint(rule)}:{target.date()}:{rule['time'].replace(':','')}:{venue['id']}:{kind}:{channel.channel_id}"
                             self.notifications.enqueue(text,[channel.channel_id],key=key,
                                                        venue_id=venue['id'],session_ids=[item['id'] for item in shown],session_snapshots=[snapshot(item) for item in shown])

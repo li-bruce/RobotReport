@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-10-26 · Clearer registration messages
+
+- Identify each empty session and invite participation while respecting ended or unavailable sessions.
+- Use the actual session number with a separate bold time line; omit internal scheduling-rule names from rosters and registration receipts.
+- Keep generated images table-only, with column headers on every image and all rows retained; remove duplicate titles and page/row counters.
+
 ## v1.0 — 2026-10-23 · Login loading transition
 
 - Show a lightweight animated GatherSpace loading screen until the current desktop or mobile illustration is fully loaded and decoded.

@@ -38,12 +38,11 @@ def table_blocks(text):
             i += 1
 
 
-def render_pages(headers, rows, title='羽协活动'):
-    """Yield bounded RGB PNGs; wrap cells without silently dropping entries."""
+def render_pages(headers, rows):
+    """Yield table-only RGB PNGs, repeating column headers without dropping rows."""
     if not 1 <= len(headers) <= 10 or len(rows) > 2000:
         raise ValueError('表格行列过多，请缩小查询范围')
     font = ImageFont.truetype(str(FONT), 24)
-    heading_font = ImageFont.truetype(str(FONT), 28)
     widths = [min(340, max(100, int(max(font.getlength(str(r[i])) for r in [headers, *rows]) + 32))) for i in range(len(headers))]
     if sum(widths) > 1460:
         factor = 1460 / sum(widths)
@@ -71,16 +70,13 @@ def render_pages(headers, rows, title='羽协活动'):
         page_rows.append(index)
         used += heights[index]
     pages.append(page_rows)
-    for page_no, indices in enumerate(pages, 1):
-        title_lines = wrap(title, width - 48)
-        top = 36 + len(title_lines) * 38 + 30
-        height = top + heights[0] + sum(heights[x] for x in indices) + 60
+    for indices in pages:
+        top = 20
+        height = top + heights[0] + sum(heights[x] for x in indices) + 20
         if height * width > 6_000_000:
             raise ValueError('表格单元内容过长')
         picture = Image.new('RGB', (width, height), '#f4f7f4')
         draw = ImageDraw.Draw(picture)
-        for k, line in enumerate(title_lines):
-            draw.text((22, 20 + 38 * k), line, font=heading_font, fill='#173f35')
         y = top
         for rno, idx in enumerate([0, *indices]):
             h = heights[idx]
@@ -93,7 +89,6 @@ def render_pages(headers, rows, title='羽协活动'):
                 x += widths[col]
             draw.line((20, y + h, width - 20, y + h), fill='#cbd8cf', width=1)
             y += h
-        draw.text((22, height - 44), f'第 {page_no} / {len(pages)} 页 · 共 {len(rows)} 条', font=font, fill='#566b5e')
         output = io.BytesIO()
         picture.save(output, format='PNG', optimize=True)
         yield output.getvalue()
@@ -118,7 +113,7 @@ def publish_tables(text, ctx, db, clock=now):
     lines = text.splitlines()
     for start, end, title, headers, rows in reversed(blocks):
         links = []
-        for page in render_pages(headers, rows, title):
+        for page in render_pages(headers, rows):
             token = secrets.token_urlsafe(32)
             digest = hashlib.sha256(token.encode()).hexdigest()
             (folder / (digest + '.png')).write_bytes(page)
