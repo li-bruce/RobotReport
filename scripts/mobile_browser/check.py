@@ -42,6 +42,7 @@ with sync_playwright() as p:
                     page.locator('#composer-text').fill('**周末活动**\n\n| 场次 | 时间 |\n| --- | --- |\n| 第一场 | 17:30–20:30 |\n\n'+('长消息预览' * 30))
                     no_overflow(page,label+' message preview')
                 if route=='guide':
+                    page.locator('.guide-finder > summary').click()
                     page.locator('#ai-navigation-content').fill('批量导入会员')
                     page.locator('#ai-navigate-form button[type="submit"]').click()
                     result=page.locator('#ai-navigation-result [data-route="member-imports"]')
@@ -77,14 +78,14 @@ with sync_playwright() as p:
             def reg_intercept(route):
                 method=route.request.method
                 if method=='GET' and not failed['get']:failed['get']=True;route.abort()
-                elif method=='POST' and not failed['post']:failed['post']=True;route.fulfill(status=503,content_type='application/json',body='{"detail":"测试网络暂不可用，请重试"}')
+                elif method=='POST' and not route.request.url.endswith('/lookup') and not failed['post']:failed['post']=True;route.fulfill(status=503,content_type='application/json',body='{"detail":"测试网络暂不可用，请重试"}')
                 else:route.continue_()
             page.route('**/public/registration/**',reg_intercept)
             page.goto(regurl);page.wait_for_load_state('networkidle');page.get_by_role('button',name='重新读取注册状态').click();page.locator('#registration').wait_for(state='visible')
             no_overflow(page,label+' registration')
             sizes=page.locator('#registration input,#registration select,#registration button').evaluate_all('(els)=>els.map(e=>({name:e.name,font:parseFloat(getComputedStyle(e).fontSize),height:e.getBoundingClientRect().height}))')
             check(label+' registration touch controls',all(i['font']>=16 and i['height']>=44 for i in sizes),sizes)
-            check(label+' guide link no token',page.locator('a[href="/guide#members"]').count()==1)
+            check(label+' guide link no token',page.locator('a[href="/guide#registration-flow"]').count()==1)
             page.locator('[name="name"]').fill('手机测试会员'+str(width));page.locator('[name="gender"]').select_option('female');page.locator('[name="level"]').select_option('6')
             page.get_by_role('button',name='提交注册申请').click();page.locator('#status').filter(has_text='测试网络').wait_for()
             check(label+' submit failure preserves name',page.locator('[name="name"]').input_value()=='手机测试会员'+str(width))
@@ -105,7 +106,7 @@ with sync_playwright() as p:
             page.wait_for_function("document.querySelector('#competitions').getBoundingClientRect().top < 190")
             check(label+' guide navigates to competition',page.locator('#competitions h2').evaluate('(el)=>el.getBoundingClientRect().top < innerHeight'))
             if width in (320,390,768,1280):screenshot(page,f'guide-competitions-{label}.png')
-            page.locator('.copy-command').first.click();page.locator('#copy-status').filter(has_text='复制').wait_for()
+            page.locator('.task-guide').first.locator('summary').first.click();page.locator('.copy-command:visible').first.click();page.locator('#copy-status').filter(has_text='复制').wait_for()
             check(label+' guide copy feedback',bool(page.locator('#copy-status').inner_text()))
             context.close();print('PASS viewport',label,flush=True)
         context=browser.new_context(viewport={'width':320,'height':740},java_script_enabled=False)

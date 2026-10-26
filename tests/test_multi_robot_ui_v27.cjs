@@ -1,7 +1,7 @@
 /* Same-group robot choice, distinct group counts and scoped event binding. */
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
+const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('interface.js')+'\n'+read('app.js'),nodes={};
 class Fields{constructor(value){this.fields=value?.fields||value||{};}get(key){return this.fields[key]??null;}getAll(key){const v=this.fields[key];return Array.isArray(v)?v:v==null?[]:[v];}}
 const node=selector=>nodes[selector]||(nodes[selector]={value:'',innerHTML:'',textContent:'',addEventListener:()=>{},querySelector:()=>({}),querySelectorAll:()=>[],reportValidity:()=>true});
 const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});
@@ -41,8 +41,8 @@ assert.match(read('event-workspace.js'),/同群通知只发一次/);
   run("state.route='guide';state.viewEpoch=3;bindAINavigator=()=>{}");
   await run('renderGuide(3)');
   const guide=node('#main').innerHTML;
-  assert.match(guide,/普通用户版/);assert.match(guide,/每日趣味赛/);assert.match(guide,/管理员版/);
-  assert.match(guide,/href="\/guide"/);assert.match(guide,/href="\/guide\/admin"/);
+  assert.match(guide,/普通用户版/);assert.match(guide,/参赛/);assert.match(guide,/管理员版/);
+  assert.match(guide,/href="\/guide\/member"/);assert.match(guide,/href="\/guide\/admin"/);
   assert.ok(!guide.includes('最多 8 步'));assert.ok(!guide.includes('12位确认码'));
   console.log('v2.7 UI checks passed: group counts, same-group choice, scope filtering, safe labels, bound notification payload and concise public guide entries.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

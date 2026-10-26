@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-const source=fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../app/static/interface.js'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8');
 const workspace=fs.readFileSync(path.join(__dirname,'../app/static/workspace.js'),'utf8');
 const events=fs.readFileSync(path.join(__dirname,'../app/static/event-workspace.js'),'utf8');
 const registrationScript=fs.readFileSync(path.join(__dirname,'../app/static/register.js'),'utf8');
@@ -37,8 +37,8 @@ const roster=run('registrationTable([{id:1,user_id:"secret-id",name:"张三",lev
 assert.ok(!roster.includes('secret-id'));assert.match(roster,/张三/);assert.match(roster,/2 级/);assert.match(roster,/提高组/);
 assert.ok(!source.includes('AI 指令解释检查'));assert.ok(!source.includes('优先处理固定指令。AI 只把'));
 const aiUsage=run('aiUsageMarkup()');
-assert.match(aiUsage,/@机器人/);assert.match(aiUsage,/AI 明天第一场帮我占个位，再看那场名单/);assert.match(aiUsage,/href="\/guide#members"/);assert.ok(!aiUsage.includes('SQL'));assert.ok(!aiUsage.includes('最多 8 步'));
-assert.match(workspace,/href="\/guide\/admin"/);assert.match(workspace,/普通用户版/);assert.match(workspace,/管理员版/);
+assert.match(aiUsage,/@机器人/);assert.match(aiUsage,/AI 帮我报名明天第一场/);assert.match(aiUsage,/href="\/guide\/member#ai-dialogue"/);assert.ok(!aiUsage.includes('SQL'));assert.ok(!aiUsage.includes('最多 8 步'));
+assert.ok(workspace.includes("'/guide/admin'"));assert.match(workspace,/普通用户版/);assert.match(workspace,/管理员版/);
 assert.ok(!source.includes('Authorization:`Bearer'));assert.ok(!source.includes("sessionStorage.setItem('yuxie-admin-token'"));
 assert.ok(source.includes("authApi('/auth/session')"));assert.ok(source.includes("'X-CSRF-Token':state.csrfToken"));
 assert.ok(source.includes("selectfield('比赛组织者','organizer_user_id'"));assert.ok(!source.includes("selectfield('日常比赛默认记分权限'"));
@@ -153,3 +153,9 @@ async function registrationPageChecks(){
   const expired=page(()=>({ok:false,json:async()=>({detail:'注册链接已过期，请重新发送注册'})}));await flush();assert.equal(expired.form.hidden,true);assert.match(expired.elements['#status'].textContent,/过期/);
   const disconnected=page(()=>{throw Error('network failure');});await flush();assert.equal(disconnected.elements['#retry'].hidden,false);assert.match(disconnected.elements['#status'].textContent,/连接失败/);disconnected.responses.push({status:'draft'});await disconnected.reload();assert.equal(disconnected.elements['#retry'].hidden,true);assert.equal(disconnected.form.hidden,false);
 }
+
+const colored=run(`markdown('<font color="#0066b2">报名</font> <font color="#916100">〈姓名〉</font>')`);
+assert.match(colored,/<span style="color:#0066b2">报名<\/span>/);
+assert.match(colored,/<span style="color:#916100">〈姓名〉<\/span>/);
+const malicious=run(`markdown('<font color="red" onmouseover="alert(1)"><img src=x onerror=alert(1)></font>')`);
+assert.ok(!malicious.includes('<font')&&!malicious.includes('<img')&&!malicious.includes('<span'));

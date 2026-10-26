@@ -2,7 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8');
-const source=read('app.js'),css=read('style.css'),nodes=new Map(),handlers={},frames=[],scrolls=[];
+const source=read('interface.js')+'\n'+read('app.js'),css=read('style.css'),nodes=new Map(),handlers={},frames=[],scrolls=[];
 let mobile=true,document;
 class Element{
   constructor(name){this.name=name;this.dataset={};this.attributes={};this.handlers={};this.hidden=false;this.isConnected=true;this.inert=false;this.innerHTML='';this.style={values:{},setProperty(k,v){this.values[k]=v;},removeProperty(k){delete this.values[k];}};const classes=new Set();this.classList={contains:k=>classes.has(k),add:k=>classes.add(k),remove:k=>classes.delete(k),toggle(k,on){if(on===undefined)on=!classes.has(k);on?classes.add(k):classes.delete(k);return on;}};}
@@ -41,7 +41,7 @@ const run=code=>vm.runInContext(code,ctx),key=(value,shift=false)=>{const event=
   table.scrollWidth=300;calendar.scrollWidth=300;run('enhanceScrollRegions()');assert.equal(table.dataset.overflow,'false');assert.equal(table.attributes.tabindex,undefined);assert.equal(table.attributes.role,undefined);
   assert.match(run("calendarGrid([], '2026-10')"),/calendar-scroll/);assert.match(run("calendarGrid([], '2026-10')"),/aria-label="2026-10-01[^\"]*0 人报名[^\"]*0 场[^\"]*0 个场地"/);
   run('state.authed=true;state.epoch=3;state.viewEpoch=3;globalThis.finderForms={};globalThis.finderCalls=[];bindForm=(id,callback)=>finderForms[id]=callback');await run('renderGuide(3)');const guide=node('#main').innerHTML;
-  for(const path of ['/guide','/guide/admin'])assert.ok(guide.includes(`href="${path}"`));for(const title of ['普通用户版','管理员版'])assert.ok(guide.includes(title));assert.ok(!guide.includes('一句最多 8 步'));assert.ok(!guide.includes('12位确认码'));assert.ok(!guide.includes('浏览全部功能'));
+  for(const path of ['/guide/member','/guide/admin'])assert.ok(guide.includes(`href="${path}"`));for(const title of ['普通用户版','管理员版'])assert.ok(guide.includes(title));assert.ok(!guide.includes('一句最多 8 步'));assert.ok(!guide.includes('12位确认码'));assert.ok(!guide.includes('浏览全部功能'));
   assert.match(guide,/id="ai-navigate-form"/);assert.match(guide,/查找功能/);assert.equal(typeof ctx.finderForms['ai-navigate-form'],'function');
   const finder=node('#ai-navigation-result');ctx.featureReply={feature:{name:'批量登记',description:'不显示长解释',steps:['不显示实施说明'],admin_route:'/admin#member-imports'}};
   run("api=async(path,options)=>{finderCalls.push({path,options});return featureReply}");

@@ -110,6 +110,8 @@ def render(node):
     if tag == 'dd':
         return content.strip() + '\n'
     if tag == 'details':
+        if 'task-guide' in node.attrs.get('class', '').split():
+            return content
         summary = next((c for c in node.children if isinstance(c, Node) and c.tag == 'summary'), None)
         title = render(summary).strip() if summary else '查看详情'
         body = ''.join(render(c) for c in node.children if c is not summary).strip()
@@ -121,7 +123,7 @@ def render(node):
     if 'command-line' in node.attrs.get('class', '').split():
         return '\n\n- ' + content.strip() + '\n'
     if tag == 'span':
-        if 'chapter-number' in node.attrs.get('class', ''):
+        if set(node.attrs.get('class', '').split()) & {'chapter-number','task-chevron','task-summary'}:
             return ''
         return content + ' '
     return content
@@ -135,11 +137,11 @@ def main():
     ):
         html = (ROOT / 'app/static' / source).read_text(encoding='utf-8')
         tree = Document(html)
-        updated = re.search(r'class="guide-updated"[^>]*>[^<]*?(\d{4}-\d{2}-\d{2})', html)
+        updated = re.search(r'name="guide-updated" content="(\d{4}-\d{2}-\d{2})"', html)
         if not updated:
             raise ValueError(f'{source}: missing guide update date')
         chapters = [c for c in walk(tree.root, 'section') if 'chapter' in c.attrs.get('class', '').split()]
-        text = f'# 聚场 · {title}\n\nv1.0 · {updated.group(1)}。服务中的网页版：`{url}`。\n\n按当前页面编写；截图均为隔离环境中的虚构数据。图片可点开查看原尺寸。示例姓名、日期、场次请按实际替换。\n\n'
+        text = f'# 聚场 · {title}\n\nv1.0 · {updated.group(1)} · 网页版：`{url}`。\n\n网页按任务展开，支持搜索和复制指令。示例姓名、日期请按实际替换；截图使用虚构数据。\n\n'
         text += '\n'.join(render(chapter) for chapter in chapters)
         text = re.sub(r'\n[ \t]+', '\n', text)
         text = re.sub(r'\n{3,}', '\n\n', text).strip() + '\n'

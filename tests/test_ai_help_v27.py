@@ -24,7 +24,7 @@ class AIHelpV27Tests(CoreFixture):
         self.assertEqual(self.s.registrations()['registrations'], [])
 
     def test_core_help_keeps_onboarding_and_offers_one_sentence_business(self):
-        self.assertIn('发送 **注册**', command_help({'status': 'unregistered'}))
+        self.assertIn('发送 <font color="#0066b2">注册</font>', command_help({'status': 'unregistered'}))
         approved = command_help({'status': 'approved'})
         self.assertIn('AI 明天第一场帮我占个位，再看那场名单', approved)
         self.assertIn('修改先预览再确认', approved)

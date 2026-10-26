@@ -1,7 +1,7 @@
 /* Group names, two-address connections and optional robot business modules. */
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
+const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('interface.js')+'\n'+read('app.js'),nodes={};
 class Fields{constructor(values){this.values=values;}get(key){return this.values[key]??null;}getAll(key){const v=this.values[key];return Array.isArray(v)?v:v==null?[]:[v];}has(key){return Object.hasOwn(this.values,key);}}
 const node=s=>nodes[s]||(nodes[s]={value:'',innerHTML:'',textContent:'',isConnected:true,hidden:false,addEventListener(){},querySelector:()=>({}),querySelectorAll:()=>[]});
 const ctx=vm.createContext({structuredClone,URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},window:{addEventListener(){}},document:{querySelector:node,querySelectorAll:()=>[]}});

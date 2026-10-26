@@ -9,8 +9,13 @@
   const sections = Array.from(document.querySelectorAll('.chapter'));
   // Cache business text before adding copy controls, so UI labels are not search terms.
   const searchable = new Map(items.map(item => [item, item.textContent.toLocaleLowerCase()]));
+  const openedBeforeSearch = new Map();
+  let searching = false;
   const applySearch = () => {
     const words = input.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length && !searching) document.querySelectorAll('details').forEach(d => openedBeforeSearch.set(d, d.open));
+    if (!words.length && searching) { openedBeforeSearch.forEach((open,d) => {d.open=open;}); openedBeforeSearch.clear(); }
+    searching=Boolean(words.length);
     let count = 0;
     items.forEach(item => {
       item.hidden = !words.every(word => searchable.get(item).includes(word));
@@ -19,7 +24,7 @@
     });
     sections.forEach(section => { section.hidden = !Array.from(section.querySelectorAll('[data-guide-item]')).some(item => !item.hidden); });
     empty.hidden = count > 0;
-    status.textContent = words.length ? `找到 ${count} 项用法` : (document.body.dataset?.edition === 'admin' ? '搜索接入、审核、抽签或发布。' : '搜索注册、报名、比赛或个人记录。');
+    status.textContent = words.length ? `找到 ${count} 项用法` : (document.body.dataset?.edition === 'admin' ? '接入、审核、抽签、发布' : '注册、报名、比赛、个人记录');
   };
   input.addEventListener('input', applySearch);
   document.getElementById('clear-search').addEventListener('click', () => { input.value = ''; applySearch(); input.focus(); });
@@ -32,6 +37,37 @@
   });
   search.hidden = false;
   applySearch();
+
+  const revealTarget = () => {
+    let id;try{id=decodeURIComponent(location.hash.slice(1));}catch{return;}
+    const target=document.getElementById(id);if(!target)return;
+    if(input.value){input.value='';applySearch();}
+    let node=target;
+    while(node&&node!==document.body){if(node.tagName==='DETAILS')node.open=true;node=node.parentElement;}
+    const task=target.querySelector(':scope > details.task-guide');if(task)task.open=true;
+    requestAnimationFrame(()=>target.scrollIntoView({block:'start',behavior:'instant'}));
+  };
+  document.querySelectorAll('a[href^="#"]').forEach(link=>link.addEventListener('click',()=>requestAnimationFrame(revealTarget)));
+  window.addEventListener('hashchange',revealTarget);
+  revealTarget();
+  const markChapter = () => {
+    const visible=sections.filter(section=>!section.hidden);
+    const edge=document.querySelector('.site-header').getBoundingClientRect().bottom+80;
+    const current=visible.filter(section=>section.getBoundingClientRect().top<=edge).at(-1)||visible[0];
+    document.querySelectorAll('.contents nav a').forEach(link=>{
+      if(current&&link.hash==='#'+current.id)link.setAttribute('aria-current','location');else link.removeAttribute('aria-current');
+    });
+  };
+  let chapterFrame=false;
+  const scheduleChapter = () => {
+    if(chapterFrame)return;chapterFrame=true;
+    requestAnimationFrame(()=>{chapterFrame=false;markChapter();});
+  };
+  window.addEventListener('scroll',scheduleChapter,{passive:true});
+  window.addEventListener('resize',scheduleChapter);
+  document.addEventListener('toggle',scheduleChapter,true);
+  input.addEventListener('input',scheduleChapter);
+  markChapter();
 
   let messageTimer;
   const announce = message => {
@@ -54,6 +90,17 @@
     return copied;
   };
   document.querySelectorAll('[data-command]').forEach(code => {
+    const raw=code.textContent;
+    // Only example values are colored. Text nodes keep copy output literal and safe.
+    const pattern=/(张三|李四|王五|赵六|提高组|周二双打|春季联赛|校队训练|(?:明天|今天|后天)|\d{4}-\d{2}-\d{2}|(?:第[一二三四五六七八九十\d]+场)|(?:场地\d+)|(?:申请\d+)|(?:\d{1,2}[:：-]\d{1,2})|(?:\d级))/g;
+    let start=0;
+    for(const match of raw.matchAll(pattern)){
+      if(start===0)code.replaceChildren();
+      code.append(document.createTextNode(raw.slice(start,match.index)));
+      const value=document.createElement('span');value.className='command-parameter';value.textContent=match[0];code.append(value);start=match.index+match[0].length;
+    }
+    if(start)code.append(document.createTextNode(raw.slice(start)));
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'copy-command';
@@ -74,7 +121,7 @@
         button.disabled = false;
         button.focus({preventScroll: true});
       }
-      if (copied) { announce('已复制。回到群里 @机器人后粘贴；示例中的日期和姓名请按实际修改。'); }
+      if (copied) { announce('已复制，回群 @机器人后粘贴。'); }
       else {
         const selection = window.getSelection();
         if (selection) {

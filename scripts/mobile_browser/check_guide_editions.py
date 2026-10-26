@@ -44,6 +44,7 @@ try:
                     check(label+' role separation',page.locator('#large-events').count()==(1 if path.endswith('/admin') else 0))
                     width(page,label)
                     if w in (390,1280):page.screenshot(path=str(output/f'{"admin" if path.endswith("admin") else "member"}-{w}.png'))
+                    page.locator('.task-guide').evaluate_all('(nodes)=>nodes.forEach(node=>node.open=true)')
                     for detail in page.locator('.response-example').all():
                         detail.locator('summary').click();check(label+' example open',detail.get_attribute('open') is not None);width(page,label+' example')
                     for detail in page.locator('.screen-guide').all():
@@ -62,7 +63,7 @@ try:
                     page.wait_for_function("key=>{const y=document.getElementById(key).getBoundingClientRect().top;const h=document.querySelector('.site-header').getBoundingClientRect().bottom;return y>=h&&y<h+80}",arg=anchor)
                     check(label+' anchor visible',page.locator('#'+anchor+' h2').is_visible())
                     if w in (390,1280):page.screenshot(path=str(output/f'{anchor}-{w}.png'))
-                    page.locator('.copy-command').first.click();page.locator('#copy-status').filter(has_text='复制').wait_for();check(label+' copy',bool(page.locator('#copy-status').inner_text()))
+                    page.locator('.task-guide').first.evaluate('(node)=>node.open=true');page.locator('.copy-command:visible').first.click();page.locator('#copy-status').filter(has_text='复制').wait_for();check(label+' copy',bool(page.locator('#copy-status').inner_text()))
                     other='管理员版' if title=='普通用户版' else '普通用户版'
                     page.locator('.edition-switch').get_by_role('link',name=other).click();page.wait_for_load_state('networkidle')
                     check(label+' edition switch',page.locator('h1').inner_text()==other)
@@ -71,7 +72,7 @@ try:
                 context=browser.new_context(viewport={'width':320,'height':740},java_script_enabled=False);context.route('**/*',intercept)
                 page=context.new_page();page.goto(origin+path)
                 check(title+' noJS',page.locator('.chapter:visible').count()==count)
-                page.locator('.response-example').first.locator('summary').click();check(title+' noJS examples',page.locator('.response-example').first.locator('.reply-flow').is_visible());width(page,title+' noJS');context.close()
+                page.locator('.response-example').first.locator('xpath=ancestor::details[contains(@class,"task-guide")]').locator(':scope > summary').click();page.locator('.response-example').first.locator(':scope > summary').click();check(title+' noJS examples',page.locator('.response-example').first.locator('.reply-flow').is_visible());width(page,title+' noJS');context.close()
         finally:browser.close()
 finally:
     server.shutdown();server.server_close();thread.join(timeout=5)

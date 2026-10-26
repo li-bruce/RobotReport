@@ -2,7 +2,7 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8');
-const source=read('app.js'),nodes={};
+const source=read('interface.js')+'\n'+read('app.js'),nodes={};
 class Fields{constructor(value){this.fields=value?.fields||value||{};}get(key){return this.fields[key]??null;}getAll(key){const v=this.fields[key];return Array.isArray(v)?v:v==null?[]:[v];}}
 const node=selector=>nodes[selector]||(nodes[selector]={value:'',innerHTML:'',textContent:'',querySelector:()=>({}),querySelectorAll:()=>[],reportValidity:()=>true});
 const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});

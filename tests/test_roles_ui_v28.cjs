@@ -1,7 +1,7 @@
 /* Role allocation, group approvals, notification status, and escaping. */
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('app.js'),nodes={};
+const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8'),source=read('interface.js')+'\n'+read('app.js'),nodes={};
 class Fields{constructor(value){this.fields=value?.fields||value||{};}get(key){return this.fields[key]??null;}getAll(key){const v=this.fields[key];return Array.isArray(v)?v:v==null?[]:[v];}}
 const node=selector=>nodes[selector]||(nodes[selector]={value:'',checked:false,innerHTML:'',textContent:'',handlers:{},addEventListener(type,fn){this.handlers[type]=fn;},querySelector:selector=>node(selector),querySelectorAll:()=>[],reportValidity:()=>true});
 const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},document:{querySelector:node,querySelectorAll:()=>[]}});

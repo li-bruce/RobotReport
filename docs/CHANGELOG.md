@@ -1,5 +1,12 @@
 # Changes
 
+## v1.0 — 2026-10-26 · Focused administration and task guides
+
+- Group navigation around daily work, group services and settings; simplify page headings, controls and the overview with a shared neutral visual style.
+- Open member and administrator instructions by task, with contextual links, searchable steps, colored command parameters and updated page screenshots.
+- Keep bot help concise and scoped to each robot's enabled businesses and the caller's permissions; provide detailed syntax through category help.
+- Preserve the existing login illustration, loading behavior, business rules and stored records.
+
 ## v1.0 — 2026-10-26 · Clearer registration messages
 
 - Identify each empty session and invite participation while respecting ended or unavailable sessions.

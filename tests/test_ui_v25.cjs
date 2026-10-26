@@ -2,13 +2,13 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const read=name=>fs.readFileSync(path.join(__dirname,'../app/static',name),'utf8');
-const app=read('app.js');
+const app=read('interface.js')+'\n'+read('app.js');
 const nodes={};
 class Fields {constructor(value){this.fields=value?.fields||value||{};}get(key){return this.fields[key]??null;}getAll(key){const value=this.fields[key];return Array.isArray(value)?value:value==null?[]:[value];}has(key){return this.fields[key]!=null;}}
 const ctx=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Symbol,Number,String,Array,JSON,AbortController,FormData:Fields,
   location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},
   document:{querySelector:selector=>nodes[selector]||(nodes[selector]={value:'',innerHTML:'',textContent:'',querySelector:()=>({}),querySelectorAll:()=>[]}),querySelectorAll:()=>[]}});
-vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js','casual-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+app.slice(0,app.indexOf("document.addEventListener('click'")),ctx);
+vm.runInContext(['time-workspace.js','workspace.js','event-workspace.js','scope-workspace.js','casual-workspace.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+app.slice(0,app.indexOf("document.addEventListener('click'")),ctx);
 const run=code=>vm.runInContext(code,ctx),plain=value=>JSON.parse(JSON.stringify(value));
 run("state.venues=[{id:1,name:'主场地'},{id:2,name:'<img src=x>'}];state.venueId=1;state.epoch=3;state.viewEpoch=3;state.authed=true;");
 assert.equal(run("genderName('female')"),'女');assert.equal(run("genderName('unknown')"),'待补齐');

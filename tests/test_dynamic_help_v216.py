@@ -11,7 +11,8 @@ def test_individual_businesses_have_fields_and_examples_without_other_actions():
     for key,title in expected.items():
         reply=command_help({'status':'approved'},capabilities=[key])
         assert '**'+title+'**' in reply
-        assert '字段：' in reply and '示例：' in reply
+        assert '<font color="#0066b2">' in reply
+        assert len(reply) < 650
         for other,label in expected.items():
             if other!=key:assert '**'+label+'**' not in reply
     ai=command_help({'status':'approved'},capabilities=['ai'])
@@ -35,7 +36,7 @@ class ScopedHelpTests(CoreFixture):
         self.platform.update(self.admin,self.ctx.id,{'capabilities':['enrollment'],'venue_ids':[1],'slot_keys':[slot['slot_key']]})
         text=scoped_help(self.member,{'status':'approved'},clock=self.clock)
         self.assertIn('20:30–22:00',text);self.assertNotIn('17:30–20:30',text)
-        self.assertIn('字段：',text);self.assertIn('报名，张三，李四',text)
+        self.assertIn('<font color="#0066b2">',text);self.assertIn('报名，张三，李四',text)
         self.assertNotIn('组织比赛',text);self.assertNotIn('AI ',text)
         self.platform.update(self.admin,self.ctx.id,{'capabilities':['statistics']})
         changed=scoped_help(self.member,{'status':'approved'},clock=self.clock)

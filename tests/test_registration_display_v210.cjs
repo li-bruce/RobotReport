@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
-const source=fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../app/static/interface.js'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,'../app/static/app.js'),'utf8');
 const content={innerHTML:'',setAttribute(){}},main={innerHTML:''},cards={innerHTML:''};
 const handlers={},calls=[];
 const context=vm.createContext({URL,URLSearchParams,Intl,Date,Map,Set,Symbol,Number,String,Array,JSON,AbortController,FormData,
