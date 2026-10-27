@@ -1,5 +1,10 @@
 # Changes
 
+## v1.0 — 2026-10-27 · Consistent message headings
+
+- Apply the shared heading style to every section in a robot message, including later sessions in rosters and scheduled broadcasts.
+- Preserve separate bold time lines, command colors, code examples and table-only images; add the configured banner once per message.
+
 ## v1.0 — 2026-10-26 · Focused administration and task guides
 
 - Group navigation around daily work, group services and settings; simplify page headings, controls and the overview with a shared neutral visual style.

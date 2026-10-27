@@ -23,6 +23,34 @@ def safe_markdown(value):
     return html.escape(value, quote=False)
 
 
+def style_markdown(text, theme):
+    """Apply the shared message heading style to every section, outside code blocks."""
+    if not theme.get('enabled', True):
+        return text
+    accent = theme.get('accent', '#197661')
+    if not isinstance(accent, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', accent):
+        accent = '#197661'
+    lines, fence, styled = [], None, False
+    for line in text.splitlines(keepends=True):
+        marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*?)(?:\r?\n)?$', line)
+        if fence:
+            if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
+                fence = None
+        elif marker:
+            fence = marker[1]
+        else:
+            heading = re.match(r'^ {0,3}#{1,6}[\t ]+([^\r\n]+?)[\t ]*(\r?\n)?$', line)
+            if heading:
+                title = re.sub(r'[\t ]+#+[\t ]*$', '', heading[1])
+                line = f"<font color='{accent}'><b>{title}</b></font>" + (heading[2] or '')
+                styled = True
+        lines.append(line)
+    result = ''.join(lines)
+    if styled and theme.get('banner_url'):
+        result = '![](' + theme['banner_url'] + ')\n\n' + result
+    return result
+
+
 def chunks(text, limit=4500):
     if len(text) > 200000:
         raise ValueError('消息过长')
@@ -202,12 +230,7 @@ class Outbox:
                     themed = publish_tables(text,self.ctx,business)
                     row = business.execute("SELECT value FROM config WHERE key='theme'").fetchone()
             theme = json.loads(row[0]) if row else {}
-            if theme.get('enabled', True) and themed.startswith('#'):
-                title, separator, body = themed.partition('\n')
-                title=title.lstrip('#').strip()
-                themed = f"<font color='{theme.get('accent', '#197661')}'><b>{title}</b></font>" + separator + body
-                if theme.get('banner_url'):
-                    themed = '![](' + theme['banner_url'] + ')\n\n' + themed
+            themed = style_markdown(themed, theme)
             ids = []
             for i, part in enumerate(chunks(themed)):
                 conn.execute('INSERT OR IGNORE INTO outbox(dedupe_key,chat_id,payload,created_at,channel_id,scope_json) VALUES(?,?,?,?,?,?)',
