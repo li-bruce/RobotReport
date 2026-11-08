@@ -28,6 +28,8 @@ class Notifications:
                 db.execute("ALTER TABLE notification_jobs ADD COLUMN session_ids TEXT NOT NULL DEFAULT 'null'")
             if 'session_snapshots' not in {r['name'] for r in db.execute('PRAGMA table_info(notification_jobs)')}:
                 db.execute("ALTER TABLE notification_jobs ADD COLUMN session_snapshots TEXT NOT NULL DEFAULT 'null'")
+            if 'dialogue_json' not in {r['name'] for r in db.execute('PRAGMA table_info(notification_jobs)')}:
+                db.execute("ALTER TABLE notification_jobs ADD COLUMN dialogue_json TEXT NOT NULL DEFAULT 'null'")
 
     def destinations(self, channel_ids, venue_id=None, session_ids=None, tournament_id=None):
         if not isinstance(channel_ids,list) or not channel_ids or len(channel_ids)>100 or any(not isinstance(v,str) for v in channel_ids):
@@ -95,7 +97,7 @@ class Notifications:
             selected.append(chosen or eligible or candidates[0])
         return selected
 
-    def enqueue(self,text,channel_ids,actor='scheduler',key=None,venue_id=None,tournament_id=None,session_ids=None,session_snapshots=None):
+    def enqueue(self,text,channel_ids,actor='scheduler',key=None,venue_id=None,tournament_id=None,session_ids=None,session_snapshots=None,dialogue=None):
         key=key or 'manual:'+uuid.uuid4().hex
         with connect(self.path) as db:
             old=db.execute('SELECT id FROM notification_jobs WHERE dedupe_key=?',(key,)).fetchone()
@@ -109,6 +111,10 @@ class Notifications:
                 session_snapshots = [snapshot(row) for sid in session_ids if (row := db.execute('SELECT * FROM sessions WHERE id=?',(sid,)).fetchone())]
             db.execute('INSERT INTO notification_jobs(id,dedupe_key,text,channel_ids,venue_id,tournament_id,created_by,created_at,session_ids,session_snapshots) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (job_id,key,text,dumps(ids),venue_id,tournament_id,actor,stamp(self.clock()),dumps(session_ids),dumps(session_snapshots)))
+            if dialogue is not None:
+                # Only internal callers supply immutable, plain-data facts. The
+                # chosen destination applies its own wording without rerouting.
+                db.execute('UPDATE notification_jobs SET dialogue_json=? WHERE id=?',(dumps(dialogue),job_id))
             for cid in ids:
                 db.execute("INSERT INTO notification_deliveries(job_id,channel_id,status) VALUES(?,?,'pending')",(job_id,cid))
             audit(db,actor,'notification.create',{'id':job_id,'channel_ids':ids,'tournament_id':tournament_id})
@@ -133,7 +139,12 @@ class Notifications:
                 from .time_rules import broadcast_delivery_allowed
                 if not broadcast_delivery_allowed(item['dedupe_key'],ctx,self.clock(),Service(ctx,self.clock).config()):
                     raise PermissionError('播报规则已变更或消息已过期')
-                ids=Outbox(ctx).enqueue(item['text'],'notice:'+item['dedupe_key'])
+                text=item['text']
+                if item.get('dialogue_json') and item['dialogue_json']!='null':
+                    from .dialogue import render
+                    copy=json.loads(item['dialogue_json'])
+                    text=render(ctx,copy['id'],**copy['values'])
+                ids=Outbox(ctx).enqueue(text,'notice:'+item['dedupe_key'])
                 state,error='queued',None
             except (ValueError,PermissionError):
                 ids,state,error=[],'failed','目的群停用或场地/时段权限已变更，请检查机器人和群通道'

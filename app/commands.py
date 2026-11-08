@@ -18,6 +18,7 @@ from .message_parser import MessageInput, normalize_message, parse, strip_mentio
 from .selection_parser import parse_selection
 
 from .help import command_help, scoped_help
+from .dialogue import render, entry, command as example, link as form_link, Markup
 HELP = command_help({'status':'approved'})
 
 
@@ -46,6 +47,10 @@ class Commands:
     def __init__(self, ctx, clock=now):
         self.ctx, self.clock = ctx, clock
         self.service = Service(ctx, clock)
+
+    def say(self, key, **values):
+        values.setdefault('name', getattr(self, 'reply_name', None))
+        return render(self.ctx, key, **values)
 
     def refresh_context(self, *, enforce_access=False):
         """Re-read transport scope and club roles after model waits/confirmations."""
@@ -157,14 +162,18 @@ class Commands:
         self.refresh_context()
         message = normalize_message(content, self.ctx.bot_name)
         if message.text in ('连接', '连接测试'):
-            return '**机器人连接成功**\n发送“帮助”查看本机器人的可用功能。'
+            return self.say('entry.connected')
         text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())
         venue_id = selection['venue_id']
-        self.service.venue(venue_id)
-        self.require_command_capabilities(text)
+        if message.text:
+            self.service.venue(venue_id)
+            self.require_command_capabilities(text)
         members = Members(self.ctx, self.clock)
         # A platform display name can prefill a record; it never approves membership.
         member = members.touch(name=name if name and name != self.ctx.actor else None)
+        self.reply_name = member.get('name') or name
+        if not message.text:
+            return entry(self.ctx, member, name=name)
         if text=='补全资料':
             text='修改资料' if member['status']=='approved' else '注册'
         confirmation_name = re.fullmatch(r'注册确认(?:\s+(.+))?',text)
@@ -174,21 +183,20 @@ class Commands:
                 if not confirmation_name and member.get('gender') not in ('male','female'):
                     from .registration import create_form
                     link=create_form(self.ctx,self.clock,purpose='profile')
-                    if link:return f"**{escape(member['name'])} · 已注册**\n\n[补全个人资料]({link})"
-                return f"**{escape(member['name'])} · 已注册**"
+                    if link:return self.say('registration.incomplete', form_link=form_link('补全个人资料',link))
+                return self.say('registration.approved', name=member['name'])
             if member['status']=='suspended':
-                return '会员已停用，请联系管理员处理，无需重复注册。'
+                return self.say('entry.suspended')
             from .registration import create_form
             hint=(confirmation_name[1] if confirmation_name else None) or name or member.get('name')
             url = create_form(self.ctx, self.clock, hint_name=hint)
-            intro = '姓名、性别必填；级别、手机号选填。'
             if url:
-                return mention(self.ctx.actor) + f'\n\n[确认本人资料]({url})'
-            return intro + '\n\n发送：注册 张三 男 2级；也可发送 注册 张三 男。'
+                return self.say('registration.form', form_link=form_link('确认本人资料',url))
+            return self.say('registration.fallback', register_example=example(self.ctx,'注册 张三 男 2级'))
         register = re.fullmatch(r'(?:注册|设置姓名)\s+(.+)', text)
         if register:
             if member['status']=='approved':
-                return f"**{escape(member['name'])} · 已注册**"
+                return self.say('registration.approved',name=member['name'])
             tokens = register[1].strip().split()
             phone, level, gender = None, None, None
             if tokens and re.fullmatch(r'(?:1[3-9]\d{9}|\+[1-9]\d{7,14})', tokens[-1]):
@@ -203,19 +211,19 @@ class Commands:
                 raise ValueError('姓名和性别必填，例如：注册 张三 男 2级；也可发送 注册 打开表单')
             member = members.apply(' '.join(tokens), level, phone, gender=gender)
             if member.get('registration_result')=='linked':
-                return f"**{escape(member['name'])} · 资料已关联，注册成功**"
+                return self.say('registration.linked',name=member['name'])
             if member['status'] == 'approved':
-                return f"**{escape(member['name'])} · 已注册**"
-            return f"**{escape(member['name'])} · 注册申请已提交，待审核**"
+                return self.say('registration.approved',name=member['name'])
+            return self.say('registration.submitted',name=member['name'])
         confirmation = re.fullmatch(r'确认注册\s+([a-f0-9]{10})', text)
         if confirmation:
             from .registration import confirm_form
             member = confirm_form(self.ctx, confirmation[1], self.clock)
             if member.get('registration_result')=='linked':
-                return f"**{escape(member['name'])} · 资料已关联，注册成功**"
+                return self.say('registration.linked',name=member['name'])
             if member['status'] == 'approved':
-                return f"**{escape(member['name'])} · 已注册**"
-            return f"{escape(member['name'])}，注册申请已提交，等待管理员审核。"
+                return self.say('registration.approved',name=member['name'])
+            return self.say('registration.submitted',name=member['name'])
         if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:(?:申请|修改|调整)(?:等级|分组)|资料(?:待审核|审核列表|查看|通过|拒绝))', text):
             from .profile_changes import ProfileChanges
             profile_reply = ProfileChanges(self.ctx, self.clock).handle(text)
@@ -241,7 +249,7 @@ class Commands:
                 result += '\n\n' + (table(['起始日期','截止日期','记录状态'], [[row['start_date'], row['end_date'], '有效记录' if row['status']=='valid' else '已作废'] for row in periods]) if periods else '尚未登记有效期，请联系管理员。')
             if member['status'] == 'approved' and text in ('注册资料','会员状态','我的资料'):
                 result += '\n\n分组：' + ( '、'.join(escape(g['name']) for g in member['groups']) or '未分组')
-                result += '\n发送 修改资料 申请调整；我的资料申请 查看进度。'
+                result += '\n' + self.say('profile.next',edit_command=example(self.ctx,'修改资料'),requests_command=example(self.ctx,'我的资料申请'))
             return result
         if text == '身份':
             return mention(self.ctx.actor, member.get('name') or '') + f"\n\n用户ID：{escape(self.ctx.actor)}；场地{venue_id}；" + ('后台管理员 · 正式会员' if self.ctx.is_admin else {'unregistered':'未注册账号','pending':'注册申请待审批','approved':'正式会员','rejected':'注册申请已退回','suspended':'会员已停用'}.get(member['status'],'未注册账号'))
@@ -254,34 +262,38 @@ class Commands:
             return f'[打开使用说明]({base}/guide)\n\n会员报名、比赛操作和管理员使用方法。' if base else '发送 帮助 查看常用指令；使用说明网页请向管理员获取。'
         if text in ('帮助','help','?','？') or text.startswith('帮助 '):
             category = text[3:].strip() if text.startswith('帮助 ') else None
-            response = scoped_help(self.ctx,member,'AI' if category and category.casefold() == 'ai' else category,self.clock)
+            response = (entry(self.ctx,member,name=name) if not category and member['status']!='approved' and not self.ctx.is_admin else
+                        self.say('help.intro',content=Markup(scoped_help(self.ctx,member,'AI' if category and category.casefold() == 'ai' else category,self.clock))))
             base = self.service.config().get('public_base_url', '').rstrip('/')
             return response + (f'\n\n[完整使用说明]({base}/guide)' if base else '')
         gender_input = re.fullmatch(r'(?:补充)?性别\s*[:：]?\s*(男|女)', text)
         if gender_input:
             members.set_gender(gender_input[1])
-            return '性别已保存为' + gender_input[1] + '，可继续' + ('报名或' if supports(self.ctx, 'enrollment') else '') + '组织比赛。'
+            return self.say('profile.gender',gender=gender_input[1])
         if text in ('性别', '补充性别'):
-            return '发送：性别 男 / 性别 女。'
+            return self.say('profile.gender_guide',male_command=example(self.ctx,'性别 男'),female_command=example(self.ctx,'性别 女'))
         self_rating = re.fullmatch(r'自评\s*(\d+|[一二三四五六七八九])\s*级', text)
         if self_rating:
             level = int(self_rating[1]) if self_rating[1].isdigit() else '一二三四五六七八九'.index(self_rating[1]) + 1
             members.request_level(level)
-            return f'已提交自评{level}级，等待管理员审核。'
+            return self.say('profile.level',level=level)
         from .bot_access import require_access
-        require_access(self.ctx,self.clock)
         ai_entry = re.fullmatch(r'(?:/?ai)(?:[\s:：]+(.*))?', text, re.I | re.S)
         ai_body = (ai_entry[1] or '').strip() if ai_entry else None
         if re.fullmatch(r'AI\s*帮助', text, re.I) or ai_entry and ai_body in ('', '帮助', 'help', '?', '？'):
-            return command_help(member, self.ctx.is_admin, 'AI',permissions=self.ctx.permissions,capabilities=effective_capabilities(self.ctx))
+            return await self.run(MessageInput('帮助 AI'),name,venue_id,allow_ai=False)
         if re.fullmatch(r'AI\s*状态', text, re.I) or ai_entry and ai_body == '状态':
             enabled = self.service.config()['ai']['enabled']
-            return '**AI业务助手：' + ('已开启' if enabled else '已关闭') + '**\n\n发送 AI 加一句业务需求；普通指令始终直接处理。发送 帮助 AI 查看用法。'
+            return self.say('ai.status',status='已开启' if enabled else '已关闭',ai_command=example(self.ctx,'AI'),ai_example=example(self.ctx,'AI 查看帮助'))
         if ai_entry and allow_ai:
             from .ai_catalog import local_route
             feature_id = local_route(ai_body)
             if feature_id:
                 return await self.route_feature(feature_id)
+        if member['status']!='approved' and not self.ctx.is_admin:
+            from .dialogue import MembershipPrompt
+            raise MembershipPrompt(entry(self.ctx,member,name=name))
+        require_access(self.ctx,self.clock)
         members.require_approved()
         from .availability_dialog import handle_availability
         availability_reply = handle_availability(self.ctx,text,selection,self.clock)
@@ -323,7 +335,7 @@ class Commands:
         if re.fullmatch(r'(?:开启|关闭)AI', text, re.I):
             enabled = text.startswith('开启')
             self.service.update_config({'ai': {'enabled': enabled}})
-            return '**AI 助手已' + ('开启**' if enabled else '关闭**')
+            return self.say('ai.toggle',status='开启' if enabled else '关闭')
         if ai_entry:
             if not allow_ai:
                 raise ValueError('AI提案不能再次调用AI')
@@ -360,19 +372,18 @@ class Commands:
             data = self.service.enroll(self.ctx.actor, name, guests, **selection, guest_names=guest_names)
             session = data['sessions'][0]
             if match[2]:
-                return roster(data, venue_id)
+                return roster(data, venue_id, ctx=self.ctx)
             owned = [r for r in data['registrations'] if r['user_id'] == self.ctx.actor and r['status'] == 'active']
-            return session_heading(session, venue_id, '报名成功') + '\n\n' + registration_table(owned)
+            return self.say('enrollment.success',heading=Markup(session_heading(session,venue_id,'报名成功')),table=Markup(registration_table(owned)))
         if text == '取消报名':
             result = self.service.cancel(self.ctx.actor, **selection)
             remaining = sum(r['user_id'] == self.ctx.actor and r['guest_index'] > 0 and r['status'] == 'active' for r in result['registrations'])
-            reply = '**已取消本人报名**' if result['cancelled'] else '本人尚未报名。'
-            return reply + (f'\n\n保留 {remaining} 位代报名同行。' if remaining else '')
+            return self.say('enrollment.cancelled' if result['cancelled'] else 'enrollment.not_enrolled',remaining=Markup(f'\n\n保留 {remaining} 位代报名同行。' if remaining else ''))
         if text in ('名单', ''):
             session_id = None
             if selection['at'] or selection['number']:
                 session_id = self.service.resolve_session(**selection, for_write=False)['id']
-            return roster(self.service.registrations(selection['day'], venue_id, session_id), venue_id)
+            return roster(self.service.registrations(selection['day'], venue_id, session_id), venue_id, ctx=self.ctx)
         tournaments = self.tournaments()
         formats = tournaments.formats()
         named_enrollment = re.fullmatch(r'(.+?)[,，]\s*(报名(?:\+(\d+))?|报名[,，].+|取消报名|取消.+)', text)
@@ -380,11 +391,11 @@ class Commands:
             event = self.event_by_name(named_enrollment[1].strip(), venue_id, selection['day'])
             if named_enrollment[2] == '取消报名':
                 tournaments.cancel(event['id'], self.ctx.actor, venue_id)
-                return f"已处理 {escape(event['title'])} 的本人取消报名，代报名人员仍保留。"
+                return self.say('event.cancelled',event=event['title'])
             event_guests = cancellation_guests(named_enrollment[2])
             if event_guests is not None:
                 tournaments.cancel_guests(event['id'], self.ctx.actor, event_guests, venue_id)
-                return f"已取消 {escape(event['title'])} 中本人代报名的：{escape('、'.join(event_guests))}。其他报名保持不变。"
+                return self.say('event.guests_cancelled',event=event['title'],names='、'.join(event_guests))
             named = re.fullmatch(r'报名[,，](.+)', named_enrollment[2])
             event_names = [v.strip() for v in re.split(r'[,，、]', named[1])] if named else None
             tournaments.enroll(event['id'], self.ctx.actor, name, len(event_names) if event_names is not None else int(named_enrollment[3] or 0), venue_id, guest_names=event_names)
@@ -392,7 +403,7 @@ class Commands:
         cancel_names = cancellation_guests(text)
         if cancel_names is not None:
             result = self.service.cancel_guests(self.ctx.actor, cancel_names, **selection)
-            return f"已取消本人代报名的：{escape('、'.join(cancel_names))}（{result['cancelled']}人）。其他报名保持不变，后续报名已依次递补。"
+            return self.say('enrollment.guests_cancelled',names='、'.join(cancel_names),count=result['cancelled'])
         organizing = re.fullmatch(r'组织比赛(?:\s*(单打|双打|男双|女双|混双))?(?:[\s，,]+(.+))?', text)
         if organizing:
             return DailyPlanning(self.ctx, self.clock).begin(selection, 'singles' if organizing[1] == '单打' else 'doubles', title=organizing[2], doubles_category={'男双':'mens','女双':'womens','混双':'mixed'}.get(organizing[1],'open'))
@@ -414,10 +425,8 @@ class Commands:
             field = {'集合说明': 'meeting_instructions', '公开说明': 'description', '协调安排': 'coordination'}[label]
             EventManagement(self.ctx, self.clock).save_organization(event['id'], {field: value, 'expected_version': event['version']})
             # Never publish internal coordination text into the group reply.
-            result = f"{escape(event['title'])} 的{label}已保存。"
-            if field != 'coordination':
-                result += f"\n\n发送 {escape(event['title'])}，说明 查看公开内容。"
-            return result
+            detail=Markup('\n\n发送 '+str(example(self.ctx,event['title']+'，说明'))+' 查看公开内容。' if field!='coordination' else '')
+            return self.say('event.organization_saved',event=event['title'],field=label,detail=detail)
         score_input = ('第' + str(selection['number']) + '场' + text) if selection['number'] is not None else text
         parsed_score = parse_score(score_input)
         if parsed_score:
@@ -428,9 +437,9 @@ class Commands:
             else:
                 candidates = [e for e in tournaments.list(venue_id) if self.event_allowed(e) and e['status'] == 'running' and (not selection['day'] or e['date'] == selection['day'])]
                 if not candidates:
-                    return '当前场地没有进行中的赛事，请先发送 组织比赛。'
+                    return self.say('event.none_running')
                 if len(candidates) > 1:
-                    return '存在多场进行中赛事，本次没有记分。请指定赛事名称：\n\n' + table(['赛事名称', '记分示例'], [[e['title'], f"{e['title']}，第{parsed_score['number']}场21:19"] for e in candidates])
+                    return self.say('event.choose_score',table=Markup(table(['赛事名称','记分示例'],[[e['title'],f"{e['title']}，第{parsed_score['number']}场21:19"] for e in candidates])))
                 event = tournaments.get(candidates[0]['id'], venue_id)
             match = next((m for m in event['matches'] if m['number'] == parsed_score['number']), None)
             if not match:
@@ -447,13 +456,13 @@ class Commands:
             if action in ('继续比赛','恢复比赛') and event['status'] == 'running':
                 return tournaments.describe(event['id'])
             tournaments.transition(event['id'], {'暂停比赛':'pause','暂停':'pause','继续比赛':'resume','恢复比赛':'resume','晋级':'advance','关闭比赛':'close','关闭':'close'}[action], venue_id)
-            return f"{escape(event['title'])} 已" + ('暂停。' if action in ('暂停比赛','暂停') else '恢复。' if action in ('继续比赛','恢复比赛') else '推进到下一阶段。' if action == '晋级' else '关闭，历史对战与比分已保留。')
+            return self.say('event.transition',event=event['title'],result='暂停。' if action in ('暂停比赛','暂停') else '恢复。' if action in ('继续比赛','恢复比赛') else '推进到下一阶段。' if action=='晋级' else '关闭，历史对战与比分已保留。')
         if text in ('对战表', '比分', '我的赛程'):
             entries = [e for e in tournaments.list(venue_id) if self.event_allowed(e) and e['date'] == (selection['day'] or self.clock().date().isoformat())]
             if text == '我的赛程':
                 entries = [e for e in entries if any(str(p['user_id']) == self.ctx.actor for p in tournaments.get(e['id'])['participants'])]
             if not entries:
-                return '当日没有符合条件的赛事。'
+                return self.say('event.none_today')
             return '\n\n'.join(tournaments.describe(e['id'], 'mine' if text == '我的赛程' else 'schedule') for e in entries)
         resume = re.fullmatch(r'继续比赛(?:\s+(\d+))?', text)
         if resume:
@@ -466,10 +475,10 @@ class Commands:
                 return tournaments.describe(event['id'])
             candidates = [event for event in tournaments.resume_candidates(venue_id, selection['day']) if self.event_allowed(event)]
             if not candidates:
-                return '未找到本场地、本群且人员匹配的未结束赛事。可先报名后发起赛制。'
+                return self.say('event.no_resume')
             if len(candidates) == 1:
                 return await self.run(MessageInput(f'场地{venue_id} 继续比赛 {candidates[0]["id"]}'), name, allow_ai=False)
-            return '存在多场未结束赛事，请选择：\n\n' + '\n\n'.join(f"继续比赛 {e['id']} · {escape(e['title'])}" for e in candidates)
+            return self.say('event.choose_resume',choices=Markup('\n\n'.join(str(example(self.ctx,f"继续比赛 {e['id']}"))+' · '+escape(e['title']) for e in candidates)))
         event_command = re.fullmatch(r'赛事\s*(\d+)\s+(报名(?:\+(\d+))?|取消报名|名单)', text)
         if event_command:
             event_id = int(event_command[1])
@@ -479,9 +488,9 @@ class Commands:
                 return tournaments.describe(event_id, 'registration')
             if event_command[2] == '取消报名':
                 tournaments.cancel(event_id, self.ctx.actor, venue_id)
-                return '已处理该赛事的本人取消报名，代报名人员仍保留。'
+                return self.say('event.cancelled',event=tournaments.get(event_id,venue_id)['title'])
             tournaments.enroll(event_id, self.ctx.actor, name, int(event_command[3] or 0), venue_id)
-            return '赛事报名已更新。'
+            return self.say('event.enrolled',event=tournaments.get(event_id,venue_id)['title'])
         for summary in tournaments.list(venue_id, _include_disabled=True):
             keyword = summary.get('keyword')
             phrase = (keyword if keyword.endswith('报名') else keyword + '报名') if keyword else ''
@@ -489,8 +498,8 @@ class Commands:
                 self.require_event(summary)
                 matched = re.fullmatch(re.escape(phrase) + r'(?:\+(\d+))?', text)
                 tournaments.enroll(summary['id'], self.ctx.actor, name, int(matched[1] or 0), venue_id)
-                return f"已更新 {escape(summary['title'])} 的报名。"
-        return '未识别指令，本次未执行。发送 帮助 查看本机器人可用指令。' + ('自然语言需求请以 AI 开头。' if supports(self.ctx, 'ai') else '')
+                return self.say('event.enrolled',event=summary['title'])
+        return self.say('entry.unknown',ai_hint=Markup('\n也可以发送 '+str(example(self.ctx,'AI 您的需求'))+' 告诉我。' if supports(self.ctx,'ai') else ''))
 
     async def route_feature(self, feature_id):
         from .ai_routing import feature_descriptor
@@ -643,7 +652,7 @@ class Commands:
         require_capability(self.ctx,'ai')
         Members(self.ctx,self.clock).require_approved()
         if not self.service.config()['ai']['enabled']:
-            return 'AI业务助手未开启，请联系管理员开启。'
+            return self.say('ai.disabled')
         conversation = AiConversation(self.ctx,self.clock)
         generation, prior = conversation.begin(self.service.config()['ai']['confirmation_minutes'])
         try:
@@ -662,7 +671,7 @@ class Commands:
             return await self.route_feature(feature_id)
         Members(self.ctx, self.clock).require_approved()
         if not self.service.config()['ai']['enabled']:
-            return 'AI业务助手未开启，本次未调用模型。请使用固定指令，或联系管理员开启AI。'
+            return self.say('ai.disabled')
         unsupported = unsupported_reason(text)
         if unsupported:
             return unsupported
@@ -678,9 +687,9 @@ class Commands:
         Members(self.ctx, self.clock).require_approved()
         self.service.venue(venue_id, True)
         if not self.service.config()['ai']['enabled']:
-            return 'AI已关闭，本次未执行操作。'
+            return self.say('ai.disabled_during')
         if policy_epoch != self.ai_policy_epoch():
-            return '业务配置已变化，本次未执行，请重新提出操作。'
+            return self.say('ai.policy_changed')
         if proposal.get('intent') == 'BusinessPlan':
             from .ai_plan_flow import Plans
             return await Plans(self).propose(proposal,generation)
@@ -748,8 +757,8 @@ class Commands:
             if intent == 'StartDailyPlan':
                 label = next((k for k,v in STRATEGIES.items() if v == arguments['assignment_strategy']), '随机')
                 detail = f'\n\n分配方式：{label}；确认后显示人数与可选赛制，再选择比赛形式。'
-            return '**AI 计划待确认 · 尚未执行**\n\n1. '+escape(command)+detail+'\n\n回复 **确认** 执行；修改请发 **AI + 修改意见**；放弃请发 **取消计划**。'
-        return '**AI 查询 · 后台结果**\n\n' + await self.run(MessageInput(command), allow_ai=False)
+            return self.say('ai.confirm',steps=Markup('1. '+escape(command)+detail),edit_command=example(self.ctx,'AI 修改意见'))
+        return self.say('ai.query',content=Markup(await self.run(MessageInput(command),allow_ai=False)))
 
     def ai_policy_epoch(self):
         with connect(self.ctx.db_path) as db:
@@ -770,7 +779,7 @@ class Commands:
             conversation.finish(token,'failed')
             raise ValueError('提案已失效或不属于当前身份，未执行任何操作')
         conversation.finish(token,'cancelled')
-        return 'AI提案已取消，未执行业务操作。'
+        return self.say('ai.cancelled')
 
     async def confirm(self, token, name):
         from .ai_conversation import AiConversation
@@ -826,4 +835,4 @@ class Commands:
             raise
         with connect(self.ctx.transport_db_path, True) as db:
             db.execute("UPDATE ai_pending SET status='consumed' WHERE token=?", (token,))
-        return '**AI 已确认 · 执行结果**\n\n' + result
+        return self.say('ai.completed',content=Markup(result))

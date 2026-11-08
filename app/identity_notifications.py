@@ -166,7 +166,7 @@ def _role_name(role):
     return ROLE_LABELS.get(role, '管理角色')
 
 
-def event_text(event):
+def event_text(event, ctx=None):
     old, new = json.loads(event['before_json']), json.loads(event['after_json'])
     title, detail = '会员资料已更新', ''
     if event['kind'] == 'membership':
@@ -205,7 +205,23 @@ def event_text(event):
         title = '资料调整已通过' if approved else '资料调整已退回'
         detail = f"资料申请{new['request_id']} · " + '、'.join(escape(v) for v in new['fields']) + '。\n\n'
         detail += '新资料已生效。发送 **我的资料** 查看。' if approved else '原资料保持不变。请联系会员管理员核对后重新申请。'
-    return '# ' + title + '\n\n' + mention(event['user_id'], event['member_name']) + '\n\n' + detail
+    from .dialogue import render, Markup
+    values={'person':Markup(mention(event['user_id'],event['member_name'])), 'title':title, 'detail':Markup(detail)}
+    key='notice.changed'
+    if event['kind']=='membership':
+        key='notice.'+({'approved':'restored' if old['status']=='suspended' else 'approved',
+                       'rejected':'rejected','suspended':'suspended','pending':'pending'}.get(new['status'],'changed'))
+    elif event['kind']=='roles':
+        key='notice.roles'
+    elif event['kind']=='level':
+        key='notice.level_approved' if new['level_status']=='approved' and new['level'] is not None else 'notice.level_rejected'
+        values['level']=new['level']
+    elif event['kind']=='groups':
+        key='notice.groups';values['groups']='、'.join(g['name'] for g in new['groups']) or '未分组'
+    elif event['kind']=='profile_request':
+        key='notice.profile_approved' if new['status']=='approved' else 'notice.profile_rejected'
+        values['fields']='、'.join(new['fields'])
+    return render(ctx,key,**values)
 
 
 class IdentityNotifications:
@@ -306,7 +322,7 @@ class IdentityNotifications:
                     raise ValueError('群绑定已变更')
                 if not self.platform.channel(item['channel_id'])['webhook_url']:
                     raise ValueError('未配置发送Webhook')
-                ids = Outbox(ctx).enqueue(event_text(event), 'identity:' + event_id)
+                ids = Outbox(ctx).enqueue(event_text(event,ctx), 'identity:' + event_id)
                 state, error = 'queued', None
             except (ValueError, PermissionError):
                 ids, state, error = [], 'blocked', '原通知机器人或群绑定不可用，请检查'+notification_feature(event)+'和发送配置后重试'

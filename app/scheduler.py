@@ -61,16 +61,19 @@ class Scheduler:
                             data['sessions']=[item for item in data['sessions'] if item['id'] in shown_ids]
                             data['registrations']=[item for item in data['registrations'] if item['session_id'] in shown_ids]
                             if kind=='roster' or empty_roster(data):
-                                text=roster(data,venue['id'])
+                                text=roster(data,venue['id'],ctx=channel)
                             else:
                                 title='报名即将结束' if kind=='closing' else '今日报名'
                                 sections=[]
                                 for item in shown:
+                                    from .dialogue import render, Markup, command
                                     section=session_heading(item,venue['id'],title)
                                     if item.get('occupancies'):
                                         section+='\n\n🔴 **已占用 · 不可报名** '+escape(item['booking_notice'])
                                     elif not any(row['session_id']==item['id'] and row['status']=='active' for row in data['registrations']):
-                                        section+='\n\n'+empty_session_notice(item)
+                                        section+='\n\n'+empty_session_notice(dict(item,venue_id=venue['id']),channel)
+                                    elif item['status']!='ended':
+                                        section=render(channel,'broadcast.closing' if kind=='closing' else 'broadcast.open',heading=Markup(section),enroll_command=command(channel,f"{item['date']} 场地{venue['id']} 第{item['number']}场 报名"))
                                     sections.append(section)
                                 text='\n\n'.join(sections)
                             key=f"broadcast:{rule['id']}:{rule_fingerprint(rule)}:{target.date()}:{rule['time'].replace(':','')}:{venue['id']}:{kind}:{channel.channel_id}"
@@ -83,7 +86,9 @@ class Scheduler:
             event=tournaments.get(notice['tournament_id'])
             destinations=event.get('channel_ids',[])
             if destinations:
-                try:self.notifications.enqueue(notice['text'],destinations,key='tournament:'+notice['key'],venue_id=event['venue_id'],tournament_id=event['id'])
+                try:
+                    import json
+                    self.notifications.enqueue(notice['text'],destinations,key='tournament:'+notice['key'],venue_id=event['venue_id'],tournament_id=event['id'],dialogue=json.loads(notice.get('dialogue_json') or 'null'))
                 except (ValueError,PermissionError):log.warning('Tournament notification channel needs configuration')
         self.notifications.recover()
         self.identity_notifications.recover()

@@ -137,7 +137,8 @@ class ProfileChanges:
             changed = db.execute("UPDATE member_profile_requests SET status='cancelled',reviewed_at=?,reviewed_by=? WHERE scope_id=? AND user_id=? AND status='pending'", (stamp(self.clock()), self.ctx.actor, self.ctx.scope_id, self.ctx.actor)).rowcount
             if changed:
                 audit(db, self.ctx.actor, 'member.profile_cancel', {'scope_id': self.ctx.scope_id})
-        return '已撤回本人的资料申请。' if changed else '没有待审核的资料申请。'
+        from .dialogue import render
+        return render(self.ctx,'profile.cancelled' if changed else 'profile.no_pending')
 
     def review(self, request_id, approved, note=''):
         if type(request_id) is not int or request_id < 1 or type(approved) is not bool:
@@ -191,13 +192,15 @@ class ProfileChanges:
             self.members.require_approved(allow_admin=False, bot_access=False)
             from .registration import create_form
             url = create_form(self.ctx, self.clock, purpose='profile')
-            return '[填写资料调整申请](' + url + ')' if url else '发送：申请分组 提高组 / 申请等级 5级。'
+            from .dialogue import render, link, command
+            return render(self.ctx,'profile.form',form_link=link('填写资料调整申请',url)) if url else render(self.ctx,'profile.fallback',group_example=command(self.ctx,'申请分组 提高组'),level_example=command(self.ctx,'申请等级 5级'))
         if text in ('可选分组', '分组列表'):
             groups = self.groups()
             return '**可申请分组**\n\n' + ('、'.join(escape(g['name']) for g in groups) or '暂无分组，请联系管理员。')
         if text in ('我的资料申请', '资料申请进度'):
             rows = self.list()
-            return '\n\n'.join(self.describe(r) for r in rows[:5]) if rows else '尚未提交资料调整申请。发送 修改资料 开始。'
+            from .dialogue import render, command
+            return '\n\n'.join(self.describe(r) for r in rows[:5]) if rows else render(self.ctx,'profile.empty',edit_command=command(self.ctx,'修改资料'))
         if text == '取消资料申请':
             return self.cancel()
         match = re.fullmatch(r'(?:申请|修改|调整)分组\s*[:：]?\s*(.+)', text)
@@ -207,14 +210,18 @@ class ProfileChanges:
             if names != ['无'] and (not names or set(names) - available.keys()):
                 raise ValueError('分组名称未找到，请发送 可选分组；多个分组用逗号分隔')
             row = self.submit({'group_ids': [] if names == ['无'] else [available[n] for n in names]})
-            return self.describe(row) + '\n\n等待会员管理员审核；申请分组为完整名单。'
+            from .dialogue import render, Markup
+            return render(self.ctx,'profile.submitted',content=Markup(self.describe(row)))
         match = re.fullmatch(r'(?:申请|修改|调整)等级\s*[:：]?\s*(\d+|[一二三四五六七八九])\s*级?', text)
         if match:
             level = int(match[1]) if match[1].isdigit() else '一二三四五六七八九'.index(match[1]) + 1
-            return self.describe(self.submit({'level': level})) + '\n\n等待会员管理员审核。'
+            from .dialogue import render, Markup
+            return render(self.ctx,'profile.submitted',content=Markup(self.describe(self.submit({'level':level}))))
         if text in ('资料待审核', '资料审核列表'):
             rows = self.list(all_users=True, status='pending')
-            return ('**待审核资料**\n\n' + table(['资料申请', '姓名', '修改项目'], [[f"资料申请{r['id']}", r['member_name'], '、'.join(i['label'] for i in r['items'])] for r in rows]) + '\n\n发送 资料查看 申请12 / 资料通过 申请12 / 资料拒绝 申请12。') if rows else '目前没有待审核的资料调整申请。'
+            from .dialogue import render, Markup, command
+            content='**待审核资料**\n\n'+table(['资料申请','姓名','修改项目'],[[f"资料申请{r['id']}",r['member_name'],'、'.join(i['label'] for i in r['items'])] for r in rows])
+            return render(self.ctx,'profile.review_list',content=Markup(content),view_command=command(self.ctx,'资料查看 申请12'),approve_command=command(self.ctx,'资料通过 申请12'),reject_command=command(self.ctx,'资料拒绝 申请12')) if rows else render(self.ctx,'profile.review_empty')
         match = re.fullmatch(r'资料(查看|通过|拒绝)\s*(?:资料)?(?:申请)?\s*(\d+)', text)
         if match:
             if match[1] == '查看':
@@ -223,5 +230,6 @@ class ProfileChanges:
                     raise ValueError('资料申请不存在')
                 return self.describe(row)
             row = self.review(int(match[2]), match[1] == '通过')
-            return self.describe(row) + '\n\n' + ('该申请已处理，无需重复操作。' if row.get('already_reviewed') else '审核结果将通知本人。')
+            from .dialogue import render, Markup
+            return render(self.ctx,'profile.review_already' if row.get('already_reviewed') else 'profile.review_done',content=Markup(self.describe(row)))
         return None

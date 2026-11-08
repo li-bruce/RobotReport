@@ -21,6 +21,8 @@ const table=run('markdown("| 姓名 | 等级 |\\n| --- | --- |\\n| 张三 | **2 
 assert.match(table,/<table>/);assert.match(table,/<thead>/);assert.match(table,/<th>姓名<\/th>/);assert.match(table,/<strong>2 级<\/strong>/);assert.equal((table.match(/<tr>/g)||[]).length,3);
 const escaped=run('markdown("| 姓名 |\\n| --- |\\n| <img src=x onerror=alert(1)> |")');
 assert.ok(!escaped.includes('<img'));assert.match(escaped,/&lt;img/);
+assert.match(run(`markdown('<font color="#0066b2"><b>@活动助手 注册</b></font>')`),/<span style="color:#0066b2"><strong>@活动助手 注册<\/strong><\/span>/);
+assert.ok(!run(`markdown('<b onclick="alert(1)">姓名</b>')`).includes('<b onclick'));
 assert.match(run('markdown("| 名字 |\\n| --- |\\n| 张\\\\|三 |")'),/<td>张\|三<\/td>/);
 assert.equal(run('memberName({name:"secret-id",user_id:"secret-id"})'),'待补姓名');
 assert.equal(run('memberName({name:"secret-id+1",user_id:"secret-id"})'),'待补姓名');

@@ -279,7 +279,8 @@ def dispatch_notices(platform, clock=now):
                     if any(s['count'] for s in sessions):
                         lines.append('已有报名保留，请留意活动调整；需要退出可发送取消报名。')
                     session_key = ','.join(str(s['id']) for s in sessions)
-                    sender.enqueue('\n\n'.join(lines),[channel.channel_id],key=f"availability:{notice['id']}:{channel.chat_id}:{session_key}",
+                    from .dialogue import render, Markup
+                    sender.enqueue(render(channel,'notice.occupancy',content=Markup('\n\n'.join(lines))),[channel.channel_id],key=f"availability:{notice['id']}:{channel.chat_id}:{session_key}",
                                    venue_id=block['venue_id'],session_ids=[s['id'] for s in sessions])
                     groups.setdefault(channel.chat_id,set()).update(s['id'] for s in sessions)
                 except (ValueError, PermissionError):

@@ -58,6 +58,7 @@ async function loadInlineBot(card){
     if(!card.isConnected)return;
     let bot=state.bots.find(b=>b.id===id),revision=broadcasts.revision;
     body.innerHTML=inlineBotForm(bot,state.page.botScopeSlots)+settingsPanel('定时播报','按北京时间发送至该机器人关联的群。',`<form id="robot-broadcast-${attr(id)}"><div data-broadcast-notice></div><div data-broadcast-rules></div><div class="bot-inline-save"><span data-save-status role="status"></span><div class="inline-error" role="alert"></div><button type="submit" class="btn primary">保存定时播报</button></div></form>`,'bot-broadcast-panel')+`<div class="robot-inline-utilities"><button type="button" class="btn small quiet" data-action="bot-help" data-id="${attr(id)}">帮助预览</button><button type="button" class="btn small danger-quiet" data-action="bot-delete" data-id="${attr(id)}">删除机器人</button></div>`;
+    body.querySelector('.robot-inline-utilities').insertAdjacentHTML('beforebegin',botDialoguePanel(id));bindBotDialogue(card);
     const form=body.querySelector('.bot-inline-form'),broadcastForm=body.querySelector('[id^="robot-broadcast-"]');
     bindScopeControls(form);
     const readPolicy=bindBotPolicy(form,bot.user_policy,attributes);

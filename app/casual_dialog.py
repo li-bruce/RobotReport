@@ -5,6 +5,7 @@ import re
 
 from .casual import CasualMatches, render_match, render_history, render_statistics, table, _safe
 from .db import connect, dumps, now, stamp
+from .dialogue import render, command, Markup
 
 
 GUIDE = '''**🏸 记录今天的一次对局**
@@ -84,15 +85,15 @@ def _choose(service, state):
                 state['choice'] = {'side': side, 'index': index}
                 _save(service, state)
                 rows = [[n, p['name'], {'male': '男', 'female': '女'}.get(p.get('gender'), '未填写'), f"{p['level']}级" if p.get('level') else '无级别', '、'.join(p.get('groups') or []) or '未分组'] for n, p in enumerate(person['candidates'], 1)]
-                return f"**请选择“{_safe(person['ambiguous_name'])}”对应的会员**\n\n" + table(['序号', '姓名', '性别', '等级', '组别'], rows) + '\n\n回复 `选择1`（替换为序号）。无法确定时请联系本人或管理员核对；20分钟内有效。'
+                return render(service.ctx,'record.choose',name=person['ambiguous_name'],table=Markup(table(['序号','姓名','性别','等级','组别'],rows)),choose_command=command(service.ctx,'选择1'))
     result = service.create(state['data'])
     if result.get('duplicate'):
         state['duplicate_id'] = result['id']
         state.pop('choice', None)
         _save(service, state)
-        return render_match(result) + '\n\n⚠️ 已有相同日期、对手与比分的记录，本次未重复记入。若确实又打了一局，请回复 `重复记录`；否则无需操作。'
+        return render(service.ctx,'record.duplicate',content=Markup(render_match(result)),repeat_command=command(service.ctx,'重复记录'))
     _clear(service)
-    return render_match(result) + f"\n\n✅ 已记录并计入统计。修改：`修改记录 {result['id']} 21:18`；作废：`作废记录 {result['id']}`。"
+    return render(service.ctx,'record.saved',content=Markup(render_match(result)),edit_command=command(service.ctx,f"修改记录 {result['id']} 21:18"))
 
 
 def _parse_record(service, text, venue_id):
@@ -157,17 +158,17 @@ def handle_casual(ctx, text, venue_id=None, clock=now, *, explicit_venue=False):
         return render_history(service.history(**kwargs)) if history else render_statistics(service.statistics(**kwargs))
     if change:
         row = service.update(int(change[1]), {'score_a': int(change[2]), 'score_b': int(change[3])})
-        return render_match(row) + '\n\n✅ 比分已修正，统计已同步更新。'
+        return render(ctx,'record.updated',content=Markup(render_match(row)))
     if remove:
         row = service.void(int(remove[1]))
-        return f"✅ 对局 #{row['id']} 已作废，不再计入统计；修改痕迹已保留。"
+        return render(ctx,'record.voided',number=row['id'])
     if text == '取消记录':
         _clear(service)
-        return '已取消当前记录草稿，已提交的对局不会受影响。'
+        return render(ctx,'record.cancelled')
     if choose or text == '重复记录':
         state = _pending(service)
         if not state:
-            return None if choose else '当前没有待确认的重复对局，请重新发送记录内容。'
+            return None if choose else render(ctx,'record.no_duplicate')
         if choose:
             choice = state.get('choice')
             if not choice:
@@ -180,9 +181,9 @@ def handle_casual(ctx, text, venue_id=None, clock=now, *, explicit_venue=False):
             state.pop('choice', None)
             return _choose(service, state)
         if not state.get('duplicate_id'):
-            return '请先完成同名会员选择。'
+            return render(ctx,'record.choose_first')
         state['data']['allow_duplicate'] = True
         return _choose(service, state)
     if text in ('记录', '记录帮助'):
-        return GUIDE
+        return render(ctx,'record.guide',record_example=command(ctx,'记录 双打 我、张三 VS 李四、王五 21:19'),single_record_example=command(ctx,'记录 单打 我 VS 张三 21:19'))
     return _choose(service, _parse_record(service, text, venue_id))

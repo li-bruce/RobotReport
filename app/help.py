@@ -18,6 +18,16 @@ def syntax(literal, fields=''):
     return command(literal) + (' ' + parameter(fields) if fields else '')
 
 
+def qualified_commands(text, ctx):
+    """Only complete examples get an @ prefix, never fragments in a grammar line."""
+    import re
+    import html
+    from .dialogue import command as example
+    return '\n'.join(line if line.startswith('格式：') else re.sub(
+        r'<font color="'+COMMAND_COLOR+r'">([^<>]*?)</font>',
+        lambda m:str(example(ctx,html.unescape(m[1]))),line) for line in text.split('\n'))
+
+
 CATEGORIES = {'注册':'registration','报名':'enrollment','比赛':'daily_events','大型赛事':'large_events',
               '记录':'match_records','统计':'statistics','AI':'ai','管理':'management'}
 
@@ -73,7 +83,7 @@ def syntax_help(enabled, is_admin=False, permissions=(), category=None):
     return '\n\n'.join(rows) or '本机器人当前没有开放的业务指令。'
 
 
-def command_help(member, is_admin=False, category=None, permissions=None, capabilities=None):
+def command_help(member, is_admin=False, category=None, permissions=None, capabilities=None, ctx=None):
     enabled=set(normalize_capabilities(capabilities))
     permissions=set(permissions or ())
     can=lambda key:_can(enabled,permissions,is_admin,key)
@@ -84,6 +94,10 @@ def command_help(member, is_admin=False, category=None, permissions=None, capabi
         if CATEGORIES[category] not in enabled:return '本机器人未开启此业务。发送 '+command('帮助')+' 查看可用功能。'
         if category=='管理' and not (is_admin or permissions):return '当前没有群内管理权限。'
         body=syntax_help(enabled,is_admin,permissions,category)
+        if ctx is not None:
+            from .dialogue_help import category_reply
+            body=qualified_commands(body,ctx)
+            return '# '+category+'用法\n\n'+category_reply(ctx,category,body)
         notes=[]
         if category=='注册':
             notes=[
@@ -155,7 +169,8 @@ def scoped_help(ctx, member, category=None, clock=None):
     from dataclasses import replace
     from .time_rules import effective_capabilities
     ctx=replace(ctx,capabilities=effective_capabilities(ctx))
-    value=command_help(member,ctx.is_admin,category,ctx.permissions,ctx.capabilities)
+    value=command_help(member,ctx.is_admin,category,ctx.permissions,ctx.capabilities,ctx=ctx)
+    if not category:value=qualified_commands(value,ctx)
     from .bot_access import public_summary
     audience=public_summary(ctx)
     if audience:value=audience+'\n\n'+value

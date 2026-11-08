@@ -26,6 +26,7 @@ Current application version: **v1.0**. The interface and bot commands are curren
 | Match history | Casual singles/doubles records, personal results, partner combinations and opponent statistics. |
 | Bots and groups | Multiple bots in one group; **one current group per bot**. Separate robot settings and a bot-to-group connection graph with optional sending/receiving addresses. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
 | Messages | Compose, preview and send text, images and file links; schedule reminders by message type, bot, date, workday/weekend/holiday conditions and time. |
+| Robot replies | Personalized greetings and scoped command examples; edit, preview and restore categorized reply templates independently for each bot. |
 | Optional AI | Natural-language business requests, multi-step plans, numbered previews and simple `确认` confirmation before changes. |
 
 Membership approval, club roles and event-specific staff roles are separate. Approved members share their identity across this backend's bots and venues. Expired membership prevents new registrations while preserving access to history.

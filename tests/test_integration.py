@@ -116,7 +116,7 @@ class IntegrationTests(CoreFixture):
         self.daily()
         self.daily('single_elimination')
         response=asyncio.run(self.commands(replace(self.member,actor='1')).run('继续比赛'))
-        self.assertIn('存在多场',response)
+        self.assertIn('您想继续哪一场',response)
         venue=self.s.save_venue({'name':'第二场地'})
         with self.assertRaises(PermissionError):
             asyncio.run(self.commands().run(f"场地{venue['id']} 继续比赛 1"))
@@ -129,7 +129,7 @@ class IntegrationTests(CoreFixture):
         self.assertEqual(sum(bool(m['scores']) for m in saved['matches']), 1)
         second = self.daily('single_elimination')
         reply = asyncio.run(self.commands().run('第2场 21:18'))
-        self.assertIn('本次没有记分', reply)
+        self.assertIn('本次尚未记分', reply)
         for item, count in [(event, 1), (second, 0)]:
             saved = Tournaments(self.ctx, self.clock).get(item['id'])
             self.assertEqual(sum(bool(m['scores']) for m in saved['matches']), count)

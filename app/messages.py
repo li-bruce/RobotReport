@@ -137,15 +137,21 @@ def session_heading(session, venue_id=1, title=''):
     return f"## {heading}\n\n**{escape(session['start'])}–{escape(session['end'])}**"
 
 
-def empty_session_notice(session):
+def empty_session_notice(session, ctx=None):
+    from .dialogue import render
     if session.get('status') == 'ended':
-        return '暂时无人报名 · 本场已结束。'
+        return render(ctx,'roster.ended')
     if session.get('can_enroll') is False:
-        return '暂时无人报名 · 本场暂不可报名。'
-    return '暂时无人报名，欢迎报名参与！'
+        return render(ctx,'roster.unavailable')
+    if ctx is None:
+        return '暂时无人报名，欢迎报名参与！'
+    from .dialogue import command
+    number=session.get('number')
+    selector=f"{session['date']} 场地{session['venue_id']} 第{number}场 " if number and session.get('venue_id') else ''
+    return render(ctx,'roster.empty',enroll_command=command(ctx,selector+'报名'))
 
 
-def roster(data, venue_id=1):
+def roster(data, venue_id=1, *, ctx=None):
     lines = []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
@@ -154,11 +160,12 @@ def roster(data, venue_id=1):
             lines.append('🔴 **已占用 · 不可报名** '+escape(session['booking_notice']))
         if not rows:
             if not session.get('occupancies'):
-                lines.append(empty_session_notice(session))
+                lines.append(empty_session_notice(dict(session,venue_id=venue_id),ctx))
             continue
         lines.append(f"**{len(rows)} 人** · 正式 {session['capacity']} · 替补 {session['substitute_capacity']}")
         lines.append(registration_table(rows))
-    return '\n\n'.join(lines) if lines else '暂无场次安排。'
+    from .dialogue import render
+    return '\n\n'.join(lines) if lines else render(ctx,'roster.no_sessions') if ctx else '暂无场次安排。'
 
 
 def tournament_text(item, mode='schedule'):

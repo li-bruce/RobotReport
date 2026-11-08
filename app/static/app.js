@@ -179,6 +179,8 @@ function markdown(value){
     });
     text=e(text).replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`\n]+)`/g,'<code>$1</code>');
     text=text.replace(/&lt;font color=(?:&#39;|&quot;)(#[0-9a-f]{6})(?:&#39;|&quot;)&gt;(.*?)&lt;\/font&gt;/gi,'<span style="color:$1">$2</span>');
+    text=text.replace(/&lt;(\/)?(?:b|strong)&gt;/gi,(_,close)=>close?'</strong>':'<strong>')
+      .replace(/&lt;(\/)?(?:i|em)&gt;/gi,(_,close)=>close?'</em>':'<em>').replace(/&lt;br\s*\/?&gt;/gi,'<br>');
     return text.replace(/\u0001(\d+)\u0002/g,(_,i)=>tokens[Number(i)]||'');
   };
   const lines=String(value||'').split('\n'),parts=[];

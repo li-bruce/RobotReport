@@ -72,7 +72,7 @@ class MentionRegistrationTests(CoreFixture):
         self.platform.update(self.admin, self.ctx.id, {'name': '喂 - 注册服务'})
         assert '/register#' in asyncio.run(router.run('@喂 - 注册服务 注册'))
         assert '已注册' in asyncio.run(Commands(self.member, self.clock).run('@喂 - 注册服务 注册'))
-        with pytest.raises(PermissionError, match='打开本人注册表单'):
+        with pytest.raises(PermissionError, match='尚未注册'):
             asyncio.run(router.run('@喂 - 注册服务 报名'))
         app = create_app(self.temp.name, TOKEN, False, False, self.clock)
         with TestClient(app) as client:

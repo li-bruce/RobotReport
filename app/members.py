@@ -398,10 +398,11 @@ class Members:
         if allow_admin and admin and user_id == self.ctx.actor:
             return member
         if not member or not member['name'] or member['status'] == 'unregistered':
-            raise PermissionError('请先发送 注册，打开本人注册表单；审核通过后即可使用会员功能')
+            from .dialogue import entry, MembershipPrompt
+            raise MembershipPrompt(entry(self.ctx, member))
         if member['status'] != 'approved':
-            status = {'rejected':'未通过，请修改资料重新提交','suspended':'已停用，请联系管理员','pending':'待审核'}.get(member['status'],'尚未通过')
-            raise PermissionError(f'会员资料{status}，请等待管理员审核后使用会员功能')
+            from .dialogue import entry, MembershipPrompt
+            raise MembershipPrompt(entry(self.ctx, member))
         return member
 
     def validate_rules(self, rules, db=None):

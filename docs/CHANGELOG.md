@@ -1,5 +1,12 @@
 # Changes
 
+## v1.0 — 2026-11-08 · Personal robot replies
+
+- Greet members by name and use the actual robot name in colored command examples; a mention without text now shows a concise, capability-aware welcome.
+- Edit categorized reply templates inside each robot, with previews, length limits, default restoration and conflict-aware saving.
+- Share the wording system across registration, rosters, event planning, match records, AI plans and proactive notices; retain trusted business facts and existing delivery routing.
+- Add mobile/desktop editing guidance and a synthetic screenshot.
+
 ## v1.0 — 2026-10-27 · Consistent message headings
 
 - Apply the shared heading style to every section in a robot message, including later sessions in rosters and scheduled broadcasts.

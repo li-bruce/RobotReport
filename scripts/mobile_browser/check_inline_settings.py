@@ -37,7 +37,7 @@ try:
             first.locator(':scope>summary').click();first.locator('.bot-inline-form').wait_for()
             second.locator(':scope>summary').click();second.locator('.bot-inline-form').wait_for()
             check('no modal or route change',page.url.endswith('#bots') and not page.locator('#modal').is_visible())
-            check('five settings panels',first.locator('.bot-setting-panel').count()==5)
+            check('six settings panels',first.locator('.bot-setting-panel').count()==6)
             check('unique control IDs',page.evaluate('(()=>{const ids=[...document.querySelectorAll("[id]")].map(n=>n.id);return ids.length===new Set(ids).size})()'))
             f1,f2=first.locator('.bot-inline-form'),second.locator('.bot-inline-form')
             draft=f'未保存二号-{width}';f2.locator('[name=name]').fill(draft)

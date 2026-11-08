@@ -152,6 +152,8 @@ class TournamentService:
                 db.execute("ALTER TABLE tour_participants ADD COLUMN is_proxy INTEGER NOT NULL DEFAULT 0")
             if "gender" not in columns:
                 db.execute("ALTER TABLE tour_participants ADD COLUMN gender TEXT NOT NULL DEFAULT 'unknown'")
+            if 'dialogue_json' not in {row[1] for row in db.execute('PRAGMA table_info(tour_notifications)')}:
+                db.execute("ALTER TABLE tour_notifications ADD COLUMN dialogue_json TEXT NOT NULL DEFAULT 'null'")
             db.commit()
 
     def _connect(self):
@@ -1167,9 +1169,11 @@ class TournamentService:
 
     def _close_notification(self, db, event):
         count = db.execute("SELECT count(*) FROM tour_participants WHERE tournament_id=? AND status='active'",(event["id"],)).fetchone()[0]
-        text = f"🏸 **{_safe_md(event['title'])} · 报名结束**\n\n场地 {event['venue_id']} · 已报名 **{count} 人**\n\n请等待组织者公布分组及赛程。"
-        db.execute("INSERT OR IGNORE INTO tour_notifications(key,tournament_id,chat_id,text,created_at) VALUES(?,?,?,?,?)",
-                   (f"tournament:{event['id']}:registration_closed",event["id"],event["chat_id"],text,_now().isoformat()))
+        from .dialogue import render
+        values={'event':event['title'],'venue':event['venue_id'],'count':count}
+        text=render(None,'notice.event_closed',**values)
+        db.execute("INSERT OR IGNORE INTO tour_notifications(key,tournament_id,chat_id,text,created_at,dialogue_json) VALUES(?,?,?,?,?,?)",
+                   (f"tournament:{event['id']}:registration_closed",event["id"],event["chat_id"],text,_now().isoformat(),json.dumps({'id':'notice.event_closed','values':values},ensure_ascii=False)))
 
     def due_notifications(self, now):
         moment = _time(now)
@@ -1184,7 +1188,7 @@ class TournamentService:
                     self._close_notification(db,event)
             # Durable notification rows deliberately repeat. The caller atomically
             # inserts them into its outbox using key UNIQUE before sending.
-            return [dict(row) for row in db.execute("SELECT key,text,tournament_id,chat_id FROM tour_notifications ORDER BY created_at")]
+            return [dict(row) for row in db.execute("SELECT key,text,tournament_id,chat_id,dialogue_json FROM tour_notifications ORDER BY created_at")]
 
     def render(self, tournament_id, section="schedule", actor=None):
         """Markdown template used equally by admin previews and bot notifications."""

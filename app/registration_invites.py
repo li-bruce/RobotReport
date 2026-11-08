@@ -51,8 +51,9 @@ class RegistrationInvites:
             if re.fullmatch(r'[A-Za-z0-9.!#$%&*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',email):
                 names.append(f'<at email="{html_escape(email,quote=True)}">{html_escape(row["name"])}</at>')
             else:names.append(escape(row['name'] or '待补姓名'))
-        text='**请确认会员资料**\n\n'+'、'.join(names)+'\n\n请 @本机器人 发送 **注册确认**，打开链接确认本人姓名和资料。'
-        signature=hashlib.sha256(json.dumps([target.channel_id,rows],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        from .dialogue import render, command, Markup
+        text=render(target,'notice.import_invite',people=Markup('、'.join(names)),confirm_registration_command=command(target,'注册确认'))
+        signature=hashlib.sha256(json.dumps([target.channel_id,rows,text],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         return {'text':text,'count':len(rows),'signature':signature,'channel_id':target.channel_id,
                 'request_id':uuid.uuid4().hex}
 

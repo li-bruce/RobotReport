@@ -127,11 +127,12 @@ class AiConversation:
                        (status,stamp(self.clock()),self.ctx.scope_id,self.ctx.actor,token,self.ctx.id,self.ctx.chat_id))
 
 
-def preview_text(steps):
+def preview_text(steps,ctx=None):
     from .ai_operations import describe_step
     from .messages import escape
     lines = []
     for index, step in enumerate(steps, 1):
         label, detail = describe_step(step)
         lines.append(f'{index}. **{escape(label)}**：{escape(detail)}')
-    return '**AI 计划待确认 · 尚未执行**\n\n' + '\n\n'.join(lines) + '\n\n回复 **确认** 执行；修改请发 **AI + 修改意见**；放弃请发 **取消计划**。'
+    from .dialogue import render, command, Markup
+    return render(ctx,'ai.confirm',steps=Markup('\n\n'.join(lines)),edit_command=command(ctx,'AI 修改意见'))

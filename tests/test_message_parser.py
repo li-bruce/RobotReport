@@ -99,7 +99,9 @@ class UnifiedEntryTests(CoreFixture):
 
     def test_bare_address_opens_help_without_creating_enrollment(self):
         router = Commands(self.member, self.clock)
-        expected = asyncio.run(router.run(MessageInput('帮助')))
+        expected = asyncio.run(router.run('@俱乐部 - 注册 助手'))
+        assert '小李，您好' in expected and '@俱乐部 - 注册 助手 注册' in expected
+        assert len(expected) < len(asyncio.run(router.run(MessageInput('帮助'))))
         for message in ('@俱乐部 - 注册 助手', '<at user_id="bot">任意名称</at>',
                         message_input('@Club A', 'mentions', [{'start': 0, 'end': 7, 'kind': 'bot'}])):
             assert asyncio.run(router.run(message)) == expected

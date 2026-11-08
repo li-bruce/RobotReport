@@ -71,7 +71,7 @@ class WorkflowV2Tests(CoreFixture):
     def test_planning_requires_activation_defaults_doubles_and_persists(self):
         for user in ('1','2','3','4'): self.s.enroll(user,'irrelevant')
         router=self.commands()
-        self.assertIn('请先发送 组织比赛',asyncio.run(router.run('积分赛')))
+        self.assertIn('@一号 组织比赛',asyncio.run(router.run('积分赛')))
         reply=asyncio.run(router.run('组织比赛'))
         self.assertIn('双打',reply)
         self.assertIn('4人',reply)

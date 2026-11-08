@@ -98,6 +98,10 @@ class Plans:
         self.commands = commands
         self.store = AiPlanStore(commands.ctx,commands.clock)
 
+    def say(self,key,**values):
+        from .dialogue import render, command
+        return render(self.commands.ctx,key,ai_command=command(self.commands.ctx,'AI'),**values)
+
     async def propose(self, proposal, generation=None):
         commands = self.commands
         commands.refresh_context(enforce_access=True)
@@ -111,7 +115,8 @@ class Plans:
             results = []
             for step in steps:
                 results.append(await execute_step(commands,step))
-            return '**AI 查询 · 后台结果**\n\n' + '\n\n---\n\n'.join(results)
+            from .dialogue import Markup
+            return self.say('ai.query',content=Markup('\n\n---\n\n'.join(results)))
         before = snapshot(commands)
         index = 0
         try:
@@ -120,10 +125,10 @@ class Plans:
                     bind_target(preview,step)
                     await execute_step(preview,step)
         except Exception as exc:
-            return f'**计划未通过检查 · 尚未执行**\n\n第{index+1}步：{escape(_error(exc))}\n\n请调整整句话后重新发送。'
+            return self.say('ai.rejected',number=index+1,reason=_error(exc))
         commands.refresh_context(enforce_access=True)
         if snapshot(commands) != before:
-            return '业务数据在检查期间发生变化，本次未执行，请重新发送需求。'
+            return self.say('ai.changed')
         from .ai_conversation import AiConversation, preview_text
         conversation = AiConversation(commands.ctx,commands.clock)
         minutes = commands.service.config()['ai']['confirmation_minutes']
@@ -134,7 +139,7 @@ class Plans:
             shared = db if commands.ctx.db_path == commands.ctx.transport_db_path else None
             record = self.store.create(steps,before,epoch,commands.clock().date().isoformat(),minutes,_connection=shared)
             conversation.publish(generation,record['token'],steps,record['expires_at'],db)
-        return preview_text(steps)
+        return preview_text(steps,commands.ctx)
 
     async def confirm(self, token):
         from .ai_conversation import AiConversation
@@ -170,7 +175,8 @@ class Plans:
                     raise ValueError('步骤之间的权限、范围或业务数据已变化；已完成步骤保留，请重新核对剩余操作')
             except Exception as exc:
                 self.store.fail_step(token,index,_error(exc))
-                return '**AI 计划执行中止**\n\n' + self.status(token) + '\n\n已完成的步骤保留；后续步骤没有执行。'
+                from .dialogue import Markup
+                return self.say('ai.interrupted',content=Markup(self.status(token)))
             self.store.start_step(token,index)
             try:
                 output = await execute_step(commands,{'operation':item['operation'],'arguments':item['arguments']})
@@ -189,7 +195,8 @@ class Plans:
                 self.store.abort(token,_error(exc))
                 return '**AI 计划执行中止**\n\n' + self.status(token) + '\n\n已完成的步骤保留；后续步骤没有执行。'
         self.store.finish(token)
-        return '**AI 计划已完成**\n\n' + '\n\n---\n\n'.join(results)
+        from .dialogue import Markup
+        return self.say('ai.completed',content=Markup('\n\n---\n\n'.join(results)))
 
     def status(self, token):
         record = self.store.get(token)
@@ -197,7 +204,8 @@ class Plans:
                   'failed':'已中止','cancelled':'已取消','expired':'已过期','done':'完成','skipped':'未执行'}
         rows = [f"{s['index']+1}. **{escape(describe_step(s)[0])} · {labels.get(s['status'],s['status'])}**：{escape(describe_step(s)[1])}" +
                 ('\n'+escape(s['error']) if s['error'] else '') for s in record['steps']]
-        return f"**AI 计划 · {labels.get(record['status'],record['status'])}**\n\n" + '\n\n'.join(rows)
+        from .dialogue import Markup
+        return self.say('ai.progress',status=labels.get(record['status'],record['status']),content=Markup('\n\n'.join(rows)))
 
     def cancel(self, token):
         from .ai_conversation import AiConversation
@@ -209,7 +217,7 @@ class Plans:
             conversation.finish(token,'failed')
             raise
         conversation.finish(token,'cancelled')
-        return 'AI计划已取消，未执行业务操作。'
+        return self.say('ai.cancelled')
 
 
 def is_plan(commands, token):

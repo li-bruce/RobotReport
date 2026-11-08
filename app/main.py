@@ -259,6 +259,21 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     def delete_bot(bot_id: str, user=Depends(principal)):
         return platform.remove(user,bot_id)
 
+    @app.get('/api/bots/{bot_id}/dialogue')
+    def bot_dialogue(bot_id: str, user=Depends(principal)):
+        from .dialogue import settings_api
+        return settings_api(platform,user,bot_id)
+
+    @app.put('/api/bots/{bot_id}/dialogue')
+    def save_bot_dialogue(bot_id: str, data: dict, user=Depends(principal)):
+        from .dialogue import settings_api
+        return settings_api(platform,user,bot_id,data)
+
+    @app.post('/api/bots/{bot_id}/dialogue/preview')
+    def preview_bot_dialogue(bot_id: str, data: dict, user=Depends(principal)):
+        from .dialogue import preview
+        return preview(platform,user,bot_id,data)
+
     @app.post('/api/bots/{bot_id}/rotate-callback')
     def rotate_callback(bot_id: str, request: Request, user=Depends(principal)):
         token = secrets.token_urlsafe(36)
@@ -871,7 +886,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
             message = body['_message'] if generic else message_input(content, 'legacy')
             reply = await Commands(ctx, clock).run(message, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)
         except (ValueError, PermissionError) as exc:
-            reply = str(exc)
+            from .dialogue import render, MembershipPrompt
+            reply = str(exc) if isinstance(exc,MembershipPrompt) else render(ctx,'entry.error',reason=str(exc),name=body.get('creator_name') or body.get('display_name'))
         except BaseException:
             with connect(ctx.transport_db_path, True) as db:
                 db.execute("UPDATE inbox SET status='unknown',error='业务执行异常，禁止自动重放' WHERE event_id=?", (event_id,))

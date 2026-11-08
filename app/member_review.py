@@ -4,6 +4,7 @@ import re
 from .db import connect, now
 from .members import Members
 from .messages import escape, table
+from .dialogue import render, command, Markup
 
 
 class MemberReview:
@@ -33,14 +34,14 @@ class MemberReview:
     def describe_pending(self):
         rows = self.pending()
         if not rows:
-            return '**注册审核**\n\n目前没有待审核的注册申请。'
+            return render(self.ctx,'review.empty')
         result = '**待审核注册 · ' + str(len(rows)) + '人**\n\n' + table(
             ['申请编号','姓名','性别','自评级别','提交时间'],
             [[f"申请{r['id']}",r['name'],{'male':'男','female':'女'}.get(r['gender'],'待补齐'),
               str(r['requested_level'])+'级' if r['requested_level'] else '未填写',r['submitted_at'][:16].replace('T',' ')] for r in rows[:50]])
         if len(rows)>50:
             result += '\n\n仅显示最新50条，完整申请可在人员中心查看。'
-        return result + '\n\n发送 **审核通过 申请编号** 或 **审核拒绝 申请编号**。也可以使用唯一姓名；注册审核不会授予管理员身份或核准自评级别。'
+        return render(self.ctx,'review.list',content=Markup(result),approve_command=command(self.ctx,'审核通过 申请12'),reject_command=command(self.ctx,'审核拒绝 申请12'))
 
     def resolve(self, member_name=None, application_id=None, *, decision=None, db=None):
         self._require()
@@ -79,9 +80,9 @@ class MemberReview:
             row=self.resolve(member_name,application_id,decision=decision,db=db)
             label='通过' if decision=='approved' else '拒绝'
             if row['already_reviewed']:
-                return f"申请{row['id']} · {escape(row['name'])} 已审核{label}，没有重复修改或发送通知。"
+                return render(self.ctx,'review.already',number=row['id'],name=row['name'],decision=label)
             Members(self.ctx,self.clock).review(row['user_id'],decision,db=db)
-        return f"**审核{label}**\n\n申请{row['id']} · {escape(row['name'])}。\n\n结果通知将投递到该会员已关联的群，发送状态可在后台查看。"
+        return render(self.ctx,'review.done',number=row['id'],name=row['name'],decision=label)
 
     def handle(self, text):
         if text in ('待审核','待审批','审核列表','注册审核列表'):
@@ -92,7 +93,7 @@ class MemberReview:
         self._require()
         target=(match[2] or '').strip()
         if not target:
-            return '请发送 审核通过 申请12 或 审核通过 张三；发送 待审核 可查询申请编号。'
+            return render(self.ctx,'review.guide',approve_command=command(self.ctx,'审核通过 申请12'),pending_command=command(self.ctx,'待审核'))
         decision='rejected' if any(v in match[1] for v in ('拒绝','退回')) else 'approved'
         number=re.fullmatch(r'(?:申请|编号|申请编号)\s*[#＃]?\s*(\d+)',target)
         return self.review(decision,application_id=int(number[1])) if number else self.review(decision,member_name=target)

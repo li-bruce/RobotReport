@@ -6,6 +6,7 @@ from .db import connect, stamp, now, dumps
 from .service import Service
 from .tournaments import Tournaments
 from .messages import table, escape
+from .dialogue import render, command, Markup
 from .gender import category, CATEGORIES, eligible
 
 STRATEGIES = {'随机': 'random', '种子分布': 'seeded', '平均分布': 'balanced', '高带低': 'high_low'}
@@ -51,7 +52,7 @@ class DailyPlanning:
     def change(self, venue_id, **options):
         record = self.get(venue_id)
         if not record or record['status'] != 'ready':
-            return '请先发送 组织比赛，再选择单打、双打或分配方式。'
+            return render(self.ctx,'planning.begin_first')
         self.info(record)  # Recheck current bot/channel scope before mutating.
         payload = record['payload'] | options
         if payload.get('discipline') == 'singles':
@@ -78,21 +79,22 @@ class DailyPlanning:
     def describe(self, venue_id):
         record = self.get(venue_id)
         if not record:
-            return '策划已过期，请重新发送 组织比赛。'
+            return render(self.ctx,'planning.expired')
         players, session, formats = self.info(record)
         mode = CATEGORIES[category(record['payload'])] if record['payload']['discipline'] == 'doubles' else '单打'
         rows = [[f['name'], ('可组织 · 补入' + str(f.get('substitutes_needed', 0)) + '名替补') if f['available'] and f.get('substitutes_needed') else ('可组织' if f['available'] else f.get('reason', '人数不符合')), f['min_players']] for f in formats if record['payload']['discipline'] in f.get('disciplines', [record['payload']['discipline']])]
-        return (f"# 每日策划 · {mode}\n\n赛事名称：{escape(record['payload'].get('title') or '选择赛制后自动命名')}\n\n{session['date']} {escape(session['name'])} · 场地{venue_id}\n\n"
+        content = (f"# 每日策划 · {mode}\n\n赛事名称：{escape(record['payload'].get('title') or '选择赛制后自动命名')}\n\n{session['date']} {escape(session['name'])} · 场地{venue_id}\n\n"
                 f"当前符合条件：正式 **{len(players)}人** · 替补 **{session['substitute_count']}人**\n\n男 {session['gender_counts']['male']} 人 · 女 {session['gender_counts']['female']} 人 · 性别待补齐 {session['gender_counts']['unknown']} 人；{session['excluded_count']} 人不符合当前类型，原报名保留。\n\n" + table(['赛制', '当前状态', '最低人数'], rows)
-                + '\n\n回复上表可用的赛制名称生成对战表。可发送 单打 / 双打 / 男双 / 女双 / 混双 切换；分配 随机 / 种子分布 / 平均分布 / 高带低。')
+                )
+        return render(self.ctx,'planning.options',content=Markup(content))
 
     def create(self, venue_id, format_id):
         record = self.get(venue_id)
         if not record:
-            return '请先发送 组织比赛，查看当前人数与可用赛制。默认双打，也可发送 组织比赛 单打。'
+            return render(self.ctx,'planning.begin_first')
         if record['status'] == 'created':
             self.events.get(record['event_id'])
-            return f"已生成赛事 {record['event_id']}。发送 继续比赛 {record['event_id']}；另建赛事请重新发送 组织比赛。"
+            return render(self.ctx,'planning.ready',resume_command=command(self.ctx,f"继续比赛 {record['event_id']}"))
         if record['status'] == 'creating':
             # The engine commits the unique planner token with the tournament.
             for summary in self.events.list(venue_id):
@@ -104,7 +106,7 @@ class DailyPlanning:
             with connect(self.ctx.transport_db_path, True) as db:
                 db.execute("UPDATE daily_planning SET status='ready' WHERE token=? AND status='creating'", (record['token'],))
         elif record['status'] != 'ready':
-            return '本次策划已结束，请重新发送 组织比赛。'
+            return render(self.ctx,'planning.closed')
         players, session, formats = self.info(record)
         selected = next((f for f in formats if f['id'] == format_id), None)
         if not selected or not selected['available']:
@@ -112,7 +114,7 @@ class DailyPlanning:
         with connect(self.ctx.transport_db_path, True) as db:
             changed = db.execute("UPDATE daily_planning SET status='creating' WHERE chat_id=? AND user_id=? AND venue_id=? AND token=? AND status='ready'", (self.ctx.chat_id, self.ctx.actor, venue_id, record['token'])).rowcount
             if not changed:
-                return '本次策划已在处理中，请稍后查询 继续比赛。'
+                return render(self.ctx,'planning.busy')
         try:
             event = self.events.create({'kind': 'daily', 'format': format_id, 'title': record['payload'].get('title') or f"{session['date']} {selected['name']}",
                                         'venue_id': venue_id, 'date': session['date'], 'session_id': session['id'],
