@@ -62,9 +62,9 @@ class ActivityOperations:
                              'is_workday': any(kind == 'workday' for kind, *_ in labels),
                              'calendar_known': all(known for _, _, known, _ in labels),
                              'capacity': sum(s['capacity'] + s['substitute_capacity'] for s in rows),
-                             'formal_count': sum(min(s['count'], s['capacity']) for s in rows),
-                             'substitute_count': sum(min(max(0,s['count']-s['capacity']),s['substitute_capacity']) for s in rows),
-                             'waiting_count': sum(max(0,s['count']-s['capacity']-s['substitute_capacity']) for s in rows),
+                             'formal_count': sum(s['formal_count'] for s in rows),
+                             'substitute_count': sum(s['substitute_count'] for s in rows),
+                             'waiting_count': sum(s['waitlist_count'] for s in rows),
                              'venues': metrics, 'events': events.get(day, []), 'event_count': len(events.get(day, []))})
         return {'month': month, 'venues': venues, 'days': days}
 

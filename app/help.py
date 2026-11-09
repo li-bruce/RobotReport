@@ -174,6 +174,17 @@ def scoped_help(ctx, member, category=None, clock=None):
     from .bot_access import public_summary
     audience=public_summary(ctx)
     if audience:value=audience+'\n\n'+value
+    if ctx.allow_external_substitute and 'enrollment' in ctx.capabilities and category in (None,'报名'):
+        from .scope import slot_catalog
+        from .dialogue import command as example
+        catalog=slot_catalog(ctx.db_path)
+        selected=[catalog[key] for key in ctx.external_slot_keys if key in catalog]
+        if selected:
+            labels=[f"场地{s['venue_id']} · {escape(s['name'])} {s['start']}–{s['end']}" for s in selected]
+            s=selected[0]
+            value+='\n\n**还可报名替补**\n'+'\n'.join(labels[:8])
+            if len(labels)>8:value+=f'\n另有 {len(labels)-8} 个可选时段。'
+            value+='\n例如 '+example(ctx,f"场地{s['venue_id']} 明天 {s['start']} 报名")+'；相同场次可发送 '+command('名单')+'、'+command('取消报名')+'。'
     if category or not set(ctx.capabilities or ()) & {'enrollment','daily_events','large_events','match_records'}:return value
     venues=[v for v in service.venues() if v['active']]
     lines=[]

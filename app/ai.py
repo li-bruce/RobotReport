@@ -601,6 +601,7 @@ def _trusted_context(context: dict[str, Any]) -> dict[str, Any]:
         "bot_capabilities": list(normalize_capabilities(context.get('bot_capabilities'))),
         "approved": context.get("approved", True) is True,
         "allowed_venue_ids": sorted(allowed_venues), "formats": sorted(format_ids),
+        "registration_venue_ids": sorted(allowed_venues | _ids(context.get('registration_venue_ids', []))),
         "scoreable_tournament_ids": sorted(_ids(context.get("scoreable_tournament_ids"))),
         "resumable_tournament_ids": sorted(_ids(context.get("resumable_tournament_ids"))),
         "planning": planning, "events": events,
@@ -883,7 +884,8 @@ def _proposal(name: str, args: dict[str, Any], context: dict[str, Any], text: st
         intent = StartDailyPlan.model_validate(_ground_planner(text, intent.model_dump(exclude_unset=True)))
     values = intent.model_dump()
     venue_id = values.get("venue_id") or context["venue_id"]
-    if venue_id not in context["allowed_venue_ids"]:
+    allowed_venues = context.get('registration_venue_ids',context['allowed_venue_ids']) if name in ('Register','CancelRegistration','Roster') else context['allowed_venue_ids']
+    if venue_id not in allowed_venues:
         raise PermissionError("Venue unavailable to this bot.")
     if isinstance(intent, _VenueIntent):
         explicit_venues = {int(match[1]) for match in re.finditer(r'场地\s*([0-9]+)', text)}

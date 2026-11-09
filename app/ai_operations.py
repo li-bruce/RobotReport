@@ -26,8 +26,8 @@ def bind_target(commands, step):
     if op not in ('Register','CancelRegistration','StartDailyPlan','UpdateSession','Roster'):
         return
     if op=='Roster' and not (a.get('number') or a.get('hour') is not None): return
-    session = commands.service.resolve_session(**selection(a),for_write=op!='Roster')
-    a['_resolved_session'] = {key:session[key] for key in ('date','number','name','start','end','slot_key')}
+    session = commands.service.resolve_session(**selection(a),for_write=op!='Roster',registration=op in ('Register','CancelRegistration','Roster'))
+    a['_resolved_session'] = {key:session[key] for key in ('date','number','name','start','end','slot_key','external_substitute')}
 
 
 def describe_step(step):
@@ -54,6 +54,8 @@ def describe_step(step):
     elif op=='ToggleHoliday': details=['开启' if a['enabled'] else '关闭']
     if op == 'Register':
         details = [f"本次新增{a.get('guests', 0)}位同行，保留已有代报"]
+        if a.get('_resolved_session',{}).get('external_substitute'):
+            details.insert(0,'范围外替补报名')
         if a.get('guest_names'): details.append('、'.join(a['guest_names']))
         if a.get('chain'): details.append('报名后展示名单')
     elif op == 'CancelRegistration':
@@ -117,7 +119,9 @@ async def execute_step(commands, step):
             if any(current[k]!=v for k,v in target.items()): raise ValueError('注册申请资料已变化，请重新核对后审核')
         return reviews.review(a['decision'],member_name=None if target else a.get('member_name'),application_id=target['id'] if target else a.get('application_id'))
     venue = a.get('venue_id', ctx.default_venue_id)
-    service.venue(venue, True)
+    registration = op in ('Register','CancelRegistration','Roster')
+    external = registration and (a.get('number') is not None or a.get('hour') is not None or a.get('_resolved_session'))
+    service.venue(venue, op!='Roster', external=bool(external))
     if op in ('QueryOccupancy','ReserveVenue','ReleaseVenue'):
         from .availability import Availability
         manager=Availability(ctx,commands.clock)
@@ -136,7 +140,7 @@ async def execute_step(commands, step):
         HolidaySchedule(ctx,commands.clock).save(venue,{'enabled':a['enabled']})
         return '节假日专用场次已'+('开启。' if a['enabled'] else '关闭。')
     if a.get('_resolved_session'):
-        current = service.resolve_session(**selection(a),for_write=op!='Roster')
+        current = service.resolve_session(**selection(a),for_write=op!='Roster',registration=registration)
         if any(current.get(k)!=v for k,v in a['_resolved_session'].items()):
             raise ValueError('所选场次或时段已变化，请重新提出操作')
     name = member.get('name') or '会员'
@@ -150,8 +154,8 @@ async def execute_step(commands, step):
         target = '指定代报' if names else '本人报名'
         return f"已取消{target}{data['cancelled']}人，其他报名保持不变。"
     if op == 'Roster':
-        sid = service.resolve_session(**selection(a), for_write=False)['id'] if a.get('number') or a.get('hour') is not None else None
-        return roster(service.registrations(a.get('date'), venue, sid), venue, ctx=ctx)
+        sid = service.resolve_session(**selection(a), for_write=False,registration=True)['id'] if a.get('number') or a.get('hour') is not None else None
+        return roster(service.registrations(a.get('date'), venue, sid,registration=True), venue, ctx=ctx)
     if op in ('PersonalStats','AllStats'):
         from .message_parser import MessageInput
         return await commands.run(MessageInput('场地' + str(venue) + (' 我的统计' if op=='PersonalStats' else ' 统计')), allow_ai=False)

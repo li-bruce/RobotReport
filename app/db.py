@@ -101,6 +101,8 @@ def initialize(path):
         from .holidays import ensure_schema as holiday_schema
         holiday_schema(db)
     with connect(path, True) as db:
+        if 'substitute_only' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
+            db.execute('ALTER TABLE registrations ADD COLUMN substitute_only INTEGER NOT NULL DEFAULT 0')
         if 'attributes' not in {r['name'] for r in db.execute('PRAGMA table_info(venues)')}:
             db.execute("ALTER TABLE venues ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]'")
         columns = {r['name'] for r in db.execute('PRAGMA table_info(sessions)')}

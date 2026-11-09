@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-11-09 · Selected external substitute registrations
+
+- Let each robot opt into substitute registration for explicitly selected activity slots outside its main service scope; an enabled rule requires at least one selection.
+- Support registration, guests, targeted rosters, cancellation and AI registration flows for those slots while preserving the normal default, broadcasts, membership eligibility and event-management scope.
+- Keep external entries outside formal seats and share one queue calculation across robots, calendars and daily competition participant selection. Full substitute lists overflow into the waiting list.
+
 ## v1.0 — 2026-11-09 · Personal form recipients
 
 - Address registration and profile form replies to the requesting member with an account mention and the known name. When the callback has no nickname, the chat platform resolves the mention.

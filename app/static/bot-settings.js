@@ -21,7 +21,7 @@ function robotScheduleSummary(bot){
 function robotSettingsSummary(bot){
   const channel=state.channels.find(c=>c.bot_id===bot.id&&!c.archived),[status,tone]=botStatus(bot,channel);
   const venues=bot.venue_ids==null?'全部场地':bot.venue_ids.map(id=>state.venues.find(v=>v.id===id)?.name||`场地 ${id}`).join('、')||'未选择场地';
-  return `<span class="robot-summary-main"><span class="robot-summary-title"><strong>${e(bot.name)}</strong><span class="badge ${tone}">${status}</span></span><span class="robot-summary-meta">${e(channel?.name||'未关联群')}<span>·</span>${e(venues)}</span><span class="robot-summary-business" aria-label="业务组合">${botCapabilityBadges(bot)}</span>${robotScheduleSummary(bot)}</span><span class="robot-disclosure-label"><span class="when-closed">设置</span><span class="when-open">收起</span></span>`;
+  return `<span class="robot-summary-main"><span class="robot-summary-title"><strong>${e(bot.name)}</strong><span class="badge ${tone}">${status}</span></span><span class="robot-summary-meta">${e(channel?.name||'未关联群')}<span>·</span>${e(venues)}</span><span class="robot-summary-business" aria-label="业务组合">${botCapabilityBadges(bot)}</span>${robotScheduleSummary(bot)}${bot.allow_external_substitute?`<span class="robot-summary-times"><span class="robot-summary-key">替补</span><span>另可报名 ${(bot.external_slot_keys||[]).length} 个时段</span></span>`:''}</span><span class="robot-disclosure-label"><span class="when-closed">设置</span><span class="when-open">收起</span></span>`;
 }
 function settingsPanel(title,description,body,extra=''){
   return `<section class="bot-setting-panel ${extra}"><header><h3>${e(title)}</h3>${description?`<p>${e(description)}</p>`:''}</header><div class="bot-setting-body">${body}</div></section>`;

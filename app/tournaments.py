@@ -237,8 +237,9 @@ class Tournaments:
         formal, substitutes = [], []
         rows = db.execute("SELECT * FROM registrations WHERE session_id=? AND chat_id=? AND status='active' ORDER BY queue_seq,id",
                           (session['id'], self.scope_id)).fetchall()
-        for rank, row in enumerate(rows, 1):
-            if rank > session['capacity'] + session['substitute_capacity']:
+        from .registration_queue import ranked_entries
+        for row in ranked_entries(rows,session):
+            if row['category'] not in ('正式','替补'):
                 break
             try:
                 profile = self.members.assert_eligible(row['user_id'], session, int(row['guest_index'] > 0), db=db)
@@ -246,7 +247,7 @@ class Tournaments:
             except (PermissionError, ValueError):
                 continue
             guest = row['guest_index']
-            category = '正式' if rank <= session['capacity'] else '替补'
+            category = row['category']
             person = {'id': f"{row['user_id']}:{guest}", 'user_id': row['user_id'], 'guest_index': guest,
                       'name': registration_name(row, profile['name']),
                       'is_proxy': guest > 0, 'level': 0 if guest else profile['level'], 'gender': 'unknown' if guest else profile['gender'],

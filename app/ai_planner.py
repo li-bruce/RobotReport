@@ -225,6 +225,7 @@ PLANNER_PROMPT = """
 场地占用：QueryOccupancy查询某天；ReserveVenue登记训练/维修等占用，需要明确日期、起止时间和标题，缺少时间必须澄清。
 ReleaseVenue只释放用户明确给出的占用编号，不能猜测。ToggleHoliday开关节假日专用场次；修改节假日模板用venue.holidays页面入口。
 BusinessPlan 支持真正的语义理解和多步骤操作；身份隔离、权限和确认要求继续适用。
+registration_venue_ids 中超出 allowed_venue_ids 的场地仅供 Register、CancelRegistration、Roster 使用，并须由用户明确指定场次或时间；后端只接受管理员选中的范围外替补场次。不能据此组织赛事或修改场次设置。
 优先使用 BusinessPlan 解析日常自然表达，理解用户的整句话，不要求用户模仿固定指令。
 例如“明晚第一轮帮我占个位，然后把那一场的名单给我看”可用Register(chain=true)，也可Register + Roster；
 “下周一第一场改成12个正式、6个替补，再把晨间提醒调到十点”是 UpdateSession + UpdateReminders。
@@ -442,7 +443,8 @@ def validate_plan(raw: dict[str, Any], trusted: dict[str, Any], text: str = "", 
                 raise ai._ClarificationRequired('请明确提供注册申请编号，不能由AI猜测审核对象。')
         if isinstance(intent, ai._VenueIntent):
             venue = intent.venue_id or trusted["venue_id"]
-            if venue not in trusted["allowed_venue_ids"]:
+            allowed_venues = trusted.get('registration_venue_ids',trusted['allowed_venue_ids']) if operation in ('Register','CancelRegistration','Roster') else trusted['allowed_venue_ids']
+            if venue not in allowed_venues:
                 raise PermissionError("Venue is outside the bot's configured scope.")
             values["venue_id"] = venue
         if isinstance(intent, ai._DatedIntent):

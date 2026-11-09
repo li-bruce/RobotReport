@@ -166,7 +166,8 @@ class Commands:
         text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())
         venue_id = selection['venue_id']
         if message.text:
-            self.service.venue(venue_id)
+            external = bool(selection['at'] or selection['number']) and (text == '名单' or text.startswith(('报名','取消')))
+            self.service.venue(venue_id, external=external)
             self.require_command_capabilities(text)
         members = Members(self.ctx, self.clock)
         # A platform display name can prefill a record; it never approves membership.
@@ -382,8 +383,8 @@ class Commands:
         if text in ('名单', ''):
             session_id = None
             if selection['at'] or selection['number']:
-                session_id = self.service.resolve_session(**selection, for_write=False)['id']
-            return roster(self.service.registrations(selection['day'], venue_id, session_id), venue_id, ctx=self.ctx)
+                session_id = self.service.resolve_session(**selection, for_write=False, registration=True)['id']
+            return roster(self.service.registrations(selection['day'], venue_id, session_id, registration=True), venue_id, ctx=self.ctx)
         tournaments = self.tournaments()
         formats = tournaments.formats()
         named_enrollment = re.fullmatch(r'(.+?)[,，]\s*(报名(?:\+(\d+))?|报名[,，].+|取消报名|取消.+)', text)
@@ -576,6 +577,7 @@ class Commands:
                 'bot_capabilities':list(self.ctx.capabilities) if self.ctx.capabilities is not None else None,
                 'formats': formats, 'planning': planning, 'events': events,
                 'allowed_venue_ids': [v['id'] for v in self.service.venues() if v['active']],
+                'registration_venue_ids': sorted(self.service.external_venue_ids() | {v['id'] for v in self.service.venues() if v['active']}),
                 'scoreable_tournament_ids': [e['id'] for e in events if 'score' in e['actions']],
                 'resumable_tournament_ids': [e['id'] for e in events if 'resume' in e['actions']]}
 
@@ -597,13 +599,13 @@ class Commands:
                 self.tournaments().engine._registration_allowed(event, self.clock())
             result['event_digest'] = hashlib.sha256(dumps(event).encode()).hexdigest()
         if not event_mutation and (re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?|取消报名', text) or re.match(r'^报名(?:\s+接龙)?[,，]', text) or cancellation_guests(text) is not None or text.startswith('组织比赛')):
-            session = self.service.resolve_session(**selection)
+            session = self.service.resolve_session(**selection, registration=text.startswith(('报名','取消')))
             command = f"场地{selection['venue_id']} {session['date']} {session['start']} {text}"
             result['session_id'] = session['id']
             result['session'] = session
             if text.startswith(('报名', '取消')):
-                data = self.service.registrations(session['date'], selection['venue_id'], session['id'])
-                result['owned_registrations'] = [{key: row.get(key) for key in ('id','guest_index','guest_name','name','status')}
+                data = self.service.registrations(session['date'], selection['venue_id'], session['id'], registration=True)
+                result['owned_registrations'] = [{key: row.get(key) for key in ('id','guest_index','guest_name','name','status','substitute_only')}
                                                  for row in data['registrations'] if row['user_id'] == self.ctx.actor]
         elif text in {f['name'] for f in self.tournaments().formats()}:
             planner = DailyPlanning(self.ctx, self.clock)

@@ -49,6 +49,8 @@ def refresh_context(ctx):
             if candidates and default not in candidates:
                 default = candidates[0]
         return replace(ctx, venue_ids=venues or (), venue_restricted=venues is not None, slot_keys=slots,
+                       allow_external_substitute=bool(bot['allow_external_substitute']) if 'allow_external_substitute' in bot.keys() else False,
+                       external_slot_keys=tuple(json.loads(bot['external_slot_keys'])) if 'external_slot_keys' in bot.keys() else (),
                        default_venue_id=default, capabilities=capabilities, bot_name=bot['name'],
                        capability_rules=tuple(json.loads(bot['capability_rules'])) if 'capability_rules' in bot.keys() else (),
                        receive_commands=bool(channel['receive_commands']) if channel else ctx.receive_commands,
@@ -57,6 +59,26 @@ def refresh_context(ctx):
 
 def snapshot(session):
     return {k: session[k] for k in ('id','venue_id','venue_name','date','name','start','end','slot_key') if k in session.keys()}
+
+
+def slot_locations(path):
+    """Resolve stable weekly, special-date and holiday slot keys to venues."""
+    return {key:item['venue_id'] for key,item in slot_catalog(path).items()}
+
+
+def slot_catalog(path):
+    with connect(path) as db:
+        result = {'slot:'+str(r['id']): json.loads(r['definition']) | {'venue_id':r['venue_id']} for r in db.execute('SELECT * FROM slots')}
+        for row in db.execute('SELECT * FROM special_dates'):
+            result.update({s['slot_key']: s | {'venue_id':row['venue_id'],'date':row['date']} for s in special_rules(row['venue_id'],row['date'],json.loads(row['slots']))})
+        from .holidays import all_slots
+        for venue in db.execute('SELECT id FROM venues'):
+            result.update({s['slot_key']: s | {'venue_id':venue[0]} for s in all_slots(db,venue[0])})
+        if 'slot_key' in {r['name'] for r in db.execute('PRAGMA table_info(sessions)')}:
+            for row in db.execute('SELECT s.* FROM sessions s JOIN (SELECT MAX(id) AS id FROM sessions GROUP BY slot_key) latest ON latest.id=s.id'):
+                if row['slot_key']:
+                    result.setdefault(row['slot_key'],dict(row))
+        return result
 
 
 def special_rules(venue_id, day, rules):

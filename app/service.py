@@ -12,6 +12,7 @@ from .db import connect, audit, dumps, stamp, now, TZ, DEFAULT_SLOTS
 from .security import BotContext, identifier
 from .members import Members
 from .scope import initialize_scope, refresh_context, snapshot, special_rules
+from .registration_queue import ranked_entries, queue_counts
 
 
 def clean_name(value):
@@ -174,6 +175,26 @@ class Service:
             raise PermissionError('本机器人或群未负责此场地/时段，请选择已开通的活动场次')
         return session
 
+    def external_venue_ids(self):
+        ctx = self.scope_context()
+        if not ctx.allow_external_substitute or not ctx.external_slot_keys:
+            return set()
+        from .scope import slot_locations
+        locations = slot_locations(self.path)
+        return {locations[key] for key in ctx.external_slot_keys if key in locations}
+
+    def allows_external_session(self, session):
+        ctx = self.scope_context()
+        from .bot_capabilities import supports
+        return bool(ctx.allow_external_substitute and session.get('slot_key') in ctx.external_slot_keys and supports(ctx, 'enrollment'))
+
+    def assert_enrollment_scope(self, session):
+        if self.allows_session(dict(session)):
+            return False
+        if not self.allows_external_session(dict(session)):
+            raise PermissionError('本机器人未开通此场次的范围外替补报名')
+        return True
+
     def assert_event_scope(self, event):
         self.venue(event['venue_id'])
         # Large events have their own dates and schedule, independent of daily slots.
@@ -212,9 +233,10 @@ class Service:
             return [venue_record(x) for x in db.execute('SELECT * FROM venues ORDER BY id')
                     if not (ctx.venue_restricted or ctx.venue_ids) or x['id'] in ctx.venue_ids]
 
-    def venue(self, venue_id, active=False):
+    def venue(self, venue_id, active=False, *, external=False):
         ctx = self.scope_context()
-        if (ctx.venue_restricted or ctx.venue_ids) and int(venue_id) not in ctx.venue_ids:
+        if ((ctx.venue_restricted or ctx.venue_ids) and int(venue_id) not in ctx.venue_ids
+                and not (external and int(venue_id) in self.external_venue_ids())):
             raise PermissionError('本机器人或群未开通此场地，请选择已负责的场地')
         with connect(self.path) as db:
             row = db.execute('SELECT * FROM venues WHERE id=?', (venue_id,)).fetchone()
@@ -391,13 +413,13 @@ class Service:
                        (old['id'],dumps(snapshot(old)),dumps(snapshot(new) if new else {'removed':True}),self.ctx.actor,stamp(self.clock())))
         return len(plans)
 
-    def sessions(self, day=None, venue_id=1):
+    def sessions(self, day=None, venue_id=1, *, external=False):
         day = day or self.clock().date().isoformat()
-        venue = self.venue(venue_id)
+        venue = self.venue(venue_id, external=external)
         with connect(self.path, True) as db:
-            return self._sessions(db, day, venue)
+            return self._sessions(db, day, venue, external=external)
 
-    def _sessions(self, db, day, venue):
+    def _sessions(self, db, day, venue, *, external=False):
         target = day_value(day)
         venue_id = venue['id']
         from .holidays import rules_for_day
@@ -423,7 +445,14 @@ class Service:
             row['can_manage'] = session_time(row,'end') > self.clock()
             row['can_enroll'] = bool(venue['active']) and row['can_manage'] and not row['occupancies']
             row['status'] = 'ended' if session_time(row,'end') <= self.clock() else ('ongoing' if session_time(row,'start') <= self.clock() else 'upcoming')
-        return [row for row in rows if self.ctx.slot_keys is None or row['slot_key'] in self.ctx.slot_keys]
+            entries = db.execute('SELECT id,queue_seq,status,substitute_only FROM registrations WHERE session_id=? AND chat_id=?', (row['id'],self.ctx.scope_id)).fetchall()
+            row.update(queue_counts(entries,row))
+        ctx = self.ctx
+        from .bot_capabilities import supports
+        external_keys = set(ctx.external_slot_keys) if external and ctx.allow_external_substitute and supports(ctx,'enrollment') else set()
+        def owned(row):
+            return (not (ctx.venue_restricted or ctx.venue_ids) or row['venue_id'] in ctx.venue_ids) and (ctx.slot_keys is None or row['slot_key'] in ctx.slot_keys)
+        return [row | {'external_substitute':not owned(row)} for row in rows if owned(row) or row['slot_key'] in external_keys]
 
     def save_session_constraints(self, session_id, rules):
         self.require_admin('activity.manage')
@@ -449,15 +478,16 @@ class Service:
         result = self.registrations(session['date'], session['venue_id'], session_id)
         return result['sessions'][0] | {'ineligible_registrations': [r['id'] for r in result['registrations'] if r['status'] == 'active' and not r['eligible']]}
 
-    def resolve_session(self, day=None, venue_id=1, session_id=None, at=None, number=None, for_write=True):
-        self.venue(venue_id, active=for_write)
+    def resolve_session(self, day=None, venue_id=1, session_id=None, at=None, number=None, for_write=True, *, registration=False):
+        external = registration and any(value is not None for value in (session_id,at,number))
+        self.venue(venue_id, active=for_write, external=external)
         day = day or self.clock().date().isoformat()
         target = day_value(day)
         if for_write and target < self.clock().date():
             raise ValueError('过去日期不能报名或取消；查询历史请使用 日期 名单')
         if for_write and target > self.clock().date() + timedelta(days=366):
             raise ValueError('最多可提前366天预约')
-        rows = self.sessions(day, venue_id)
+        rows = self.sessions(day, venue_id, external=external)
         if session_id is not None:
             candidates = [r for r in rows if r['id'] == int(session_id)]
         elif number is not None:
@@ -475,10 +505,10 @@ class Service:
             raise ValueError('该场次已经结束')
         return row
 
-    def registrations(self, day=None, venue_id=1, session_id=None):
+    def registrations(self, day=None, venue_id=1, session_id=None, *, registration=False):
         members = Members(self.ctx, self.clock)
         members.require_approved()
-        sessions = self.sessions(day, venue_id)
+        sessions = self.sessions(day, venue_id, external=registration and session_id is not None)
         if session_id is not None:
             sessions = [s for s in sessions if s['id'] == int(session_id)]
             if not sessions:
@@ -490,13 +520,12 @@ class Service:
                                      FROM registrations r LEFT JOIN profiles p ON p.chat_id=r.chat_id AND p.user_id=r.user_id
                                      LEFT JOIN member_records m ON m.chat_id=r.chat_id AND m.user_id=r.user_id
                                      WHERE r.session_id=? AND r.chat_id=? ORDER BY r.queue_seq,r.id''', (session['id'], self.ctx.scope_id)).fetchall()
-                active_index = 0
-                for row in rows:
-                    item = dict(row) | {'date': session['date'], 'venue_id': venue_id, 'rank': None, 'category': '已取消'}
+                for row in ranked_entries(rows,session):
+                    item = dict(row) | {'date': session['date'], 'venue_id': venue_id}
                     base_name = row['member_name'] if row['member_status'] == 'approved' and row['member_name'] else ''
                     item['name'] = registration_name(row, base_name)
                     item['session_snapshot'] = json.loads(item.get('session_snapshot') or '{}')
-                    item['can_cancel'] = row['status'] == 'active' and session['can_manage'] and self.ctx.can('activity.manage')
+                    item['can_cancel'] = row['status'] == 'active' and session['can_manage'] and self.ctx.can('activity.manage') and not session.get('external_substitute')
                     item['is_proxy'] = row['guest_index'] > 0
                     item['sponsor_name'] = base_name or '待完善姓名'
                     item['gender'] = (row['member_gender'] or 'unknown') if row['guest_index'] == 0 else 'unknown'
@@ -512,10 +541,6 @@ class Service:
                         item['eligible'], item['eligibility_reason'] = False, str(exc)
                     for key in ('member_name', 'member_status', 'member_level', 'member_gender'):
                         item.pop(key, None)
-                    if row['status'] == 'active':
-                        active_index += 1
-                        item['rank'] = active_index
-                        item['category'] = '正式' if active_index <= session['capacity'] else ('替补' if active_index <= session['capacity'] + session['substitute_capacity'] else '候补')
                     records.append(item)
         return {'sessions': sessions, 'registrations': records}
 
@@ -532,7 +557,7 @@ class Service:
             guest_names = [clean_name(value) for value in guest_names]
             if len({value.casefold() for value in guest_names}) != len(guest_names):
                 raise ValueError('同行姓名不能重复')
-        session = self.resolve_session(day, venue_id, session_id, at, number)
+        session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
         timestamp = stamp(self.clock())
         with connect(self.path, True) as db:
             # Re-read both policy and member state inside the same write transaction:
@@ -541,7 +566,7 @@ class Service:
             if not current_session:
                 raise ValueError('活动场次已调整，请重新查询场次后报名')
             session = dict(current_session)
-            self.assert_session_scope(session)
+            substitute_only = self.assert_enrollment_scope(session)
             member = Members(self.ctx, self.clock).assert_eligible(user_id, session, guests, db)
             # Preserve existing bookings after expiry, but adding/rejoining any
             # participant requires current validity and coverage of the event day.
@@ -583,33 +608,33 @@ class Service:
             else:
                 seq += 1
                 if own:
-                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=? WHERE id=?", (name, seq, timestamp, own['id']))
+                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=?,substitute_only=? WHERE id=?", (name, seq, timestamp, int(substitute_only), own['id']))
                 else:
-                    db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot) VALUES(?,?,?,?,0,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, name, '', seq, timestamp, timestamp, dumps(snapshot(session))))
+                    db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,0,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, name, '', seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
                 changed = True
             for guest, guest_name, display in additions:
                 seq += 1
-                db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, display, guest, guest_name, seq, timestamp, timestamp, dumps(snapshot(session))))
+                db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, display, guest, guest_name, seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
                 changed = True
             if changed:
-                audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id})
-        return self.registrations(session['date'], venue_id, session['id'])
+                audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id, 'bot_id':self.ctx.id, 'substitute_only':substitute_only})
+        return self.registrations(session['date'], venue_id, session['id'], registration=True)
 
     def cancel(self, user_id, day=None, venue_id=1, session_id=None, at=None, number=None):
         user_id = identifier(user_id)
         if user_id != self.ctx.actor and (self.ctx.source in ('callback', 'simulator') or not self.ctx.can('activity.manage')):
             raise PermissionError('只能取消本人报名；同行人员请按姓名单独取消')
-        session = self.resolve_session(day, venue_id, session_id, at, number)
+        session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
         with connect(self.path, True) as db:
             Members(self.ctx, self.clock).require_approved(db=db)
             current = db.execute('SELECT * FROM sessions WHERE id=?', (session['id'],)).fetchone()
             if not current or session_time(current, 'end') <= self.clock():
                 raise ValueError('该场次已调整或已经结束')
-            self.assert_session_scope(current)
+            self.assert_enrollment_scope(current)
             changed = db.execute("UPDATE registrations SET status='cancelled',updated_at=? WHERE session_id=? AND chat_id=? AND user_id=? AND guest_index=0 AND status='active'", (stamp(self.clock()), session['id'], self.ctx.scope_id, user_id)).rowcount
             if changed:
                 audit(db, self.ctx.actor, 'registration.cancel', {'user_id': user_id, 'session_id': session['id'], 'count': changed, 'chat_id': self.ctx.scope_id})
-        return self.registrations(session['date'], venue_id, session['id']) | {'cancelled': changed}
+        return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': changed}
 
     def cancel_guests(self, user_id, guest_names, day=None, venue_id=1, session_id=None, at=None, number=None):
         """Cancel only the caller's named active guests, all or none."""
@@ -623,13 +648,13 @@ class Service:
             raise ValueError('同行姓名或名单显示名须为1至100字符')
         if len({value.casefold() for value in names}) != len(names):
             raise ValueError('取消名单中的同行姓名不能重复')
-        session = self.resolve_session(day, venue_id, session_id, at, number)
+        session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
         with connect(self.path, True) as db:
             member = Members(self.ctx, self.clock).require_approved(user_id, db=db, allow_admin=False)
             current = db.execute('SELECT * FROM sessions WHERE id=?', (session['id'],)).fetchone()
             if not current or session_time(current, 'end') <= self.clock():
                 raise ValueError('该场次已调整或已经结束')
-            self.assert_session_scope(current)
+            self.assert_enrollment_scope(current)
             candidates = list(db.execute("SELECT * FROM registrations WHERE session_id=? AND chat_id=? AND user_id=? AND guest_index>0 AND status='active'", (session['id'], self.ctx.scope_id, user_id)))
             targets = []
             for name in names:
@@ -642,7 +667,7 @@ class Service:
             timestamp = stamp(self.clock())
             db.executemany("UPDATE registrations SET status='cancelled',updated_at=? WHERE id=?", [(timestamp, target) for target in targets])
             audit(db, self.ctx.actor, 'registration.cancel_guests', {'user_id': user_id, 'session_id': session['id'], 'registration_ids': targets, 'count': len(targets), 'chat_id': self.ctx.scope_id})
-        return self.registrations(session['date'], venue_id, session['id']) | {'cancelled': len(targets)}
+        return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': len(targets)}
 
     def cancel_person(self, registration_id):
         self.require_admin('activity.manage')
