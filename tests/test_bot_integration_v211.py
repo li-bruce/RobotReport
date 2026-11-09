@@ -23,7 +23,7 @@ from app.messages import Outbox
 from app.notifications import Notifications
 from app.scheduler import Scheduler
 from app.service import Service
-from app.bot_capabilities import ALL_CAPABILITIES
+from app.bot_capabilities import ALL_CAPABILITIES, LEGACY_CAPABILITIES
 
 
 class BotIntegrationTests(unittest.TestCase):
@@ -144,6 +144,7 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertEqual(denied.status_code, 403)
 
     def test_queued_reply_revoked_when_capabilities_change_legacy_queue_stays_compatible(self):
+        self.caps(list(LEGACY_CAPABILITIES))
         ctx = self.ctx()
         Outbox(ctx).enqueue('旧回复', 'legacy-reply')
         with connect(ctx.transport_db_path, True) as db:

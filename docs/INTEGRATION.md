@@ -73,9 +73,9 @@ Configure the public HTTPS origin in the local file or the admin page; the appli
 
 ### Capabilities and routing
 
-Capabilities are `registration`, `enrollment`, `daily_events`, `large_events`, `match_records`, `statistics`, `messages`, `ai` and `management`. New bots enable all except `large_events`, `ai` and `management` by default; each can be changed.
+Capabilities are `registration`, `member_notifications`, `enrollment`, `daily_events`, `large_events`, `match_records`, `statistics`, `messages`, `ai` and `management`. New bots enable all except `member_notifications`, `large_events`, `ai` and `management` by default; each can be changed. `member_notifications` is opt-in for existing bots as well, including legacy unspecified capability lists. Save it in the bot’s `capabilities` array; it can also have an independent availability window.
 
-Bot capability, venue/session scope, member eligibility and user permissions are separate checks. Help reflects those settings. Management notices are delivered by a management-enabled bot. Event notifications use selected event channels and deduplicate the same physical group. A normal chat reply goes to its source group.
+Bot capability, venue/session scope, member eligibility and user permissions are separate checks. Help reflects those settings. Registration receipts use the original registration bot. Group, level and profile-review notices use `member_notifications` bots, once per member group; without a sender, they remain waiting. Management-role notices use a management-enabled bot. Notification capability does not grant approval authority. Event notifications use selected event channels and deduplicate the same physical group. A normal chat reply goes to its source group.
 
 ## Administrative HTTP API
 

@@ -5,7 +5,8 @@ membership or management authority; those checks remain in the business modules.
 """
 
 _CATALOG = (
-    ('registration', '会员注册', '注册申请、个人资料、等级与组别及审核结果通知'),
+    ('registration', '会员注册', '注册申请、个人资料与等级组别申请、注册审核结果通知'),
+    ('member_notifications', '会员资料变更通知', '组别、级别和个人资料审核结果通知，同群选择一个机器人发送'),
     ('enrollment', '活动报名', '活动报名、代报名、取消和报名名单'),
     ('daily_events', '每日赛事', '组织趣味比赛、查看赛程和记录比分'),
     ('large_events', '大型赛事', '大型赛事报名、组织、赛程和比赛记录'),
@@ -17,7 +18,9 @@ _CATALOG = (
 )
 ALL_CAPABILITIES = tuple(item[0] for item in _CATALOG)
 REQUIRED_CAPABILITIES = ()
-DEFAULT_CAPABILITIES = tuple(key for key in ALL_CAPABILITIES if key not in ('ai','large_events','management'))
+OPT_IN_CAPABILITIES = ('member_notifications',)
+LEGACY_CAPABILITIES = tuple(key for key in ALL_CAPABILITIES if key not in OPT_IN_CAPABILITIES)
+DEFAULT_CAPABILITIES = tuple(key for key in ALL_CAPABILITIES if key not in ('ai','large_events','management',*OPT_IN_CAPABILITIES))
 
 
 def capability_catalog():
@@ -27,9 +30,9 @@ def capability_catalog():
 
 
 def normalize_capabilities(value):
-    """None preserves legacy full access; an empty list disables all business."""
+    """None preserves legacy services without enabling new opt-in notices."""
     if value is None:
-        return ALL_CAPABILITIES
+        return LEGACY_CAPABILITIES
     if not isinstance(value, (list, tuple)) or any(not isinstance(v, str) for v in value):
         raise ValueError('机器人业务能力必须为数组')
     if len(value) != len(set(value)):

@@ -7,7 +7,7 @@ const node=s=>nodes[s]||(nodes[s]={value:'',innerHTML:'',textContent:'',isConnec
 const ctx=vm.createContext({structuredClone,URL,URLSearchParams,Intl,Date,Map,Set,Number,String,Array,JSON,AbortController,FormData:Fields,location:{origin:'http://localhost'},sessionStorage:{getItem:()=>null},window:{addEventListener(){}},document:{querySelector:node,querySelectorAll:()=>[]}});
 vm.runInContext(['workspace.js','event-workspace.js','scope-workspace.js','bot-relations.js','time-workspace.js','bot-settings.js'].map(read).join('\n')+'\n'+read('availability-workspace.js').split("document.addEventListener('click'")[0]+'\n'+source.slice(0,source.indexOf("document.addEventListener('click'")),ctx);
 const run=code=>vm.runInContext(code,ctx),plain=value=>JSON.parse(JSON.stringify(value));
-ctx.catalog=[{id:'daily_events',name:'每日赛事',default_enabled:true},{id:'registration',name:'会员注册',default_enabled:true},{id:'enrollment',name:'活动报名',default_enabled:true},{id:'ai',name:'AI 助手',default_enabled:false},{id:'large_events',name:'大型赛事',default_enabled:false},{id:'management',name:'群内管理',default_enabled:false}];
+ctx.catalog=[{id:'daily_events',name:'每日赛事',default_enabled:true},{id:'registration',name:'会员注册',default_enabled:true},{id:'member_notifications',name:'会员资料变更通知',default_enabled:false},{id:'enrollment',name:'活动报名',default_enabled:true},{id:'ai',name:'AI 助手',default_enabled:false},{id:'large_events',name:'大型赛事',default_enabled:false},{id:'management',name:'群内管理',default_enabled:false}];
 ctx.bots=[{id:'student',name:'学生机器人',capabilities:['registration'],active:true,venue_ids:[1],slot_keys:['slot:1']},{id:'other',name:'另一机器人',capabilities:['enrollment'],active:true,venue_ids:[1]}];
 ctx.groups=[{id:'group-a',chat_id:'266382',name:'共同群'},{id:'group-b',chat_id:'',name:'待接入学生群'}];
 ctx.channels=[{id:'student-channel',bot_id:'student',group_id:'group-a',chat_id:'266382',name:'共同群',active:true,configured:true,receive_commands:true,daily_notifications:true},{id:'other-channel',bot_id:'other',group_id:'group-a',chat_id:'266382',name:'共同群',active:true,configured:true},{id:'removed',bot_id:'student',chat_id:'removed-group',name:'<script>旧群',archived:true}];
@@ -29,7 +29,13 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
   run("bots[0].name='<img src=x onerror=alert(1)>'");await run('renderBotWorkspace(3)');assert.doesNotMatch(node('#main').innerHTML,/<img src=x/);assert.match(node('#main').innerHTML,/&lt;img/);run("bots[0].name='学生机器人'");
   assert.equal(ctx.sent.some(x=>x.path.includes('/connection')),false,'list does not fetch credential addresses');
   await run('editBotScope(null)');assert.match(ctx.modal,/value="daily_events" checked/);assert.doesNotMatch(ctx.modal,/value="daily_events"[^>]*disabled/);
-  for(const key of ['ai','large_events','management'])assert.doesNotMatch(ctx.modal,new RegExp('value="'+key+'" checked'));
+  for(const key of ['ai','large_events','management','member_notifications'])assert.doesNotMatch(ctx.modal,new RegExp('value="'+key+'" checked'));
+  run("bots[0].capabilities=['member_notifications']");
+  await run('renderBotWorkspace(3)');assert.match(node('#main').innerHTML,/<summary class="robot-card-summary">[\s\S]*?会员资料变更通知[\s\S]*?<\/summary>/);
+  await run("editBotScope('student')");assert.match(ctx.modal,/value="member_notifications" checked/);assert.doesNotMatch(ctx.modal,/value="registration" checked/);
+  ctx.data={name:'学生机器人',active:'on',capabilities:['member_notifications'],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
+  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body.capabilities),['member_notifications']);
+  run("bots[0].capabilities=['registration']");
   await run("editBotScope('student')");assert.doesNotMatch(ctx.modal,/value="daily_events" checked/);assert.match(ctx.modal,/value="registration" checked/);
   ctx.data={name:'学生机器人',active:'on',capabilities:[],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
   await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:[],capability_rules:[],venue_ids:[1],slot_keys:null,allow_external_substitute:false,external_slot_keys:[],user_policy:{enabled:false,match:'all',rules:[]}});

@@ -14,16 +14,20 @@ from .bot_capabilities import supports
 
 
 def notification_capability(kind):
-    """A personal result uses registration; role grants use management."""
-    if kind in ('membership', 'level', 'groups', 'profile_request'):
+    """Registration receipts, profile updates and role grants have separate senders."""
+    if kind == 'membership':
         return 'registration'
+    if kind in ('level', 'groups', 'profile_request'):
+        return 'member_notifications'
     if kind == 'roles':
         return 'management'
     raise ValueError('身份通知类型无效')
 
 
 def notification_feature(event):
-    return '会员注册' if notification_capability(event['kind']) == 'registration' else '群内管理'
+    from .bot_capabilities import capability_catalog
+    capability = notification_capability(event['kind'])
+    return next(item['name'] for item in capability_catalog() if item['id'] == capability)
 
 
 def delivery_capability(db, ctx, dedupe_key):
@@ -69,7 +73,7 @@ def remember_request_source(db, ctx, user_id, kind, at=None):
     if (ctx.source not in ('callback', 'registration_form') or ctx.actor != user_id
             or not ctx.channel_id or not ctx.chat_id or ctx.id == 'workspace'):
         return
-    if notification_capability(kind) != 'registration':
+    if kind not in ('membership', 'level', 'groups', 'profile_request'):
         return
     ensure_schema(db)
     db.execute('''INSERT INTO identity_request_sources VALUES(?,?,?,?,?,?,?)

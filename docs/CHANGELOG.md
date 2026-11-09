@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-11-09 · Independent member profile notifications
+
+- Add the opt-in “会员资料变更通知” bot capability for group, level and profile-review notices, independent of registration and group management.
+- Select one enabled sender per member group; retain waiting notices when no sender is available and recheck the setting and time window before sending. Already sent notices are not replayed.
+- Keep registration receipts with their original registration bot and management-role notices with management-enabled bots. Approval permissions remain independent.
+
 ## v1.0 — 2026-11-09 · Selected external substitute registrations
 
 - Let each robot opt into substitute registration for explicitly selected activity slots outside its main service scope; an enabled rule requires at least one selection.

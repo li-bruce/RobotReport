@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from app.bot_capabilities import ALL_CAPABILITIES, DEFAULT_CAPABILITIES, capability_catalog, normalize_capabilities, require_capability, supports
+from app.bot_capabilities import ALL_CAPABILITIES, LEGACY_CAPABILITIES, DEFAULT_CAPABILITIES, capability_catalog, normalize_capabilities, require_capability, supports
 from app.db import connect, stamp
 from app.messages import Outbox
 from app.scope import refresh_context
@@ -36,7 +36,7 @@ class RobotRegistryTests(unittest.TestCase):
         return 'https://xz.wps.cn/api/v1/webhook/send?key=' + key
 
     def test_catalog_defaults_and_optional_daily_events(self):
-        self.assertEqual(normalize_capabilities(None), ALL_CAPABILITIES)
+        self.assertEqual(normalize_capabilities(None), LEGACY_CAPABILITIES)
         self.assertEqual(normalize_capabilities([]), ())
         self.assertEqual([item['id'] for item in capability_catalog() if item['required']], [])
         self.assertEqual(self.bot['capabilities'], list(DEFAULT_CAPABILITIES))
@@ -243,7 +243,7 @@ class RegistryMigrationTests(unittest.TestCase):
                 self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
                 self.assertEqual(list(db.execute('PRAGMA foreign_key_check')), [])
                 self.assertIsNotNone(db.execute("SELECT 1 FROM sqlite_master WHERE name='custom_channel_name'").fetchone())
-            self.assertEqual(platform.list(admin)[0]['capabilities'], list(ALL_CAPABILITIES))
+            self.assertEqual(platform.list(admin)[0]['capabilities'], list(LEGACY_CAPABILITIES))
             platform.archive_channel(admin, bot_id, channel_id)
             replacement = platform.save_channel(admin, bot_id, {'chat_id': 'old-room', 'robot_key': 'new-key', 'webhook_url': RobotRegistryTests.webhook('new')})
             self.assertNotEqual(replacement['id'], channel_id)

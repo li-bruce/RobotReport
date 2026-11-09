@@ -89,9 +89,11 @@ class IdentityNotificationTests(unittest.TestCase):
         self.assertEqual(result['deliveries'][0]['channel_id'], self.channels[0])
         self.assertEqual(self.outbox(1), [])
 
-    def test_profile_and_level_requests_keep_their_own_origin(self):
+    def test_profile_and_level_requests_use_designated_notice_bot(self):
         from app.profile_changes import ProfileChanges
         self.user((0,1))
+        self.caps(0,['registration','member_notifications'])
+        self.caps(1,['registration'])
         Members(self.admin, self.clock).review('person-one','approved')
         self.notices.recover()
         Members(self.ctx(1), self.clock).request_level(5)
@@ -101,7 +103,7 @@ class IdentityNotificationTests(unittest.TestCase):
         for kind in ('level','profile_request'):
             event = next(e for e in self.notices.list() if e['kind']==kind)
             result = self.notices.dispatch(event['id'])
-            self.assertEqual(result['deliveries'][0]['channel_id'],self.channels[1])
+            self.assertEqual(result['deliveries'][0]['channel_id'],self.channels[0])
 
     def test_simulation_and_admin_edits_cannot_forge_request_origins(self):
         from app.identity_notifications import remember_request_source
@@ -114,7 +116,7 @@ class IdentityNotificationTests(unittest.TestCase):
     def test_personal_results_and_role_notices_use_their_own_business_bots(self):
         self.user((0,))
         self.caps(0, ['registration', 'messages'])
-        self.caps(1, ['management'])
+        self.caps(1, ['management','member_notifications'])
         cases = [
             ('membership', {'status':'pending'}, {'status':'approved'}),
             ('roles', {'roles':[]}, {'roles':['member_manager']}),
@@ -124,14 +126,14 @@ class IdentityNotificationTests(unittest.TestCase):
         ]
         for kind, before, after in cases:
             with self.subTest(kind=kind):
-                expected = 1 if kind == 'roles' else 0
+                expected = 0 if kind == 'membership' else 1
                 event_id = self.event(self.ctx(0), kind, before, after)
                 item = self.notices.dispatch(event_id)
                 self.assertEqual(item['status'], 'queued')
                 self.assertEqual([(d['chat_id'],d['channel_id']) for d in item['deliveries']],
                                  [('known-room',self.channels[expected])])
-        self.assertEqual(len(self.outbox(1)), 1)
-        self.assertEqual(len(self.outbox(0)), len(cases)-1)
+        self.assertEqual(len(self.outbox(1)), len(cases)-1)
+        self.assertEqual(len(self.outbox(0)), 1)
         self.assertEqual(self.outbox(2), [])
         self.assertEqual(self.outbox(3), [])
 
@@ -161,6 +163,112 @@ class IdentityNotificationTests(unittest.TestCase):
         event_id = self.event(kind='roles',before={'roles':[]},after={'roles':['member_manager']})
         self.assertEqual(self.notices.dispatch(event_id)['status'], 'blocked')
         self.assertEqual(sum(len(self.outbox(i)) for i in range(4)), 0)
+
+    def test_profile_notification_setting_is_explicit_and_persisted(self):
+        from app.bot_capabilities import DEFAULT_CAPABILITIES, normalize_capabilities, capability_catalog
+        self.assertNotIn('member_notifications',DEFAULT_CAPABILITIES)
+        self.assertNotIn('member_notifications',normalize_capabilities(None))
+        option=next(c for c in capability_catalog() if c['id']=='member_notifications')
+        self.assertEqual(option['name'],'会员资料变更通知')
+        self.assertFalse(option['default_enabled'])
+        self.caps(0,['member_notifications'])
+        reopened=Platform(self.platform.root)
+        self.assertEqual(reopened.context_for_channel(self.channels[0]).capabilities,('member_notifications',))
+
+    def test_profile_notices_use_only_enabled_sender_in_the_same_group(self):
+        self.user((0,))
+        self.caps(0,['registration','management','messages'])
+        self.caps(1,['member_notifications'])
+        self.caps(2,['member_notifications'])
+        cases=[('groups',{'groups':[]},{'groups':[{'id':1,'name':'二组'}]}),
+               ('level',{'level_status':'pending'},{'level_status':'approved','level':2}),
+               ('profile_request',{'request_id':1,'status':'pending'},{'request_id':1,'status':'approved','fields':['姓名']})]
+        for kind,before,after in cases:
+            with self.subTest(kind=kind):
+                event_id=self.event(self.ctx(0),kind,before,after)
+                item=self.notices.dispatch(event_id)
+                self.assertEqual([(d['chat_id'],d['channel_id']) for d in item['deliveries']],
+                                 [('known-room',self.channels[1])])
+                self.assertEqual(item['status'],'queued')
+        self.assertEqual(len(self.outbox(1)),3)
+        self.assertEqual(self.outbox(0),[])
+        self.assertEqual(self.outbox(2),[])
+        # Receiving notifications cannot grant the ability to handle requests.
+        from app.commands import Commands
+        for text in ('注册','自评3级','审核通过 张三'):
+            with self.subTest(text=text),self.assertRaises(PermissionError):
+                asyncio.run(Commands(self.ctx(1),self.clock).run(text))
+
+    def test_profile_notices_wait_for_configuration_without_using_registration_bot(self):
+        self.user((0,))
+        self.caps(0,['registration']);self.caps(1,['management','messages'])
+        event_id=self.event(kind='groups',before={'groups':[]},after={'groups':[{'id':1,'name':'二组'}]})
+        item=self.notices.dispatch(event_id)
+        self.assertEqual(item['status'],'blocked')
+        self.assertIn('会员资料变更通知',item['last_error'])
+        self.assertEqual(sum(len(self.outbox(i)) for i in range(4)),0)
+        self.caps(1,['member_notifications'])
+        self.at+=timedelta(seconds=61)
+        self.notices.recover()
+        self.assertEqual(self.notices.get(event_id)['deliveries'][0]['channel_id'],self.channels[1])
+        self.assertEqual(len(self.outbox(1)),1)
+        self.notices.recover()
+        self.assertEqual(len(self.outbox(1)),1)
+
+    def test_multiple_profile_senders_still_create_one_notice_per_group(self):
+        self.user((0,))
+        for i in (0,1):self.caps(i,['member_notifications'])
+        event_id=self.event(kind='level',before={'level_status':'pending'},after={'level_status':'approved','level':2})
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            list(workers.map(self.notices.dispatch,[event_id,event_id]))
+        self.assertEqual(len(self.notices.get(event_id)['deliveries']),1)
+        self.assertEqual(sum(len(self.outbox(i)) for i in range(4)),1)
+
+    def test_profile_setting_revocation_is_enforced_at_transport_without_switching_sender(self):
+        self.user((0,))
+        self.caps(0,['registration']);self.caps(1,['member_notifications'])
+        event_id=self.event(kind='level',before={'level_status':'pending'},after={'level_status':'approved','level':2})
+        self.notices.dispatch(event_id)
+        self.caps(1,['registration','management'])
+        self.caps(0,['registration','member_notifications'])
+        self.assertEqual(asyncio.run(Outbox(self.ctx(1)).deliver_one(self.platform,at=self.at)),'failed')
+        self.assertEqual(self.outbox(1)[0]['attempts'],0)
+        self.assertIn('会员资料变更通知',self.outbox(1)[0]['last_error'])
+        self.notices.recover()
+        self.assertEqual(self.outbox(0),[])
+        self.assertFalse(self.notices.get(event_id)['can_retry'])
+
+    def test_profile_notification_time_window_is_independent_of_registration(self):
+        self.user((0,))
+        self.caps(0,['registration']);self.caps(1,['member_notifications'])
+        event_id=self.event(kind='groups',before={'groups':[]},after={'groups':[{'id':1,'name':'二组'}]})
+        self.platform.update(self.principal,self.bots[1]['id'],{'capability_rules':[
+            {'id':'notice-hours','name':'通知时间','enabled':True,'capabilities':['member_notifications'],
+             'action':'open','when':{'start_time':'13:00','end_time':'18:00'}}]})
+        self.assertEqual(self.notices.dispatch(event_id)['status'],'blocked')
+        membership=self.event(self.ctx(0))
+        self.assertEqual(self.notices.dispatch(membership)['deliveries'][0]['channel_id'],self.channels[0])
+        self.at+=timedelta(hours=1)
+        self.notices.recover()
+        self.assertEqual(self.notices.get(event_id)['deliveries'][0]['channel_id'],self.channels[1])
+
+    def test_sent_legacy_profile_notice_is_not_replayed_after_sender_setting_changes(self):
+        self.user((0,))
+        self.caps(0,['registration']);self.caps(1,['registration'])
+        with patch('app.identity_notifications.notification_capability',return_value='registration'):
+            event_id=self.event(self.ctx(0),kind='level',before={'level_status':'pending'},after={'level_status':'approved','level':2})
+            self.notices.dispatch(event_id)
+            async def send():
+                async def handler(request):return httpx.Response(200,json={'result':'ok'})
+                async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                    return await Outbox(self.ctx(0)).deliver_one(self.platform,live=True,client=client,at=self.at)
+            self.assertEqual(asyncio.run(send()),'sent')
+        original_ids=[r['id'] for r in self.outbox(0)]
+        self.caps(1,['member_notifications'])
+        self.notices.recover()
+        self.assertEqual(self.notices.get(event_id)['status'],'sent')
+        self.assertEqual([r['id'] for r in self.outbox(0)],original_ids)
+        self.assertEqual(self.outbox(1),[])
 
     def legacy_notice(self):
         self.user((0,))
