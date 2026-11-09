@@ -8,7 +8,7 @@ import re
 from string import Formatter
 
 from .db import connect, dumps, audit
-from .messages import escape
+from .messages import escape, mention
 
 
 class Markup(str):
@@ -29,6 +29,7 @@ class Template:
 
 
 TEMPLATES = {}
+PERSONAL_FORM_TEMPLATES = frozenset({'registration.form', 'registration.incomplete', 'profile.form'})
 VARIABLE_LABELS = {'greeting':'称呼','name':'姓名','person':'通知对象','people':'通知名单','system_name':'系统名称',
                   'bot_name':'机器人名称','commands':'可用指令','content':'业务结果','table':'业务表格','steps':'执行步骤',
                   'heading':'场次与时间','title':'标题','detail':'详细结果','reason':'原因','status':'当前状态',
@@ -258,9 +259,15 @@ def render(ctx, key, *, settings=None, **values):
     name = str(values.get('name') or '').strip()
     if name == getattr(ctx, 'actor', None) or name in ('待完善姓名', '待填写', '未命名'):
         name = ''
+    recipient = escape(name)
+    if (key in PERSONAL_FORM_TEMPLATES and getattr(ctx, 'source', '') in ('callback', 'simulator')
+            and getattr(ctx, 'actor', None)):
+        # A new sender may have no saved name or callback nickname. Address the
+        # authenticated account so the platform can resolve its display name.
+        recipient = mention(ctx.actor, name)
     common = {'system_name': settings.get('system_name') or '聚场',
               'bot_name': getattr(ctx, 'bot_name', '') or '机器人',
-              'greeting': Markup((escape(name) + '，' if name else '') + '您好！')}
+              'greeting': Markup((recipient + '，' if recipient else '') + '您好！')}
     for key_name, cmd in {'register':'注册', 'profile':'注册资料', 'help':'帮助', 'organize':'组织比赛',
                           'resume':'继续比赛', 'enroll':'报名', 'roster':'名单', 'confirm':'确认',
                           'cancel':'取消计划'}.items():

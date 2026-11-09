@@ -41,6 +41,74 @@ def test_every_template_valid_and_previewable(club):
         assert reply['image']==spec.image
 
 
+@pytest.mark.parametrize('text', ['注册', '注册确认', '补全资料'])
+@pytest.mark.parametrize('name', [None, '小林'])
+def test_personal_registration_link_addresses_its_sender(club, text, name):
+    from app.service import Service
+    from app.security import digest
+    p,a,b,ctx,user,clock=club
+    Service(ctx,clock).update_config({'public_base_url':'http://127.0.0.1:9874'})
+    reply=asyncio.run(Commands(user,clock).run(text,name))
+    assert f'<at user_id="12345">{name or ""}</at>，您好！' in reply
+    assert '确认本人资料' in reply
+    assert '12345' not in plain(reply)  # Account IDs are never visible text.
+    reference=re.search(r'/register#([^)]*)',reply)[1]
+    token=reference.split('.',1)[1]
+    with connect(user.transport_db_path) as db:
+        row=db.execute('SELECT user_id,chat_id FROM registration_forms WHERE token_hash=?',(digest(token),)).fetchone()
+    assert tuple(row)==(user.actor,user.chat_id)
+
+
+@pytest.mark.parametrize('text', ['修改资料', '注册'])
+def test_profile_links_use_reviewed_name_and_actual_account(club, text):
+    from app.service import Service
+    p,a,b,ctx,user,clock=club
+    Service(ctx,clock).update_config({'public_base_url':'http://127.0.0.1:9874'})
+    Members(user,clock).touch(name='登记姓名')
+    Members(ctx,clock).review(user.actor,'approved')
+    # Missing gender opens the completion form on 注册. A later nickname must
+    # not replace the reviewed name in either the record or the invitation.
+    reply=asyncio.run(Commands(user,clock).run(text,'新的群昵称'))
+    assert '<at user_id="12345">登记姓名</at>，您好！' in reply
+    assert '新的群昵称' not in reply
+    assert '/register#' in reply
+
+
+def test_custom_form_greeting_keeps_recipient_and_escapes_name(club):
+    from app.dialogue import link
+    p,a,b,ctx,user,clock=club
+    current=settings_api(p,a,b[0]['id'])
+    custom=TEMPLATES['registration.form'].text.replace('请点击','请打开')
+    settings_api(p,a,b[0]['id'],{'revision':current['revision'],'system_name':'聚场','overrides':{'registration.form':custom}})
+    reply=render(user,'registration.form',name='<b>小林</b>',form_link=link('确认本人资料','https://example.invalid/register'))
+    assert '<at user_id="12345">&lt;b&gt;小林&lt;/b&gt;</at>，您好！请打开' in reply
+    assert '<b>小林</b>' not in reply
+    fallback=render(user,'registration.form',name=user.actor,form_link=link('确认本人资料','https://example.invalid/register'))
+    assert '<at user_id="12345"></at>，您好！' in fallback
+
+
+def test_callback_form_replies_identify_each_sender_without_nicknames(club):
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.service import Service
+    p,a,b,ctx,user,clock=club
+    bot=p.create(a,{'name':'注册助手','chat_id':'shared','robot_key':'recipient-fixture',
+                    'capabilities':['registration']})
+    Service(ctx,clock).update_config({'public_base_url':'http://127.0.0.1:9874'})
+    app=create_app(p.root,'template-admin-token-of-at-least-32-characters',False,False,clock)
+    with TestClient(app) as client:
+        for actor in ('21001','21002'):
+            body={'robot_key':'recipient-fixture','chatid':'shared','creator':actor,'ctime':'123456','content':'注册'}
+            assert client.post(bot['callback_path'],json=body).json()=={'result':'ok'}
+    channel=p.context_for_channel(bot['channels'][0]['id'],'21001',False,'callback')
+    with connect(channel.transport_db_path) as db:
+        rows=[json.loads(r[0])['markdown']['text'] for r in db.execute('SELECT payload FROM outbox ORDER BY rowid')]
+    assert len(rows)==2
+    assert '<at user_id="21001"></at>，您好！' in rows[0] and '21002' not in rows[0]
+    assert '<at user_id="21002"></at>，您好！' in rows[1] and '21001' not in rows[1]
+    assert re.search(r'/register#([^)]*)',rows[0])[1]!=re.search(r'/register#([^)]*)',rows[1])[1]
+
+
 def test_personalized_bare_mention_and_membership_gate(club):
     p,a,b,ctx,user,clock=club
     router=Commands(user,clock)

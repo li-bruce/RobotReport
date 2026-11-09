@@ -189,11 +189,11 @@ class ProfileChanges:
 
     def handle(self, text):
         if text in ('修改资料', '申请修改资料', '修改个人信息', '申请调整资料'):
-            self.members.require_approved(allow_admin=False, bot_access=False)
+            member = self.members.require_approved(allow_admin=False, bot_access=False)
             from .registration import create_form
             url = create_form(self.ctx, self.clock, purpose='profile')
             from .dialogue import render, link, command
-            return render(self.ctx,'profile.form',form_link=link('填写资料调整申请',url)) if url else render(self.ctx,'profile.fallback',group_example=command(self.ctx,'申请分组 提高组'),level_example=command(self.ctx,'申请等级 5级'))
+            return render(self.ctx,'profile.form',name=member['name'],form_link=link('填写资料调整申请',url)) if url else render(self.ctx,'profile.fallback',group_example=command(self.ctx,'申请分组 提高组'),level_example=command(self.ctx,'申请等级 5级'))
         if text in ('可选分组', '分组列表'):
             groups = self.groups()
             return '**可申请分组**\n\n' + ('、'.join(escape(g['name']) for g in groups) or '暂无分组，请联系管理员。')

@@ -1,5 +1,10 @@
 # Changes
 
+## v1.0 — 2026-11-09 · Personal form recipients
+
+- Address registration and profile form replies to the requesting member with an account mention and the known name. When the callback has no nickname, the chat platform resolves the mention.
+- Include the saved member name in profile-change invitations and preserve recipient addressing in custom reply templates.
+
 ## v1.0 — 2026-11-09 · One daily competition per session
 
 - Enforce one daily competition per shared activity session across robots, the admin UI and AI, including concurrent creation attempts. Paused, closed, completed and archived events still occupy the session.
