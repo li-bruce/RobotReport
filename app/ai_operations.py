@@ -87,7 +87,7 @@ def describe_step(step):
         details = [a.get('tournament_name') or '匹配未结束赛事']
         if op == 'RecordScore': details += [f"第{a['match_id']}场", ' / '.join(f'{x}:{y}' for x,y in a['scores'])]
         if op == 'TournamentQuery': details.append({'schedule':'对战表','results':'积分表','mine':'我的赛程','rules':'规则'}[a['view']])
-        if op == 'EventAction': details.append({'pause':'暂停','close':'关闭','advance':'晋级'}[a['action']])
+        if op == 'EventAction': details.append({'pause':'暂停','close':'关闭','advance':'晋级','delete':'删除'}[a['action']])
         if op == 'EventRegistration':
             if a['action']=='cancel':
                 details.append('只取消代报：'+'、'.join(a['guest_names'])+'；保留本人及其他同行' if a.get('guest_names') else '只取消本人，保留所有同行')
@@ -195,6 +195,9 @@ async def execute_step(commands, step):
         elif op == 'ResumeTournament':
             if event['status']=='paused': events.transition(event['id'],'resume',venue)
             elif event['status']!='running': raise ValueError('赛事当前不能继续')
+        elif a['action'] == 'delete':
+            events.delete(event['id'], event['version'], venue)
+            return commands.say('event.deleted', event=event['title'])
         else: events.transition(event['id'],a['action'],venue)
         return events.describe(event['id'])
     if op == 'ToggleAI':

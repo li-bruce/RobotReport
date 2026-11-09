@@ -40,10 +40,11 @@ class IntegrationTests(CoreFixture):
         self.assertEqual(result.status_code,200,result.text)
         return result.json()
 
-    def daily(self, form='round_robin', via_api=False):
+    def daily(self, form='round_robin', via_api=False, session_index=0):
+        session_id = self.s.sessions()[session_index]['id']
         for i in range(1,5):
-            self.s.enroll(str(i),'球友'+str(i))
-        data={'title':'每日积分','kind':'daily','format':form,'options':{'discipline':'singles'},'venue_id':1,'date':'2026-10-12','registration_open':None,'registration_close':None}
+            self.s.enroll(str(i),'球友'+str(i),session_id=session_id)
+        data={'title':'每日积分','kind':'daily','format':form,'options':{'discipline':'singles'},'venue_id':1,'date':'2026-10-12','session_id':session_id,'registration_open':None,'registration_close':None}
         if via_api:
             item=self.call('POST','/api/tournaments',data)
             self.call('PUT',f"/api/tournaments/{item['id']}/organization",{'channel_ids':[self.ctx.channel_id]})
@@ -103,7 +104,10 @@ class IntegrationTests(CoreFixture):
             self.s.enroll(user,user)
         member_event=Tournaments(self.member,self.clock).create({'kind':'daily','format':'round_robin','options':{'scoring_mode':'members','discipline':'singles'}})
         self.assertEqual(member_event['options']['scoring_mode'],'leader')
-        admin_event=Tournaments(self.ctx,self.clock).create({'kind':'daily','format':'round_robin','options':{'scoring_mode':'members','leader_user_ids':['other'],'discipline':'singles'}})
+        second = self.s.sessions()[1]
+        for user in ('1001', '2'):
+            self.s.enroll(user, user, session_id=second['id'])
+        admin_event=Tournaments(self.ctx,self.clock).create({'kind':'daily','format':'round_robin','session_id':second['id'],'options':{'scoring_mode':'members','leader_user_ids':['other'],'discipline':'singles'}})
         self.assertEqual(admin_event['options']['scoring_mode'],'members')
         with self.assertRaises(PermissionError):
             Tournaments(replace(self.member,actor='leader'),self.clock).score(member_event['id'],member_event['matches'][0]['id'],[[21,19]])
@@ -114,7 +118,7 @@ class IntegrationTests(CoreFixture):
 
     def test_resume_multiple_candidates_and_wrong_venue(self):
         self.daily()
-        self.daily('single_elimination')
+        self.daily('single_elimination', session_index=1)
         response=asyncio.run(self.commands(replace(self.member,actor='1')).run('继续比赛'))
         self.assertIn('您想继续哪一场',response)
         venue=self.s.save_venue({'name':'第二场地'})
@@ -127,7 +131,7 @@ class IntegrationTests(CoreFixture):
         self.assertIn('（21）', reply)
         saved = Tournaments(self.ctx, self.clock).get(event['id'])
         self.assertEqual(sum(bool(m['scores']) for m in saved['matches']), 1)
-        second = self.daily('single_elimination')
+        second = self.daily('single_elimination', session_index=1)
         reply = asyncio.run(self.commands().run('第2场 21:18'))
         self.assertIn('本次尚未记分', reply)
         for item, count in [(event, 1), (second, 0)]:

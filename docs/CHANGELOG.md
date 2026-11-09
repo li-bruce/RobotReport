@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-11-09 · One daily competition per session
+
+- Enforce one daily competition per shared activity session across robots, the admin UI and AI, including concurrent creation attempts. Paused, closed, completed and archived events still occupy the session.
+- Allow the event organizer or an event administrator to delete the daily competition before rebuilding it; retain activity registrations and deletion audit history.
+- Show existing competitions during planning and in the admin form; exclude deleted competitions from active lists, reminders and personal match statistics.
+
 ## v1.0 — 2026-11-09 · Shared list guidance
 
 - Keep session facts in each section and show a single enrollment example after the entire roster or scheduled reminder.

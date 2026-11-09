@@ -331,7 +331,7 @@ class CasualMatches:
             return []
         rows = db.execute('''SELECT m.*,e.title,e.venue_id,e.date,e.options,e.status AS event_status,e.chat_id AS scope_id,e.creator,
             v.name AS venue_name FROM tour_matches m JOIN tour_events e ON e.id=m.tournament_id
-            JOIN venues v ON v.id=e.venue_id WHERE e.chat_id=? AND m.status='completed' AND e.status<>'cancelled' ''', (self.ctx.scope_id,))
+            JOIN venues v ON v.id=e.venue_id WHERE e.chat_id=? AND m.status='completed' AND e.status NOT IN ('cancelled','deleted') ''', (self.ctx.scope_id,))
         result = []
         for source in rows:
             row = dict(source)

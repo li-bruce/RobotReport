@@ -63,7 +63,7 @@ class People(Members):
                     COALESCE(n.name,'待补姓名') AS sponsor_name,p.name,p.guest_index,p.status
                     FROM tour_participants p JOIN tour_events e ON e.id=p.tournament_id
                     LEFT JOIN profiles n ON n.user_id=p.user_id AND n.chat_id=e.chat_id
-                    WHERE e.chat_id=? AND p.guest_index>0 ORDER BY e.date DESC LIMIT 500''',(self.ctx.scope_id,)))
+                    WHERE e.chat_id=? AND e.status<>'deleted' AND p.guest_index>0 ORDER BY e.date DESC LIMIT 500''',(self.ctx.scope_id,)))
         for row in rows:
             row['name'] = row.get('guest_name') or row.get('name') or f"{row['sponsor_name']}+{row['guest_index']}"
             row['member'] = False

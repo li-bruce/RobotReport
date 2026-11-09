@@ -639,6 +639,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     def update_tournament(event_id: int, data: dict, ctx=Depends(context)):
         return events(ctx).update(event_id, data)
 
+    @app.delete('/api/tournaments/{event_id}')
+    def delete_tournament(event_id: int, data: dict, ctx=Depends(context)):
+        return events(ctx).delete(event_id, data.get('expected_version'))
+
     @app.post('/api/tournaments/{event_id}/actions')
     def transition(event_id: int, data: dict, ctx=Depends(context)):
         return events(ctx).transition(event_id, data['action'])

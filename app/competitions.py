@@ -21,7 +21,13 @@ from .formats import get_format, metadata
 from .formats.common import knockout, match, player_name, level
 
 TZ = ZoneInfo("Asia/Shanghai")
-TERMINAL = {"completed", "archived", "cancelled"}
+TERMINAL = {"completed", "archived", "cancelled", "deleted"}
+
+
+class DailySessionConflict(ValueError):
+    def __init__(self, event):
+        self.event = dict(event)
+        super().__init__(f'本场次已有每日比赛“{event["title"]}”，请查看原比赛；如需重建，请由赛事负责人或赛事管理员先删除原比赛。')
 
 
 from .gender import normalize_gender, category as doubles_category, require_person, validate_roster, CATEGORIES
@@ -98,6 +104,8 @@ CREATE TABLE IF NOT EXISTS tour_events (
  version INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS ix_tour_scope ON tour_events(venue_id,chat_id,status,date);
+CREATE INDEX IF NOT EXISTS ix_tour_daily_session ON tour_events(chat_id,venue_id,json_extract(options,'$.session_id'))
+ WHERE kind='daily' AND status<>'deleted';
 CREATE TABLE IF NOT EXISTS tour_participants (
  tournament_id INTEGER NOT NULL REFERENCES tour_events(id), id TEXT NOT NULL,
  user_id TEXT NOT NULL, name TEXT NOT NULL, guest_index INTEGER NOT NULL DEFAULT 0,
@@ -187,8 +195,8 @@ class TournamentService:
 
     def _event(self, db, event_id):
         row = db.execute("SELECT * FROM tour_events WHERE id=?", (event_id,)).fetchone()
-        if row is None:
-            raise ValueError("赛事不存在")
+        if row is None or row['status'] == 'deleted':
+            raise ValueError("赛事不存在或已删除")
         event = dict(row)
         for src, dest, fallback in (("options", "options", {}), ("staff", "staff", []),
                                     ("groups_json", "groups", []), ("plan_json", "plan", {}),
@@ -211,6 +219,20 @@ class TournamentService:
     def _audit(db, event_id, actor, action, before=None, after=None):
         db.execute("INSERT INTO tour_audit(tournament_id,actor,action,before_json,after_json,created_at) VALUES(?,?,?,?,?,?)",
                    (event_id, str(actor), action, _dump(before), _dump(after), _now().isoformat()))
+
+    @staticmethod
+    def _daily_for_session(db, chat_id, venue_id, session_id):
+        if session_id is None:
+            return None  # Standalone format scripts have no activity session.
+        return db.execute("""SELECT id,title,status,version FROM tour_events
+            WHERE kind='daily' AND chat_id=? AND venue_id=? AND status<>'deleted'
+            AND json_extract(options,'$.session_id')=? ORDER BY id LIMIT 1""",
+            (str(chat_id), venue_id, session_id)).fetchone()
+
+    def daily_for_session(self, chat_id, venue_id, session_id):
+        with closing(self._connect()) as db:
+            row = self._daily_for_session(db, chat_id, venue_id, session_id)
+            return dict(row) if row else None
 
     @staticmethod
     def _touch(db, event_id):
@@ -335,7 +357,7 @@ class TournamentService:
                  and _time(s['starts_at']) <= moment < _time(s['expires_at'])}
         owner = bool(is_admin or str(actor) == event['creator'] or 'organizer' in roles)
         coordinator = owner or 'coordinator' in roles
-        return {'view': True, 'manage': owner, 'score': owner or 'scorer' in roles,
+        return {'view': True, 'manage': owner, 'delete': owner and event.get('kind') == 'daily', 'score': owner or 'scorer' in roles,
                 'correct_score': owner, 'coordinate': coordinator, 'manage_staff': owner,
                 'appoint_organizer': bool(is_admin), 'manage_channels': owner,
                 'role': 'administrator' if is_admin else 'organizer' if owner else
@@ -428,7 +450,7 @@ class TournamentService:
                 self._approved(db, {'chat_id': chat}, [creator])
             token = options.get('planner_token')
             if token:
-                for old in db.execute('SELECT id,format,options FROM tour_events WHERE kind=? AND chat_id=? AND venue_id=? AND creator=?', ('daily', chat, venue, creator)):
+                for old in db.execute("SELECT id,format,options FROM tour_events WHERE kind=? AND chat_id=? AND venue_id=? AND creator=? AND status<>'deleted'", ('daily', chat, venue, creator)):
                     old_options = _load(old['options'], {})
                     if old_options.get('planner_token') == token:
                         old_discipline = old_options.get('discipline', 'singles' if old_options.get('team_size') == 1 else 'doubles')
@@ -438,6 +460,10 @@ class TournamentService:
                                 old_options.get('session_id') != options.get('session_id')):
                             raise ValueError('同一策划标识不能用于不同赛事设置')
                         return self.get(old['id'])
+            if kind == 'daily':
+                existing = self._daily_for_session(db, chat, venue, options.get('session_id'))
+                if existing:
+                    raise DailySessionConflict(existing)
             if creation_guard:
                 refreshed = creation_guard(db, {'kind': kind, 'format': format_id, 'venue_id': venue, 'chat_id': chat,
                                                 'date': day, 'options': options, 'participants': participants,
@@ -489,7 +515,7 @@ class TournamentService:
         return self.get(event_id)
 
     def list(self, venue_id=None, chat_id=None, status=None):
-        where, args = [], []
+        where, args = ["status<>'deleted'"], []
         for field, value in (("venue_id",venue_id),("chat_id",chat_id),("status",status)):
             if value is not None:
                 where.append(f"{field}=?")
@@ -616,6 +642,26 @@ class TournamentService:
             sync_event(db, self._event(db,tournament_id), actor, _now())
             self._audit(db,tournament_id,actor,"update",before,data)
         return self.get(tournament_id)
+
+    def delete(self, tournament_id, actor, is_admin=False, expected_version=None, guard=None):
+        """Remove a daily event from use while retaining its scores and audit trail."""
+        with self._transaction() as db:
+            event = self._event(db, tournament_id)
+            if guard:
+                guard(db, event)
+            if not is_admin:
+                self._approved(db, event, [actor])
+            if not self.permissions(event, actor, is_admin)['delete']:
+                raise PermissionError('仅本场次赛事负责人或赛事管理员可以删除每日比赛')
+            if type(expected_version) is not int or expected_version != event['version']:
+                raise ValueError('赛事已更新，请刷新后再删除')
+            db.execute("UPDATE tour_events SET status='deleted' WHERE id=?", (tournament_id,))
+            self._touch(db, tournament_id)
+            self._audit(db, tournament_id, actor, 'delete',
+                        {'title': event['title'], 'status': event['status'], 'version': event['version']},
+                        {'status': 'deleted', 'session_id': event['options'].get('session_id')})
+            db.execute('DELETE FROM tour_notifications WHERE tournament_id=?', (tournament_id,))
+        return {'id': tournament_id, 'title': event['title'], 'status': 'deleted'}
 
     def _schedule(self, db, event, entries, actor):
         if not isinstance(entries,list) or len(entries)>2000:

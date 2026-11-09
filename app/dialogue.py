@@ -103,7 +103,9 @@ define('planning.begin_first', '提示先组织比赛', '每日与大型赛事',
 define('planning.expired', '每日策划过期', '每日与大型赛事', '这次策划已过期，请发送 {organize_command} 重新开始。')
 define('planning.closed', '每日策划已结束', '每日与大型赛事', '这次策划已结束。想再来一场，请发送 {organize_command}。')
 define('planning.busy', '正在生成赛事', '每日与大型赛事', '正在为您安排比赛，请稍后发送 {resume_command} 查看。')
-define('planning.ready', '已生成每日赛事', '每日与大型赛事', '已生成赛事，比赛安排好了！请发送 {resume_command} 查看；另建赛事可发送 {organize_command}。')
+define('planning.ready', '已生成每日赛事', '每日与大型赛事', '已生成赛事，比赛安排好了！请发送 {resume_command} 查看。')
+define('planning.exists', '本场次已有每日比赛', '每日与大型赛事', '本场次已有 **{event}**。发送 {schedule_command} 查看。')
+define('planning.deleted', '原每日比赛已删除', '每日与大型赛事', '原比赛已删除，发送 {organize_command} 重新组织。')
 define('planning.options', '每日策划选择赛制', '每日与大型赛事', '{content}\n\n以上标为可用的赛制都可以选，回复对应名称就能开始。', image=True)
 define('event.enrolled', '赛事报名已更新', '每日与大型赛事', '**{event}** 的报名已更新，期待您的参与！')
 define('event.cancelled', '取消赛事本人报名', '每日与大型赛事', '已处理 **{event}** 的本人取消报名，代报名人员仍保留。')
@@ -114,6 +116,7 @@ define('event.no_resume', '没有可继续的赛事', '每日与大型赛事', '
 define('event.choose_score', '记分前选择赛事', '每日与大型赛事', '有几场比赛正在进行，本次尚未记分。请带上赛事名称再告诉我：\n\n{table}', image=True)
 define('event.choose_resume', '选择继续哪场比赛', '每日与大型赛事', '找到几场还没结束的比赛，您想继续哪一场？\n\n{choices}')
 define('event.transition', '赛事状态调整', '每日与大型赛事', '**{event}** 已{result}')
+define('event.deleted', '每日比赛已删除', '每日与大型赛事', '**{event}** 已删除，本场次可以重新组织比赛。')
 define('event.organization_saved', '赛事安排已保存', '每日与大型赛事', '**{event}** 的{field}已保存。{detail}')
 define('record.guide', '零散对局示例', '对局记录', '打完一局了吗？可以这样记下来：\n\n{record_example}\n{single_record_example}\n\n请带上双方姓名和比分；本人需要参赛。')
 define('record.saved', '对局已记录', '对局记录', '{content}\n\n已记录并计入您的对战统计！需要修正可发送 {edit_command}。', image=True)
@@ -371,7 +374,8 @@ def preview(platform, user, bot_id, data):
                   cancel_guests_command=command(ctx,'取消小张，小王'),schedule_example=command(ctx,'春季联赛，我的赛程'),
                   edit_example=command(ctx,'修改记录 12 21:18'),void_example=command(ctx,'作废记录 12'),
                   stats_command=command(ctx,'我的统计'),progress_command=command(ctx,'AI进度'),
-                  coordination_example=command(ctx,'春季联赛，协调安排 18点到场准备'))
+                  coordination_example=command(ctx,'春季联赛，协调安排 18点到场准备'),
+                  delete_example=command(ctx,'周末友谊赛，删除比赛'),schedule_command=command(ctx,'周末友谊赛，对战表'))
     values.update(male_command=command(ctx,'性别 男'),female_command=command(ctx,'性别 女'),
                   reserve_example=command(ctx,'场地1 明天 占用 17:30-20:30 校队训练'),
                   query_example=command(ctx,'场地1 明天 场地占用'),release_example=command(ctx,'场地1 释放占用12'))

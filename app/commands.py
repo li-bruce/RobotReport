@@ -447,12 +447,15 @@ class Commands:
             result = tournaments.score(event['id'], parsed_score['number'], parsed_score['scores'],
                 (expected or {}).get('match_version', match['version']), venue_id, by_number=True)
             return tournaments.describe(result['id'])
-        event_action = re.fullmatch(r'(.+?)[,，]\s*(对战表|比分|积分表|我的赛程|规则|说明|暂停比赛|暂停|继续比赛|恢复比赛|晋级|关闭比赛|关闭)', text)
+        event_action = re.fullmatch(r'(.+?)[,，]\s*(对战表|比分|积分表|我的赛程|规则|说明|暂停比赛|暂停|继续比赛|恢复比赛|晋级|关闭比赛|关闭|删除比赛)', text)
         if event_action:
             event = self.event_by_name(event_action[1].strip(), venue_id, selection['day'])
             action = event_action[2]
             if action in ('对战表','比分','积分表','我的赛程','规则','说明'):
                 return tournaments.describe(event['id'], 'rules' if action in ('规则','说明') else 'mine' if action == '我的赛程' else 'results' if action == '积分表' else 'schedule')
+            if action == '删除比赛':
+                tournaments.delete(event['id'], event['version'], venue_id)
+                return self.say('event.deleted', event=event['title'])
             if action in ('继续比赛','恢复比赛') and event['status'] == 'running':
                 return tournaments.describe(event['id'])
             tournaments.transition(event['id'], {'暂停比赛':'pause','暂停':'pause','继续比赛':'resume','恢复比赛':'resume','晋级':'advance','关闭比赛':'close','关闭':'close'}[action], venue_id)
@@ -513,6 +516,8 @@ class Commands:
     def event_ai_actions(self, event):
         permissions, status = event['permissions'], event['status']
         actions = ['query']
+        if permissions.get('delete'):
+            actions.append('delete')
         if permissions['score'] and (status == 'running' or status == 'completed' and permissions['correct_score']):
             actions.append('score')
         if status == 'paused' and permissions['manage'] or status == 'running':
@@ -581,11 +586,11 @@ class Commands:
         if re.fullmatch(r'自评[1-9]级', text):
             member = Members(self.ctx, self.clock).require_approved()
             result['member'] = {key: member.get(key) for key in ('status', 'level', 'requested_level', 'level_status', 'gender')}
-        event_mutation = re.fullmatch(r'(.+?)[,，]\s*(暂停比赛|关闭比赛|晋级|报名(?:\+\d+)?|报名[,，].+|取消报名|取消.+)', text)
+        event_mutation = re.fullmatch(r'(.+?)[,，]\s*(暂停比赛|关闭比赛|删除比赛|晋级|报名(?:\+\d+)?|报名[,，].+|取消报名|取消.+)', text)
         if event_mutation:
             event = self.event_by_name(event_mutation[1], selection['venue_id'], selection['day'])
-            if event_mutation[2] in ('暂停比赛', '关闭比赛', '晋级'):
-                action = {'暂停比赛':'pause', '关闭比赛':'close', '晋级':'advance'}[event_mutation[2]]
+            if event_mutation[2] in ('暂停比赛', '关闭比赛', '删除比赛', '晋级'):
+                action = {'暂停比赛':'pause', '关闭比赛':'close', '删除比赛':'delete', '晋级':'advance'}[event_mutation[2]]
                 if action not in self.event_ai_actions(event):
                     raise PermissionError('当前没有操作权限，或赛事状态不允许该操作')
             else:
@@ -709,7 +714,7 @@ class Commands:
         query_text, _ = parse_selection(command)
         valid = {
             'SelfLevel': bool(re.fullmatch(r'自评[1-9]级', query_text)),
-            'EventAction': bool(re.fullmatch(r'.+?[,，]\s*(暂停比赛|关闭比赛|晋级)', query_text)),
+            'EventAction': bool(re.fullmatch(r'.+?[,，]\s*(暂停比赛|关闭比赛|删除比赛|晋级)', query_text)),
             'EventRegistration': bool(re.fullmatch(r'.+?[,，]\s*(报名(?:\+\d+)?|报名[,，].+|取消报名|取消.+)', query_text)),
             'Register': bool(re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', query_text) or re.fullmatch(r'报名(?:\s+接龙)?[,，][^\n]+', query_text)),
             'CancelRegistration': query_text == '取消报名' or cancellation_guests(query_text) is not None,

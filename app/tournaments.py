@@ -73,6 +73,22 @@ class Tournaments:
         return {'formal': [p for p in players if p['source_category'] == '正式'],
                 'substitutes': [p for p in players if p['source_category'] == '替补'], 'session': session}
 
+    def daily_for_session(self, session):
+        self.members.require_approved()
+        self.service.assert_session_scope(session)
+        return self.engine.daily_for_session(self.scope_id, session['venue_id'], session['id'])
+
+    def delete(self, event_id, expected_version, venue_id=None):
+        self.get(event_id, venue_id)
+        def guard(db, event):
+            self.members.require_approved(db=db)
+            self.service.assert_event_scope(event)
+            if event['chat_id'] != self.scope_id:
+                raise PermissionError('赛事不属于当前后台')
+            if not self.engine.permissions(event, self.ctx.actor, self.ctx.can('event.manage', db=db), self.clock())['delete']:
+                raise PermissionError('仅本场次赛事负责人或赛事管理员可以删除每日比赛')
+        return self.engine.delete(event_id, self.ctx.actor, self.ctx.can('event.manage'), expected_version, guard)
+
     def planning_formats(self, candidates, discipline='doubles', options=None):
         options = options or {}
         rules = self.members.validate_rules(options.get('eligibility') or {})

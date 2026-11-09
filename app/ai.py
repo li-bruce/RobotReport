@@ -164,7 +164,7 @@ class SelfLevel(_StrictIntent):
 
 class EventAction(_TournamentIntent):
     """Propose one permitted lifecycle transition of an existing event."""
-    action: Literal["pause", "close", "advance"]
+    action: Literal["pause", "close", "advance", "delete"]
 
 
 class EventRegistration(_TournamentIntent):
@@ -589,7 +589,7 @@ def _trusted_context(context: dict[str, Any]) -> dict[str, Any]:
             continue
         if event.get('venue_id') not in allowed_venues:
             continue
-        actions = sorted(set(event.get('actions', [])) & {'query', 'score', 'resume', 'pause', 'close', 'advance', 'enroll', 'cancel'})
+        actions = sorted(set(event.get('actions', [])) & {'query', 'score', 'resume', 'pause', 'close', 'advance', 'delete', 'enroll', 'cancel'})
         if actions:
             events.append({'id': event['id'], 'title': title, 'venue_id': event['venue_id'],
                            'date': _parse_date(event.get('date')).isoformat(), 'actions': actions,
@@ -634,7 +634,7 @@ def _tool_schemas(context: dict[str, Any]) -> list[type[_StrictIntent]]:
         names = [name for name in names if name != 'RecordScore']
     if not any('query' in event['actions'] for event in context['events']):
         names = [name for name in names if name != 'TournamentQuery']
-    if not any(set(event['actions']) & {'pause', 'close', 'advance'} for event in context['events']):
+    if not any(set(event['actions']) & {'pause', 'close', 'advance', 'delete'} for event in context['events']):
         names = [name for name in names if name != 'EventAction']
     if not any(set(event['actions']) & {'enroll', 'cancel'} for event in context['events']):
         names = [name for name in names if name != 'EventRegistration']
@@ -838,11 +838,11 @@ def _ground_score(intent: RecordScore, text: str, event: dict[str, Any]) -> None
 def _ground_event_action(intent: EventAction, text: str, event: dict[str, Any]) -> None:
     literal = text.replace(event['title'], '')
     patterns = {'pause': r'暂停|停赛', 'close': r'关闭|终止|结束比赛|结束赛事',
-                'advance': r'晋级|推进到?下一阶段|进入下一阶段'}
+                'advance': r'晋级|推进到?下一阶段|进入下一阶段', 'delete': r'删除'}
     found = {action for action, pattern in patterns.items() if re.search(pattern, literal)}
-    if found != {intent.action} or re.search(r'(?:不要|不用|别|不想|不再|禁止|取消)\s*(?:暂停|停赛|关闭|终止|结束|晋级|推进|进入)', literal):
-        raise _ClarificationRequired('请明确赛事名称及一个操作：暂停比赛、关闭比赛或晋级。')
-    if re.search(r'是否|有没有|状态|情况|怎么|如何|为什么|为何|能否|可以吗|了吗|原因', literal):
+    if found != {intent.action} or re.search(r'(?:不要|不用|别|不想|不再|禁止|取消)\s*(?:暂停|停赛|关闭|终止|结束|晋级|推进|进入|删除)', literal):
+        raise _ClarificationRequired('请明确赛事名称及一个操作：暂停、关闭、晋级或删除比赛。')
+    if re.search(r'是否|有没有|状态|情况|怎么|如何|为什么|为何|能否|可以吗|了吗|原因|可不可以|能不能|(?:可以|能).{0,16}(?:吗|[?？])', literal):
         raise _ClarificationRequired('如需更改赛事状态，请明确发送“赛事名，暂停比赛”“赛事名，关闭比赛”或“赛事名，晋级”。')
 
 
@@ -978,7 +978,7 @@ def _proposal(name: str, args: dict[str, Any], context: dict[str, Any], text: st
         event = _event_target(intent, context, text, intent.action, venue_id)
         _ground_event_action(intent, text, event)
         values.update(tournament_id=event['id'], tournament_name=event['title'])
-        action = {'pause': '暂停比赛', 'close': '关闭比赛', 'advance': '晋级'}[intent.action]
+        action = {'pause': '暂停比赛', 'close': '关闭比赛', 'advance': '晋级', 'delete': '删除比赛'}[intent.action]
         command = venue_prefix + f"{event['date']} {event['title']}，{action}"
         requires_confirmation = True
     elif name == "EventRegistration":

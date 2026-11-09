@@ -543,7 +543,7 @@ class AIIntentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['error'], 'intent_invalid')
 
     async def test_event_lifecycle_uses_specific_fresh_capabilities_and_literal_action(self):
-        for action, word in (('pause', '暂停比赛'), ('close', '关闭比赛'), ('advance', '晋级')):
+        for action, word in (('pause', '暂停比赛'), ('close', '关闭比赛'), ('advance', '晋级'), ('delete', '删除比赛')):
             args = {'tournament_name': '友谊赛', 'action': action}
             result, _, _ = await self.propose('EventAction', args, trusted=event_context(actions=['query', action]), text=f'友谊赛，{word}')
             self.assertEqual(result['command'], f'场地1 2026-10-12 友谊赛，{word}')
@@ -558,6 +558,10 @@ class AIIntentTests(unittest.IsolatedAsyncioTestCase):
         result, _, _ = await self.propose('EventAction', {'tournament_name': '友谊赛', 'action': 'draw'},
                                         trusted=event_context(actions=['pause']), text='友谊赛抽签')
         self.assertEqual(result['error'], 'intent_invalid')
+        for text in ('不要删除友谊赛', '友谊赛可以删除吗', '友谊赛关闭比赛'):
+            result, _, _ = await self.propose('EventAction', {'tournament_name': '友谊赛', 'action': 'delete'},
+                                            trusted=event_context(actions=['delete']), text=text)
+            self.assertEqual(result['error'], 'clarification_required')
 
     async def test_event_registration_preserves_event_identity_and_guests(self):
         for action, guests, text, expected in (

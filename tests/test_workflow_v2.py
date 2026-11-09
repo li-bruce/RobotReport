@@ -212,7 +212,11 @@ class WorkflowV2Tests(CoreFixture):
 
     def test_duplicate_event_names_and_ambiguous_compact_scores_never_write(self):
         self.organized('相同赛事')
-        self.organized('相同赛事')
+        # Names can still overlap across distinct activity sessions.
+        second = self.s.sessions()[1]
+        for user in ('1001', '1', '2', '3', '4', '5'):
+            self.s.enroll(user, 'ignored', session_id=second['id'])
+        Tournaments(self.member, self.clock).create({'title': '相同赛事', 'session_id': second['id']})
         for command in ('相同赛事，第1场21:19','相同赛事，1221-19'):
             with self.subTest(command=command),self.assertRaises(ValueError):
                 asyncio.run(self.commands().run(command))

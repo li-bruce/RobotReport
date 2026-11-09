@@ -357,7 +357,7 @@ class Outbox:
                                 session_ids=json.loads(notice['session_ids']) if 'session_ids' in notice.keys() else None
                                 if notice['tournament_id'] is not None:
                                     event=business.execute('SELECT * FROM tour_events WHERE id=?',(notice['tournament_id'],)).fetchone()
-                                    if not event:raise PermissionError('赛事已不存在')
+                                    if not event or event['status']=='deleted':raise PermissionError('赛事不存在或已删除')
                                     scoped.assert_event_scope(dict(event))
                                 if session_ids is not None:
                                     from .scope import snapshot

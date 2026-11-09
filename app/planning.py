@@ -43,11 +43,18 @@ class DailyPlanning:
                 raise ValueError('赛事名称限1至100字，不能包含逗号或换行')
         category({'discipline': discipline, 'doubles_category': doubles_category})
         session = self.service.resolve_session(**selection)
+        existing = self.events.daily_for_session(session)
+        if existing:
+            return self.existing_reply(existing, selection['venue_id'])
         payload = {'session_id': session['id'], 'date': session['date'], 'discipline': discipline, 'doubles_category': doubles_category, 'assignment_strategy': strategy, 'title': title}
         with connect(self.ctx.transport_db_path, True) as db:
             db.execute('INSERT OR REPLACE INTO daily_planning VALUES(?,?,?,?,?,?,?,NULL)',
                        (self.ctx.chat_id, self.ctx.actor, selection['venue_id'], secrets.token_hex(16), dumps(payload), 'ready', stamp(self.clock() + timedelta(hours=2))))
         return self.describe(selection['venue_id'])
+
+    def existing_reply(self, event, venue_id):
+        return render(self.ctx, 'planning.exists', event=event['title'],
+                      schedule_command=command(self.ctx, f"场地{venue_id} {event['title']}，对战表"))
 
     def change(self, venue_id, **options):
         record = self.get(venue_id)
@@ -92,7 +99,21 @@ class DailyPlanning:
         record = self.get(venue_id)
         if not record:
             return render(self.ctx,'planning.begin_first')
+        session = self.service.resolve_session(record['payload']['date'], venue_id, record['payload']['session_id'])
+        existing = self.events.daily_for_session(session)
+        if existing and record['status'] == 'creating':
+            committed = self.events.get(existing['id'])
+            if committed['options'].get('planner_token') == record['token']:
+                # A previous attempt committed the event before saving its dialogue state.
+                with connect(self.ctx.transport_db_path, True) as db:
+                    db.execute("UPDATE daily_planning SET status='created',event_id=? WHERE token=? AND status='creating'",
+                               (existing['id'], record['token']))
+                return self.events.describe(existing['id'])
+        if existing and (record['status'] != 'created' or existing['id'] != record['event_id']):
+            return self.existing_reply(existing, venue_id)
         if record['status'] == 'created':
+            if not existing:
+                return render(self.ctx, 'planning.deleted')
             self.events.get(record['event_id'])
             return render(self.ctx,'planning.ready',resume_command=command(self.ctx,f"继续比赛 {record['event_id']}"))
         if record['status'] == 'creating':
@@ -119,9 +140,12 @@ class DailyPlanning:
             event = self.events.create({'kind': 'daily', 'format': format_id, 'title': record['payload'].get('title') or f"{session['date']} {selected['name']}",
                                         'venue_id': venue_id, 'date': session['date'], 'session_id': session['id'],
                                         'options': {'discipline': record['payload']['discipline'], 'doubles_category': record['payload'].get('doubles_category', 'open'), 'assignment_strategy': record['payload']['assignment_strategy'], 'planner_token': record['token']}})
-        except Exception:
+        except Exception as exc:
             with connect(self.ctx.transport_db_path, True) as db:
                 db.execute("UPDATE daily_planning SET status='ready' WHERE token=?", (record['token'],))
+            from .competitions import DailySessionConflict
+            if isinstance(exc, DailySessionConflict):
+                return self.existing_reply(exc.event, venue_id)
             raise
         with connect(self.ctx.transport_db_path, True) as db:
             db.execute("UPDATE daily_planning SET status='created',event_id=? WHERE token=?", (event['id'], record['token']))

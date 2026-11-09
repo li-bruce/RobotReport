@@ -347,7 +347,7 @@ class Service:
         overrides = {r[0] for r in db.execute('SELECT date FROM special_dates WHERE venue_id=?',(venue_id,))}
         plans = []
         has_events = db.execute("SELECT 1 FROM sqlite_master WHERE name='tour_events'").fetchone()
-        events = [dict(r) for r in db.execute('SELECT id,title,status,options FROM tour_events')] if has_events else []
+        events = [dict(r) for r in db.execute("SELECT id,title,status,options FROM tour_events WHERE status<>'deleted'")] if has_events else []
         for old in rows:
             if (special_date and old['date'] != special_date) or (not special_date and old['date'] in overrides):
                 continue

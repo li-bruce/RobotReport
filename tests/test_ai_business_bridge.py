@@ -65,6 +65,24 @@ class AIBusinessBridgeTests(CoreFixture):
         with connect(self.ctx.transport_db_path) as db:
             return db.execute("SELECT COUNT(*) FROM ai_pending WHERE status='pending'").fetchone()[0]
 
+    def test_daily_delete_requires_ai_confirmation_and_keeps_activity_registrations(self):
+        event = self.event()
+        before = self.s.registrations()['registrations']
+        reply = self.model_reply('AI 删除桥接友谊赛', 'EventAction', {
+            'tournament_name': '桥接友谊赛', 'action': 'delete'})
+        self.assertEqual(Tournaments(self.member, self.clock).get(event['id'])['status'], 'running')
+        self.assertIn('已删除', self.confirm(reply))
+        self.assertEqual(Tournaments(self.member, self.clock).list(), [])
+        self.assertEqual(self.s.registrations()['registrations'], before)
+
+    def test_ai_delete_does_not_grant_participant_permission(self):
+        event = self.event()
+        participant = replace(self.member, actor='1002')
+        reply = self.model_reply('AI 删除桥接友谊赛', 'EventAction', {
+            'tournament_name': '桥接友谊赛', 'action': 'delete'}, ctx=participant)
+        self.assertEqual(Tournaments(self.member, self.clock).get(event['id'])['status'], 'running')
+        self.assertNotIn('回复 <font color="#0066b2"><b>@一号 确认', reply)
+
     def test_two_stage_doubles_high_low_planner_to_named_score_without_admin_role(self):
         self.participants()
         reply = self.model_reply('AI 组织比赛 双打，采用高带低', 'StartDailyPlan', {
@@ -100,7 +118,10 @@ class AIBusinessBridgeTests(CoreFixture):
         self.assertEqual(next(m for m in current['matches'] if m['id'] == match['id'])['scores'], [[21, 18]])
         # An actual short title on that date creates a real ambiguity with the
         # default date-prefixed title. Neither event may be selected silently.
-        Tournaments(self.member, self.clock).create({'kind': 'daily', 'title': '积分赛', 'format': 'round_robin'})
+        second = self.s.sessions()[1]
+        for user in ('1001', '1002', '1003', '1004'):
+            self.s.enroll(user, user, session_id=second['id'])
+        Tournaments(self.member, self.clock).create({'kind': 'daily', 'title': '积分赛', 'format': 'round_robin', 'session_id': second['id']})
         before = self.domain_rows()
         with self.assertRaisesRegex(ValueError, '同名|歧义'):
             self.send(f"{event['title']}，第{match['number']}场21:17")
