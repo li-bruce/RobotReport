@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from .db import now, TZ
 from .service import Service
-from .messages import Outbox, roster, escape, empty_roster, session_heading, empty_session_notice
+from .messages import Outbox, roster, escape, empty_roster, session_heading, empty_session_notice, can_invite, enrollment_example
 from .notifications import Notifications
 from .identity_notifications import IdentityNotifications
 from .scope import snapshot
@@ -66,16 +66,17 @@ class Scheduler:
                                 title='报名即将结束' if kind=='closing' else '今日报名'
                                 sections=[]
                                 for item in shown:
-                                    from .dialogue import render, Markup, command
                                     section=session_heading(item,venue['id'],title)
                                     if item.get('occupancies'):
                                         section+='\n\n🔴 **已占用 · 不可报名** '+escape(item['booking_notice'])
                                     elif not any(row['session_id']==item['id'] and row['status']=='active' for row in data['registrations']):
                                         section+='\n\n'+empty_session_notice(dict(item,venue_id=venue['id']),channel)
-                                    elif item['status']!='ended':
-                                        section=render(channel,'broadcast.closing' if kind=='closing' else 'broadcast.open',heading=Markup(section),enroll_command=command(channel,f"{item['date']} 场地{venue['id']} 第{item['number']}场 报名"))
                                     sections.append(section)
                                 text='\n\n'.join(sections)
+                                inviting=next((item for item in shown if can_invite(item)),None)
+                                if inviting is not None:
+                                    from .dialogue import render, Markup
+                                    text=render(channel,'broadcast.closing' if kind=='closing' else 'broadcast.open',heading=Markup(text),enroll_command=enrollment_example(channel,inviting,venue['id']))
                             key=f"broadcast:{rule['id']}:{rule_fingerprint(rule)}:{target.date()}:{rule['time'].replace(':','')}:{venue['id']}:{kind}:{channel.channel_id}"
                             self.notifications.enqueue(text,[channel.channel_id],key=key,
                                                        venue_id=venue['id'],session_ids=[item['id'] for item in shown],session_snapshots=[snapshot(item) for item in shown])

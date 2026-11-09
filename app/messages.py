@@ -120,6 +120,38 @@ def registration_table(rows):
     ])
 
 
+class ListReply(str):
+    """Keep list content separate from shared guidance until replies are combined."""
+    def __new__(cls, body, guidance=()):
+        tips = {}
+        for key, text in guidance:
+            tips.setdefault(key, text)
+        result = super().__new__(cls, '\n\n'.join(part for part in (body, *tips.values()) if part))
+        result.body, result.guidance = body, tuple(tips.items())
+        return result
+
+
+def join_replies(replies, separator='\n\n'):
+    """Append each kind of guidance once, after all facts, without editing text."""
+    bodies, tips = [], []
+    for reply in replies:
+        bodies.append(reply.body if isinstance(reply, ListReply) else str(reply))
+        if isinstance(reply, ListReply):
+            tips.extend(reply.guidance)
+    return ListReply(separator.join(bodies), tips)
+
+
+def can_invite(session):
+    return session.get('status') != 'ended' and session.get('can_enroll') is not False and not session.get('occupancies')
+
+
+def enrollment_example(ctx, session, venue_id=1):
+    from .dialogue import command
+    number = session.get('number')
+    selector = f"{session['date']} 场地{session.get('venue_id') or venue_id} 第{number}场 " if number else ''
+    return command(ctx, selector + '报名')
+
+
 def empty_roster(data):
     """An empty visible roster without an occupancy notice that needs showing."""
     sessions = data['sessions']
@@ -145,14 +177,11 @@ def empty_session_notice(session, ctx=None):
         return render(ctx,'roster.unavailable')
     if ctx is None:
         return '暂时无人报名，欢迎报名参与！'
-    from .dialogue import command
-    number=session.get('number')
-    selector=f"{session['date']} 场地{session['venue_id']} 第{number}场 " if number and session.get('venue_id') else ''
-    return render(ctx,'roster.empty',enroll_command=command(ctx,selector+'报名'))
+    return render(ctx,'roster.empty_status')
 
 
 def roster(data, venue_id=1, *, ctx=None):
-    lines = []
+    lines, inviting = [], []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
         lines.append(session_heading(session, venue_id))
@@ -161,11 +190,18 @@ def roster(data, venue_id=1, *, ctx=None):
         if not rows:
             if not session.get('occupancies'):
                 lines.append(empty_session_notice(dict(session,venue_id=venue_id),ctx))
+                if can_invite(session):
+                    inviting.append(session)
             continue
         lines.append(f"**{len(rows)} 人** · 正式 {session['capacity']} · 替补 {session['substitute_capacity']}")
         lines.append(registration_table(rows))
     from .dialogue import render
-    return '\n\n'.join(lines) if lines else render(ctx,'roster.no_sessions') if ctx else '暂无场次安排。'
+    if not lines:
+        return render(ctx,'roster.no_sessions') if ctx else '暂无场次安排。'
+    guidance = []
+    if ctx is not None and inviting:
+        guidance.append(('enrollment:' + ctx.id, render(ctx, 'roster.empty', enroll_command=enrollment_example(ctx, inviting[0], venue_id))))
+    return ListReply('\n\n'.join(lines), guidance)
 
 
 def tournament_text(item, mode='schedule'):

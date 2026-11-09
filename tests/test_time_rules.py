@@ -105,7 +105,8 @@ class TimePolicyTests(CoreFixture):
         self.at('2026-10-12T18:00');scheduler.tick();scheduler.tick()
         jobs=self.jobs();assert len(jobs)==1
         assert '第1场' in jobs[0]['text'] and '第2场' in jobs[0]['text']
-        assert jobs[0]['text'].count('暂时无人报名，欢迎报名参与！')==2
+        assert jobs[0]['text'].count('暂时无人报名。')==2
+        assert jobs[0]['text'].count('一起活动吧')==1
         assert json.loads(jobs[0]['channel_ids'])==[self.ctx.channel_id]
         assert '报名+N' not in jobs[0]['text']
 
@@ -114,10 +115,10 @@ class TimePolicyTests(CoreFixture):
         self.at('2026-10-12T17:59');scheduler=Scheduler(self.platform,False,self.clock)
         self.at('2026-10-12T18:00');scheduler.tick()
         jobs=self.jobs();assert len(jobs)==3
-        assert all('第1场' in job['text'] and '第2场' in job['text'] and job['text'].count('欢迎报名参与')==2 for job in jobs)
+        assert all('第1场' in job['text'] and '第2场' in job['text'] and job['text'].count('暂时无人报名。')==2 and job['text'].count('一起活动吧')==1 for job in jobs)
         messages=[row for ctx in self.platform.system_contexts() for row in Outbox(ctx).list()]
         assert len(messages)==3
-        assert all('第1场' in row['text'] and '第2场' in row['text'] and row['text'].count('欢迎报名参与')==2 for row in messages)
+        assert all('第1场' in row['text'] and '第2场' in row['text'] and row['text'].count('暂时无人报名。')==2 and row['text'].count('一起活动吧')==1 for row in messages)
 
     def test_overlapping_rules_same_group_only_once_but_different_time_runs(self):
         self.s.update_config({'broadcast_rules':[self.broadcast(),self.broadcast(id='second',bot_ids=[self.bots[1]['id']]),self.broadcast(id='later',time='18:05')]})
@@ -133,7 +134,8 @@ class TimePolicyTests(CoreFixture):
         jobs=self.jobs();assert len(jobs)==3
         for job in jobs:
             assert '第1场' in job['text'] and '第2场' in job['text']
-            assert job['text'].count('欢迎报名参与')==1
+            assert job['text'].count('<font color="#0066b2"><b>@')==1
+            assert job['text'].index('<font color="#0066b2"><b>@')>job['text'].index('**20:30–22:00**')
             assert '**20:30–22:00**' in job['text']
 
     def test_weekend_filter_skips_monday_and_queued_edits_cancel_delivery(self):

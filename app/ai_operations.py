@@ -142,7 +142,8 @@ async def execute_step(commands, step):
     name = member.get('name') or '会员'
     if op == 'Register':
         data = service.enroll(ctx.actor, name, a['guests'], **selection(a), guest_names=a.get('guest_names') or None)
-        return ('报名已更新。\n\n' + roster(data, venue))
+        from .messages import join_replies
+        return join_replies(['报名已更新。', roster(data, venue, ctx=ctx)])
     if op == 'CancelRegistration':
         names = a.get('guest_names') or []
         data = service.cancel_guests(ctx.actor, names, **selection(a)) if names else service.cancel(ctx.actor, **selection(a))
@@ -150,7 +151,7 @@ async def execute_step(commands, step):
         return f"已取消{target}{data['cancelled']}人，其他报名保持不变。"
     if op == 'Roster':
         sid = service.resolve_session(**selection(a), for_write=False)['id'] if a.get('number') or a.get('hour') is not None else None
-        return roster(service.registrations(a.get('date'), venue, sid), venue)
+        return roster(service.registrations(a.get('date'), venue, sid), venue, ctx=ctx)
     if op in ('PersonalStats','AllStats'):
         from .message_parser import MessageInput
         return await commands.run(MessageInput('场地' + str(venue) + (' 我的统计' if op=='PersonalStats' else ' 统计')), allow_ai=False)

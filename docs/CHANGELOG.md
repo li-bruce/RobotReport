@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 — 2026-11-09 · Shared list guidance
+
+- Keep session facts in each section and show a single enrollment example after the entire roster or scheduled reminder.
+- Combine shared guidance when AI returns several lists; preserve every list, table and session heading.
+- Edit empty-session status and end-of-list guidance separately; keep existing custom guidance and queued messages.
+
 ## v1.0 — 2026-11-08 · Personal robot replies
 
 - Greet members by name and use the actual robot name in colored command examples; a mention without text now shows a concise, capability-aware welcome.

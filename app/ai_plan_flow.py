@@ -17,7 +17,7 @@ from .ai_operations import execute_step, describe_step, bind_target
 from .ai_plan_store import AiPlanStore, PLAN_VERSION
 from .time_rules import effective_capabilities
 from .db import connect, dumps
-from .messages import escape, table
+from .messages import escape, table, join_replies
 
 
 _VOLATILE = {'audit','identity_observations','inbox','outbox','ai_pending','ai_requests','ai_plans',
@@ -116,7 +116,7 @@ class Plans:
             for step in steps:
                 results.append(await execute_step(commands,step))
             from .dialogue import Markup
-            return self.say('ai.query',content=Markup('\n\n---\n\n'.join(results)))
+            return self.say('ai.query',content=Markup(join_replies(results,'\n\n---\n\n')))
         before = snapshot(commands)
         index = 0
         try:
@@ -181,7 +181,7 @@ class Plans:
             try:
                 output = await execute_step(commands,{'operation':item['operation'],'arguments':item['arguments']})
                 self.store.finish_step(token,index,output)
-                results.append(f"**第{index+1}步 · {escape(describe_step(item)[0])}**\n\n" + output)
+                results.append(join_replies([f"**第{index+1}步 · {escape(describe_step(item)[0])}**", output]))
             except Exception as exc:
                 detail = _error(exc)
                 self.store.fail_step(token,index,detail)
@@ -196,7 +196,7 @@ class Plans:
                 return '**AI 计划执行中止**\n\n' + self.status(token) + '\n\n已完成的步骤保留；后续步骤没有执行。'
         self.store.finish(token)
         from .dialogue import Markup
-        return self.say('ai.completed',content=Markup('\n\n---\n\n'.join(results)))
+        return self.say('ai.completed',content=Markup(join_replies(results,'\n\n---\n\n')))
 
     def status(self, token):
         record = self.store.get(token)
