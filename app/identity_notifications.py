@@ -305,7 +305,10 @@ class IdentityNotifications:
 
     @staticmethod
     def _can_notify(ctx, event):
-        return supports(ctx, notification_capability(event['kind']))
+        if ctx.notification_types is None:
+            return supports(ctx, notification_capability(event['kind']))
+        from .feedback import identity_enabled
+        return identity_enabled(ctx, event['kind'])
 
     def dispatch(self, event_id):
         event = self._event(event_id)

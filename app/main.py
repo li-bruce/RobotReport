@@ -67,6 +67,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     app.state.live = live
     app.state.passwords = passwords
     app.add_middleware(BoundaryMiddleware, platform=platform, passwords=passwords)
+    from .enrollment_portal import mount_portal
+    mount_portal(app, platform, clock, ROOT)
 
     @app.exception_handler(BodyTooLarge)
     async def body_too_large(request, exc):
@@ -179,7 +181,8 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     @app.get('/api/bot-capabilities')
     def bot_capabilities(user=Depends(principal)):
         from .bot_capabilities import capability_catalog
-        return {'capabilities': capability_catalog()}
+        from .feedback import catalog
+        return {'capabilities': capability_catalog(), 'notifications':catalog()}
 
     @app.get('/api/bot-user-attributes')
     def bot_user_attributes(user=Depends(principal)):
@@ -787,9 +790,10 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     def send(data:dict,ctx=Depends(context)):
         from .notifications import Notifications
         notices=Notifications(platform,clock)
-        notices.destinations(notices.select_channels(data.get('channel_ids')))
+        channel_ids=[c['id'] for c in platform.list_channels(active_only=True)]
+        notices.destinations(notices.select_channels(channel_ids, notification_type='announcement'), notification_type='announcement')
         markdown=Media(ctx,clock).compose(data.get('title',''),data.get('text',''),data.get('media_ids',[]),publish=True)
-        result=notices.enqueue(markdown,data['channel_ids'],actor=ctx.actor)
+        result=notices.enqueue(markdown,channel_ids,actor=ctx.actor,notification_type='announcement')
         return {'queued':result['deliveries'],'notification_id':result['id'],'mode':'live' if live else 'simulation'}
 
     @app.delete('/api/messages/{message_id}')

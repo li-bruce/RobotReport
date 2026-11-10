@@ -18,14 +18,14 @@ Current application version: **v1.0**. The interface and bot commands are curren
 | --- | --- |
 | Members | Personal registration links, application review, Excel/CSV pre-registration with automatic column matching and reviewed duplicate candidates, groups, gender, approved levels **1–9**, management roles and membership renewal periods. |
 | Profile changes | Request changes to name, gender, phone, level or groups through a bot or personal form; review in the admin page or chat, retain history and notify the member. |
-| Registration | Book today's or future sessions; add named guests or `+N` guests; cancel yourself or selected guests; configure regular, substitute and waiting places. |
+| Registration | Bare chat enrollment selects today's nearest eligible primary or substitute session. `手动报名` opens a personal mobile/desktop page to freely choose future dates and sessions; verified members can set a login name/password and later use their name or phone to sign in. Book today's or future sessions; add named guests or `+N` guests; cancel yourself or selected guests; configure regular, substitute and waiting places. |
 | Venues and schedules | Multiple venues, recurring rules, date-specific plans, individual holiday plans, event reservations and other occupancy. |
 | Activity calendar | Registration counts, capacity bars, venues and sessions, with holiday, weekend, makeup workday, event and occupancy markers; drill down by day and session. |
 | Daily competitions | Select an eligible format from session participants, generate draws, record scores and resume unfinished competitions. |
 | Large events | Registration windows and keywords, staff, groups, draws, schedules, results, photo/file archives and notifications through selected bots. |
 | Match history | Casual singles/doubles records, personal results, partner combinations and opponent statistics. |
-| Bots and groups | Multiple bots in one group; **one current group per bot**. Separate robot settings and a bot-to-group connection graph with optional sending/receiving addresses. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
-| Messages | Compose, preview and send text, images and file links; schedule reminders by message type, bot, date, workday/weekend/holiday conditions and time. |
+| Bots and groups | Multiple bots in one group; **one current group per bot**. A sectioned settings drawer with display-name aliases and a bot-to-group connection graph with optional sending/receiving addresses. Configure capabilities, venues, sessions, member eligibility and per-feature availability windows; help adapts to each bot. |
+| Messages | Independent passive-feedback permissions. Message-center announcements reach every connected group once and cannot be disabled per bot. Compose, preview and send text, images and file links; schedule reminders by message type, bot, date, workday/weekend/holiday conditions and time. |
 | Robot replies | Personalized greetings and scoped command examples; edit, preview and restore categorized reply templates independently for each bot. |
 | Optional AI | Natural-language business requests, multi-step plans, numbered previews and simple `确认` confirmation before changes. |
 

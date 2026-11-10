@@ -160,3 +160,13 @@ AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有
 
 
 [名册与时间规则接口](MEMBER_OPERATIONS.zh-CN.md)：Excel/CSV列匹配、自动预登记编号、资料补全审核、定时播报与机器人功能时间窗口。
+
+## 会员网页报名与反馈通知
+
+“手动报名”生成20分钟有效、单次使用的本人链接 `/enroll#…`。网页通过 `POST /member/exchange` 换取 HttpOnly、SameSite=Strict 会员 Cookie 与 CSRF 令牌；会员和管理员认证相互独立。写操作必须携带 `X-CSRF-Token`，并验证同源。
+
+`GET /member/sessions?day=YYYY-MM-DD` 返回所选日期的全部可见主场次及明确选定的范围外替补场次，支持今日至未来366天，仅返回本人的报名明细。`POST /member/enrollments` 接收 `action`（enroll/cancel/cancel_guests）、日期、整数场地/场次ID、32位十六进制 `request_id`，以及可选同行姓名/人数。同一请求重试不重复追加同行；身份从登录会话获取，不接受请求指定用户。
+
+首次设置密码：`POST /member/account/request` 获取确认指令 → 同一用户在真实群回调确认 → `GET /member/account/status` → `POST /member/account` 保存登录名及密码。之后 `POST /member/login` 支持登录名或唯一登记手机号。密码散列保存，失败限流；密码登录会话可通过 `POST /member/bot` 切换符合本人条件的机器人。每次操作重检会员、机器人范围与用户条件、会籍和活动报名规则。
+
+机器人新增/修改支持 `aliases`（最多12个）及 `notification_types`。通知配置为 null 时继承旧业务开关规则，显式列表则按通知类型独立启用。目录见 `/api/bot-capabilities` 的 notifications；公告 announcement 固定启用。消息中心忽略接收者子集，向全部有效连接群各发一次。别名仅影响文本解析及示例，不参与回调身份认证。

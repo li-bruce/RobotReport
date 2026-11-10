@@ -1,5 +1,13 @@
 # Changes
 
+
+## v1.0 · 2026-11-10
+
+- 网页报名可自由选择日期、场地和场次；本人链接进入，经群内确认后可设置会员密码。
+- 群内“报名”统一选择当天最近可报的主负责或已选替补场次。
+- 反馈通知按类型独立设置；消息中心公告覆盖全部连接群，每群一份。
+- 机器人群内别名、分区设置抽屉和群卡片；会员及管理员说明与示例截图同步。
+
 ## v1.0 — 2026-11-09 · Independent member profile notifications
 
 - Add the opt-in “会员资料变更通知” bot capability for group, level and profile-review notices, independent of registration and group management.

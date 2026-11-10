@@ -19,6 +19,9 @@ def _feature(feature_id, name, category, description, examples, steps,
 
 
 _FEATURES = (
+    _feature('registration.manual','手动报名网页','活动报名','打开本人报名页面，选择当前机器人支持的日期、场地和场次。',
+             ['打开手动报名页面','我想在网页上报名'],['打开本人报名链接。','选择日期、场地和场次后报名。'],
+             mode='command',command='手动报名'),
     _feature('venue.occupancies','场地占用管理','场地与活动','登记、查询、释放其他活动占用；大型赛事在赛事页面预留。',
              ['明天场地被谁占用了','安排训练占用场地'],['进入活动运营 → 场地占用。','选择日期和起止时间，填写用途后保存。'],
              'admin',admin_route='/admin#occupancies'),
@@ -427,6 +430,7 @@ def model_features(is_admin: bool, approved: bool, permissions=(), bot_capabilit
 # management destinations before provider calls. Rules contain no execution or
 # access decisions. Ordering resolves specialised phrases before broader ones.
 _LOCAL_RULES = (
+    ('registration.manual', r'手动报名|(?:网页|页面|手机).{0,5}报名|报名.{0,5}(?:网页|页面|链接)'),
     ('membership.change_review', r'(?:审核|审批|待审核).{0,10}(?:资料调整|资料修改|分组申请)|资料(?:调整|修改).{0,8}(?:审核|审批)'),
     ('membership.change', r'(?:我|本人).{0,8}(?:修改|调整|更正|申请|换).{0,12}(?:资料|个人信息|分组|等级|级别|姓名|手机号|性别)|(?:申请|修改|调整)(?:分组|等级)|(?:修改|调整|更正).{0,4}(?:我的|本人|个人)(?:资料|信息|姓名|手机号|分组|等级)'),
     ('membership.renewal', r'(?:登记|设置|配置|管理|作废|添加|修改).{0,12}(?:续费|会籍|会员有效期|年费)|(?:续费|会籍|会员有效期|年费).{0,12}(?:登记|设置|配置|管理|作废|添加|修改)'),

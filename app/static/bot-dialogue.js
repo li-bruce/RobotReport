@@ -72,5 +72,5 @@ async function loadBotDialogue(panel){
     });
     options();choose();panel.dataset.loaded='true';
   }catch(error){if(panel.isConnected){area.innerHTML=`<p role="alert">${e(error.message)}</p><button type="button" class="btn">重试</button>`;area.querySelector('button').onclick=()=>loadBotDialogue(panel);}}
-  finally{delete panel.dataset.loading;}
+  finally{delete panel.dataset.loading;panel.closest('.robot-card')?.dispatchEvent(new Event('drawer-forms-ready'));}
 }

@@ -21,6 +21,8 @@ class RegistrationInvites:
         channel=self.platform.channel(channel_id,active=True)
         target=bind_clock(self.platform.context_for_channel(channel_id),self.clock)
         require_capability(target,'registration')
+        from .feedback import require as require_feedback
+        require_feedback(target,'registration_invite')
         if not channel['webhook_url'] or not target.receive_commands:
             raise ValueError('请选择能发送消息并接收注册指令的机器人')
         return target

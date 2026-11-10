@@ -1,7 +1,7 @@
 'use strict';
 function robotWorkspaceTabs(){return `<nav class="section-tabs" aria-label="机器人与群"><a href="#bots" data-route="bots" class="${state.route==='bots'?'active':''}">机器人管理</a><a href="#bot-links" data-route="bot-links" class="${state.route==='bot-links'?'active':''}">群关联</a></nav>`;}
 function robotManagerMarkup(){
- return head('机器人管理','',btn('新建机器人','bot-new','primary'))+`<div class="robot-overview"><span><strong>${state.bots.length}</strong> 个机器人</span><a href="/guide/admin#robots" target="_blank" rel="noopener">使用说明 ↗</a></div><div class="stack robot-manager">${state.bots.map(bot=>{const key=`bot:${bot.id}:settings`;return `<details class="robot-card" data-bot-id="${attr(bot.id)}" data-disclosure-key="${attr(key)}"${disclosureOpen(key)}><summary class="robot-card-summary">${robotSettingsSummary(bot)}</summary><div class="robot-inline-settings" data-inline-settings></div></details>`;}).join('')||empty('尚未创建机器人','',btn('新建机器人','bot-new','primary'))}</div>`;
+ return head('机器人管理','',btn('新建机器人','bot-new','primary'))+`<div class="robot-overview"><span><strong>${state.bots.length}</strong> 个机器人</span><a href="/guide/admin#robots" target="_blank" rel="noopener">使用说明 ↗</a></div><div class="stack robot-manager">${state.bots.map(bot=>`<article class="robot-card" data-bot-id="${attr(bot.id)}"><button type="button" class="robot-card-summary" aria-haspopup="dialog" aria-label="${attr('设置 '+bot.name)}">${robotSettingsSummary(bot)}</button>${botDrawerMarkup(bot)}</article>`).join('')||empty('尚未创建机器人','',btn('新建机器人','bot-new','primary'))}</div>`;
 }
 
 function relationLayout(bots,channels,groups){
@@ -33,12 +33,12 @@ function relationGraphMarkup(bots,channels,groups){
   return `<div class="relation-viewport" tabindex="0" aria-label="机器人与群连接图，可滚动查看"><div class="relation-world" data-width="${layout.width}" data-height="${layout.height}" style="width:${layout.width}px;height:${layout.height}px"><div class="relation-canvas" style="width:${layout.width}px;height:${layout.height}px"><svg class="relation-edges" width="${layout.width}" height="${layout.height}" aria-label="机器人到群的连接">${lines.join('')}</svg>${nodes.join('')}</div></div></div>`;
 }
 function robotRelationsMarkup(){
-  const groups=state.page.botGroups||[],selected=state.botGroupFilter||'';
-  const shownGroups=selected?groups.filter(g=>g.id===selected):groups,channels=state.channels.filter(c=>!c.archived&&(!selected||c.group_id===selected));
-  const bots=selected?state.bots.filter(b=>channels.some(c=>c.bot_id===b.id)):state.bots;
-  return head('群关联','点击机器人或连线，配置收发地址。',btn('新建群','group-new','primary'))+
-    `<div class="relation-workspace"><aside class="relation-sidebar panel" aria-label="群管理"><div class="panel-head"><h2>群管理</h2><span class="badge outline">${groups.length}</span></div><div class="relation-group-list"><button class="relation-filter ${selected?'':'selected'}" data-graph-group="">全部群<span>${state.channels.filter(c=>!c.archived).length} 条连接</span></button>${groups.map(g=>`<div class="relation-group-item"><button class="relation-filter ${selected===g.id?'selected':''}" data-graph-group="${attr(g.id)}"><strong>${e(g.name)}</strong><span>${g.chat_id?'群 ID '+e(g.chat_id):'群 ID 自动识别'}</span></button><div class="actions">${btn('编辑','group-edit','small quiet',`data-id="${attr(g.id)}"`)}${btn('删除','group-delete','small danger-quiet',`data-id="${attr(g.id)}"`)}</div></div>`).join('')}</div></aside><section class="panel relation-board" aria-label="群连接"><div class="relation-toolbar"><div><strong>连接图</strong><span class="caption">${bots.length} 个机器人 · ${shownGroups.length} 个群</span></div><div class="actions"><button class="btn small" data-graph-zoom="-0.15" aria-label="缩小连接图">−</button><button class="btn small" data-graph-fit>适应宽度</button><button class="btn small" data-graph-zoom="0.15" aria-label="放大连接图">＋</button></div></div>${relationGraphMarkup(bots,channels,shownGroups)}${!bots.length?'<p class="relation-empty">暂无关联机器人。请先在机器人管理中新建，或切换“全部群”连接已有机器人。</p>':''}</section></div>`;
+ const groups=state.page.botGroups||[],selected=state.botGroupFilter||'';
+ const shownGroups=selected?groups.filter(g=>g.id===selected):groups,channels=state.channels.filter(c=>!c.archived&&(!selected||c.group_id===selected));
+ const bots=selected?state.bots.filter(b=>channels.some(c=>c.bot_id===b.id)):state.bots;
+ return head('群关联','',btn('新建群','group-new','primary'))+`<div class="group-directory" aria-label="群管理">${groups.map(g=>{const count=state.channels.filter(c=>!c.archived&&c.group_id===g.id).length;return `<article class="group-directory-card"><div><strong>${e(g.name)}</strong><span>${count} 个机器人 · ${g.chat_id?'已连接':'等待识别'}</span></div><details class="group-menu"><summary aria-label="${attr(g.name+'操作')}">•••</summary><div>${btn('重命名','group-edit','quiet',`data-id="${attr(g.id)}"`)}${btn('删除群','group-delete','danger-quiet',`data-id="${attr(g.id)}"`)}</div></details><button type="button" class="group-view-link" data-graph-group="${attr(g.id)}">查看连接 <span aria-hidden="true">↗</span></button></article>`;}).join('')||'<p class="caption">新建一个群，再连接机器人。</p>'}</div><section class="panel relation-board" aria-label="群连接"><div class="relation-toolbar"><label class="graph-filter-label">连接范围<select data-graph-filter aria-label="连接范围"><option value="">所有连接</option>${groups.map(g=>`<option value="${attr(g.id)}"${selected===g.id?' selected':''}>${e(g.name)}</option>`).join('')}</select></label><div class="actions"><button class="btn small" data-graph-zoom="-0.15" aria-label="缩小连接图">−</button><button class="btn small" data-graph-fit>适应宽度</button><button class="btn small" data-graph-zoom="0.15" aria-label="放大连接图">＋</button></div></div>${relationGraphMarkup(bots,channels,shownGroups)}${!bots.length?'<p class="relation-empty">本群暂无机器人，可在“所有连接”中选择机器人关联。</p>':''}</section>`;
 }
+
 function bindRelationGraph(){
   const area=$('.relation-viewport'),world=$('.relation-world'),canvas=$('.relation-canvas');
   if(!area)return;
@@ -47,6 +47,7 @@ function bindRelationGraph(){
   $$('[data-graph-zoom]').forEach(button=>button.onclick=()=>scale(zoom+Number(button.dataset.graphZoom)));
   $('[data-graph-fit]').onclick=()=>scale(Math.min(1,area.clientWidth/Number(world.dataset.width)));
   if(area.clientWidth>=600)scale(Math.min(1,area.clientWidth/Number(world.dataset.width)));
+  $('[data-graph-filter]').onchange=event=>{state.botGroupFilter=event.target.value;renderRoute();};
   $$('[data-graph-group]').forEach(button=>button.onclick=()=>{state.botGroupFilter=button.dataset.graphGroup;renderRoute();});
   area.addEventListener('keydown',event=>{const edge=event.target.closest('.relation-edge');if(edge&&(event.key==='Enter'||event.key===' ')){event.preventDefault();editChannelScope(edge.dataset.botId,edge.dataset.id);}});
   let drag=null;

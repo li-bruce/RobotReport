@@ -129,19 +129,23 @@ class BotIntegrationTests(unittest.TestCase):
         self.assertNotIn('发送 注册', messages[0]['text'])
         self.assertEqual(asyncio.run(Outbox(self.ctx(1)).deliver_one(self.platform,at=self.at)), 'simulated')
 
-    def test_manual_publish_uses_message_capability_not_group_management(self):
+    def test_manual_publish_is_mandatory_and_deduplicated_per_group(self):
         self.caps([])
         self.caps(['messages'], 1)
         response = self.client.post('/api/messages/send', headers=self.headers,
             json={'text':'通知', 'channel_ids':self.channels})
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(len(Outbox(self.ctx(1)).list()), 1)
-        self.assertEqual(Outbox(self.ctx()).list(), [])
-        self.assertEqual(asyncio.run(Outbox(self.ctx(1)).deliver_one(self.platform)), 'simulated')
+        delivery=response.json()['queued']
+        self.assertEqual(len(delivery),1)
+        chosen=self.platform.context_for_channel(delivery[0]['channel_id'])
+        self.assertEqual(sum(len(Outbox(self.ctx(i)).list()) for i in range(2)),1)
+        self.assertEqual(asyncio.run(Outbox(chosen).deliver_one(self.platform)), 'simulated')
         self.caps([], 1)
-        denied = self.client.post('/api/messages/send', headers=self.headers,
-            json={'text':'禁止发布', 'channel_ids':[self.channels[1]]})
-        self.assertEqual(denied.status_code, 403)
+        allowed = self.client.post('/api/messages/send', headers=self.headers,
+            json={'text':'全群公告', 'channel_ids':[self.channels[1]]})
+        self.assertEqual(allowed.status_code, 200,allowed.text)
+        self.assertEqual(len(allowed.json()['queued']),1)
+
 
     def test_queued_reply_revoked_when_capabilities_change_legacy_queue_stays_compatible(self):
         self.caps(list(LEGACY_CAPABILITIES))

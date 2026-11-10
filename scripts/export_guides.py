@@ -85,8 +85,9 @@ def render(node):
         target = href(node.attrs.get('href', ''))
         if any(isinstance(c, Node) and c.tag == 'img' for c in node.children):
             return content
-        if target.startswith('/admin'):
-            return content.strip() + '（后台 `' + target + '`）'
+        if target.startswith('/admin') or target in ('/enroll', '/register'):
+            area = '后台' if target.startswith('/admin') else '本站'
+            return content.strip() + '（' + area + ' `' + target + '`）'
         return '[' + content.strip() + '](' + target + ')'
     if tag == 'img':
         return '\n\n![' + node.attrs.get('alt', '') + '](' + href(node.attrs['src']) + ')\n\n'

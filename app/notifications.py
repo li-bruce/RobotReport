@@ -31,7 +31,10 @@ class Notifications:
             if 'dialogue_json' not in {r['name'] for r in db.execute('PRAGMA table_info(notification_jobs)')}:
                 db.execute("ALTER TABLE notification_jobs ADD COLUMN dialogue_json TEXT NOT NULL DEFAULT 'null'")
 
-    def destinations(self, channel_ids, venue_id=None, session_ids=None, tournament_id=None):
+            if 'notification_type' not in {r['name'] for r in db.execute('PRAGMA table_info(notification_jobs)')}:
+                db.execute("ALTER TABLE notification_jobs ADD COLUMN notification_type TEXT NOT NULL DEFAULT ''")
+
+    def destinations(self, channel_ids, venue_id=None, session_ids=None, tournament_id=None, notification_type=None):
         if not isinstance(channel_ids,list) or not channel_ids or len(channel_ids)>100 or any(not isinstance(v,str) for v in channel_ids):
             raise ValueError('请明确选择至少一个通知群通道')
         destinations=[];groups=set()
@@ -41,15 +44,13 @@ class Notifications:
             service=Service(ctx,self.clock)
             if venue_id is not None:
                 service.venue(venue_id)
+            from .feedback import require as require_feedback, kind_for_job
+            kind=notification_type or kind_for_job({'venue_id':venue_id,'session_ids':session_ids,'tournament_id':tournament_id},self.path)
+            require_feedback(ctx, kind)
             if tournament_id is not None:
                 from .competitions import TournamentService
                 event = TournamentService(self.path).get(tournament_id)
-                require_event(ctx, event)
                 service.assert_event_scope(event)
-            elif session_ids is not None or venue_id is not None:
-                require_capability(ctx, 'enrollment')
-            else:
-                require_capability(ctx, 'messages')
             if session_ids is not None:
                 if not isinstance(session_ids,list) or not session_ids or any(type(v) is not int for v in session_ids):
                     raise ValueError('活动通知必须关联有效场次')
@@ -66,7 +67,7 @@ class Notifications:
                 groups.add(ctx.chat_id)
         return destinations
 
-    def select_channels(self, channel_ids, venue_id=None, session_ids=None, tournament_id=None):
+    def select_channels(self, channel_ids, venue_id=None, session_ids=None, tournament_id=None, notification_type=None):
         """Persist one eligible sender per group, retaining failed destinations.
 
         Multiple robots may serve and manage the same group. They are candidate
@@ -84,7 +85,7 @@ class Notifications:
             chosen = eligible = None
             for cid in candidates:
                 try:
-                    self.destinations([cid], venue_id, session_ids, tournament_id)
+                    self.destinations([cid], venue_id, session_ids, tournament_id, notification_type)
                 except (ValueError, PermissionError):
                     continue
                 eligible = eligible or cid
@@ -97,12 +98,14 @@ class Notifications:
             selected.append(chosen or eligible or candidates[0])
         return selected
 
-    def enqueue(self,text,channel_ids,actor='scheduler',key=None,venue_id=None,tournament_id=None,session_ids=None,session_snapshots=None,dialogue=None):
+    def enqueue(self,text,channel_ids,actor='scheduler',key=None,venue_id=None,tournament_id=None,session_ids=None,session_snapshots=None,dialogue=None,notification_type=None):
         key=key or 'manual:'+uuid.uuid4().hex
         with connect(self.path) as db:
             old=db.execute('SELECT id FROM notification_jobs WHERE dedupe_key=?',(key,)).fetchone()
             if old:return self.get(old[0],db)
-        ids=self.select_channels(channel_ids,venue_id,session_ids,tournament_id)
+        from .feedback import kind_for_job
+        notification_type=notification_type or kind_for_job({'dedupe_key':key,'venue_id':venue_id,'session_ids':session_ids,'tournament_id':tournament_id},self.path)
+        ids=self.select_channels(channel_ids,venue_id,session_ids,tournament_id,notification_type)
         job_id=uuid.uuid4().hex
         with connect(self.path,True) as db:
             old=db.execute('SELECT id FROM notification_jobs WHERE dedupe_key=?',(key,)).fetchone()
@@ -111,6 +114,7 @@ class Notifications:
                 session_snapshots = [snapshot(row) for sid in session_ids if (row := db.execute('SELECT * FROM sessions WHERE id=?',(sid,)).fetchone())]
             db.execute('INSERT INTO notification_jobs(id,dedupe_key,text,channel_ids,venue_id,tournament_id,created_by,created_at,session_ids,session_snapshots) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (job_id,key,text,dumps(ids),venue_id,tournament_id,actor,stamp(self.clock()),dumps(session_ids),dumps(session_snapshots)))
+            db.execute('UPDATE notification_jobs SET notification_type=? WHERE id=?',(notification_type,job_id))
             if dialogue is not None:
                 # Only internal callers supply immutable, plain-data facts. The
                 # chosen destination applies its own wording without rerouting.
@@ -135,7 +139,8 @@ class Notifications:
             if destination['status']!='pending':continue
             cid=destination['channel_id']
             try:
-                ctx=self.destinations([cid],item['venue_id'],item['session_ids'],item['tournament_id'])[0]
+                from .feedback import kind_for_job
+                ctx=self.destinations([cid],item['venue_id'],item['session_ids'],item['tournament_id'],kind_for_job(item,self.path))[0]
                 from .time_rules import broadcast_delivery_allowed
                 if not broadcast_delivery_allowed(item['dedupe_key'],ctx,self.clock(),Service(ctx,self.clock).config()):
                     raise PermissionError('播报规则已变更或消息已过期')

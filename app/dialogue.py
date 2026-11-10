@@ -80,6 +80,8 @@ define('roster.ended', '结束场次无人报名', '活动报名', '暂时无人
 define('roster.unavailable', '暂不可报名', '活动报名', '暂时无人报名 · 本场暂不可报名。')
 define('roster.no_sessions', '没有场次', '活动报名', '当前没有可显示的场次安排，请换个日期查询。')
 define('enrollment.success', '报名成功', '活动报名', '{heading}\n\n已为您登记，期待见到您！\n\n{table}', image=True)
+define('enrollment.manual', '手动报名入口', '活动报名', '**{name}**，请点击 {form_link}，选择您想参加的场次。')
+define('enrollment.login_confirmed', '确认网页登录', '活动报名', '**{name}**，身份已确认，请返回报名页面设置登录信息。')
 define('enrollment.cancelled', '取消本人报名', '活动报名', '**已取消本人报名**，下次有空再来！{remaining}')
 define('enrollment.not_enrolled', '本人尚未报名', '活动报名', '您本人尚未报名，本次无需取消。{remaining}')
 define('enrollment.guests_cancelled', '取消指定同行', '活动报名', '已取消您代报名的 **{names}**（{count}人），其他报名保持不变。')
@@ -240,7 +242,7 @@ def read(ctx):
 
 
 def command(ctx, text):
-    name = (getattr(ctx, 'bot_name', '') or '机器人').strip()
+    name = (next(iter(getattr(ctx,'bot_aliases',())), '') or getattr(ctx, 'bot_name', '') or '机器人').strip()
     return Markup('<font color="#0066b2"><b>' + html_escape('@' + name + ' ' + text) + '</b></font>')
 
 
@@ -324,7 +326,7 @@ def settings_api(platform, user, bot_id, data=None):
     platform.require_platform(user)
     bot = platform.bot(bot_id)
     from dataclasses import replace
-    ctx = replace(platform.workspace_context(actor=user.id, source='admin'), id=bot_id, bot_name=bot['name'])
+    ctx = replace(platform.workspace_context(actor=user.id, source='admin'), id=bot_id, bot_name=bot['name'], bot_aliases=tuple(json.loads(bot.get('aliases') or '[]')))
     with connect(ctx.db_path, data is not None) as db:
         row = db.execute('SELECT value FROM config WHERE key=?', (_key(ctx),)).fetchone()
         current = json.loads(row[0]) if row else {'system_name': '聚场', 'overrides': {}}
@@ -356,7 +358,7 @@ def preview(platform, user, bot_id, data):
     key, text = data.get('id'), data.get('text')
     validate(key, text)
     from dataclasses import replace
-    ctx = replace(platform.workspace_context(), id=bot_id, bot_name=bot['name'])
+    ctx = replace(platform.workspace_context(), id=bot_id, bot_name=bot['name'], bot_aliases=tuple(json.loads(bot.get('aliases') or '[]')))
     values = {f: f'〈{variable_label(f)}〉' for f in fields(TEMPLATES[key].text)}
     values.update(name='小林', person=Markup('**小林**'), reason='这场活动暂时不能报名',
                   event='周末友谊赛', count=8, number=12, level=5, groups='兴趣组', gender='女',

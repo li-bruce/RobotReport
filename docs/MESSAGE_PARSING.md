@@ -66,3 +66,6 @@ Plain text alone cannot reliably reveal where an arbitrary display name ends. Na
 - Tests cover renamed/spaced/punctuated/emoji bot names, all command families, both callback routes, simulator, AI input, embedded user mentions, entity handling, malformed spans, rejected ambiguous prefixes, duplicate events and permission denial.
 
 For business help see `/guide` and `/guide/admin`; this document is for maintainers and adapter authors.
+
+
+Display names and up to 12 configured aliases are normalized longest-first only at the leading mention. Structured bot mentions do not depend on a configured name. Identity always comes from the authenticated callback route, never a display name.

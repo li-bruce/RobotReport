@@ -323,7 +323,8 @@ class Outbox:
                 with connect(self.ctx.db_path) as business:
                     identity_capability = delivery_capability(business, current_ctx, row['dedupe_key'])
                 if identity_capability:
-                    require_capability(current_ctx, identity_capability)
+                    from .feedback import require as require_feedback
+                    require_feedback(current_ctx, {'registration':'registration_result', 'member_notifications':'member_profile', 'management':'role_change'}[identity_capability])
             except (ValueError, PermissionError) as error:
                 db.execute("UPDATE outbox SET status='failed',last_error=? WHERE id=?", (str(error),row['id']))
                 return 'failed'
@@ -333,10 +334,38 @@ class Outbox:
                 db.execute("UPDATE outbox SET status='failed',last_error='播报规则已变更或消息已过期' WHERE id=?",(row['id'],))
                 return 'failed'
             current_scope=self.scope_signature(current_ctx)
+            mandatory_notice = False
+            # Only a persisted job allocated to this channel can bypass unrelated
+            # command/scope edits. A caller-chosen outbox key is not authority.
+            with connect(self.ctx.db_path) as business:
+                if business.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='notification_jobs'").fetchone():
+                    prefix = (self.ctx.channel_id or self.ctx.chat_id) + ':notice:'
+                    if row['dedupe_key'].startswith(prefix):
+                        key = row['dedupe_key'][len(prefix):].rsplit(':', 1)[0]
+                        saved = business.execute('SELECT * FROM notification_jobs WHERE dedupe_key=?', (key,)).fetchone()
+                        if saved:
+                            from .feedback import require as require_feedback, kind_for_job
+                            kind = kind_for_job(dict(saved), self.ctx.db_path)
+                            try:
+                                if current_ctx.channel_id not in json.loads(saved['channel_ids']):
+                                    raise PermissionError('通知目的群不匹配')
+                                require_feedback(current_ctx, kind)
+                            except (ValueError, PermissionError) as error:
+                                db.execute("UPDATE outbox SET status='failed',last_error=? WHERE id=?", (str(error),row['id']))
+                                return 'failed'
+                            mandatory_notice = kind == 'announcement'
+                if ':registration-invite:' in row['dedupe_key']:
+                    from .feedback import require as require_feedback
+                    try:
+                        require_feedback(current_ctx, 'registration_invite')
+                        require_capability(current_ctx, 'registration')
+                    except PermissionError as error:
+                        db.execute("UPDATE outbox SET status='failed',last_error=? WHERE id=?", (str(error),row['id']))
+                        return 'failed'
             captured_scope=json.loads(row['scope_json'])
             if captured_scope:
                 captured_scope.setdefault('capabilities', None)
-            if not identity_capability and ((captured_scope and captured_scope!=current_scope) or (not captured_scope and any(v is not None for v in current_scope.values()))):
+            if not identity_capability and not mandatory_notice and ((captured_scope and captured_scope!=current_scope) or (not captured_scope and any(v is not None for v in current_scope.values()))):
                 db.execute("UPDATE outbox SET status='failed',last_error='机器人负责范围已变更，旧消息已取消发送' WHERE id=?",(row['id'],))
                 return 'failed'
             # Recheck the business notice against the destination's current scope.

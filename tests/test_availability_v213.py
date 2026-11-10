@@ -29,7 +29,7 @@ class AvailabilityTests(CoreFixture):
         other=self.platform.context_for_channel(self.bots[1]['primary_channel_id'] if 'primary_channel_id' in self.bots[1] else self.platform.channels(self.admin,self.bots[1]['id'])[0]['id'])
         self.assertEqual(Service(other,self.clock).sessions()[0]['booking_state'],'occupied')
         with self.assertRaisesRegex(ValueError,'不可报名'):
-            service.enroll('1001','小李',guests=1)
+            service.enroll('1001','小李',guests=1,number=1)
         self.assertEqual(len(service.registrations()['registrations']),2)
         self.assertEqual(service.registrations()['registrations'][0]['session_snapshot'],before[0]['session_snapshot'])
         self.assertIn('校队训练',roster(service.registrations()))
@@ -161,7 +161,7 @@ class AvailabilityTests(CoreFixture):
             self.assertEqual(response.status_code,200,response.text)
             block=response.json()
             self.assertEqual(block['affected_sessions'][0]['booking_state'],'occupied')
-            signup={'user_id':'1001','name':'小李','date':'2026-10-13','venue_id':1}
+            signup={'user_id':'1001','name':'小李','date':'2026-10-13','venue_id':1,'session_id':block['affected_sessions'][0]['id']}
             denied=client.post('/api/registrations',json=signup)
             self.assertEqual(denied.status_code,400,denied.text)
             self.assertIn('不可报名',denied.json()['detail'])

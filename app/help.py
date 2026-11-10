@@ -58,7 +58,7 @@ def syntax_help(enabled, is_admin=False, permissions=(), category=None):
         rows.append(body)
 
     add('注册','registration','注册与资料','注册确认',('注册资料','修改资料'),command('注册')+' → 本人表单')
-    add('报名','enrollment','报名与预约','明天第2场 报名，张三，李四',('报名','名单','取消报名','场地占用'),parameter('日期 / 场地 / 场次，可省略')+' '+command('报名')+'，'+parameter('同行姓名，可省略'))
+    add('报名','enrollment','报名与预约','明天第2场 报名，张三，李四',('报名','手动报名','名单','取消报名','场地占用'),parameter('日期 / 场地 / 场次，可省略')+' '+command('报名')+'，'+parameter('同行姓名，可省略'))
     add('比赛','daily_events','每日趣味赛','组织比赛 混双',('继续比赛',),syntax('组织比赛','单打 / 双打 / 男双 / 女双 / 混双'))
     add('大型赛事','large_events','大型赛事报名','春季联赛报名',(),parameter('赛事关键词')+command('报名'))
     add('记录','match_records','零散对局','记录 双打 我、张三 VS 李四、王五 21:19',('我的对战历史','我的对战统计'),command('记录')+' '+parameter('项目')+' '+parameter('我方姓名')+' VS '+parameter('对方姓名')+' '+parameter('比分'))
@@ -107,6 +107,7 @@ def command_help(member, is_admin=False, category=None, permissions=None, capabi
                 command('我的会籍')+' 查看有效期；到期后不能新报名，历史仍可查询。']
         elif category=='报名':
             notes=[
+                '**选择场次**\n'+command('报名')+' 自动选择今天最近可报名的场次（含已开通的替补场次）。\n'+command('手动报名')+' 打开网页，选择日期、场地和场次。',
                 '**同行报名**\n'+command('报名+2')+' 或 '+command('报名，张三，李四')+'。每次追加同行。\n'+command('报名 接龙')+' 报名后显示名单。',
                 '**取消**\n'+command('取消报名')+' 仅取消本人。\n'+command('取消张三，李四')+' 取消自己代报的指定同行。',
                 '**预约与查询**\n'+command('2026-11-18 第二场 报名')+'\n'+command('明天第二场 名单')+' · '+command('明天 场地占用')+'\n多个场地时加 '+command('场地2')+'；不能报名时按回复调整时间或场次。']

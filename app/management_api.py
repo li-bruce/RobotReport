@@ -149,9 +149,8 @@ def management_router(platform, principal, context, clock):
             raise ValueError('请选择有效的群通道列表')
         for channel_id in set(ids):
             ctx = platform.context_for_channel(channel_id)
-            from .bot_capabilities import require_capability
-            if kind != 'daily':
-                require_capability(ctx, 'large_events')
+            from .feedback import require as require_feedback
+            require_feedback(ctx, 'daily_event' if kind=='daily' else 'large_event')
             if (ctx.venue_restricted or ctx.venue_ids) and venue_id not in ctx.venue_ids:
                 raise ValueError('所选群通道未开通赛事所在场地')
         return list(dict.fromkeys(ids))

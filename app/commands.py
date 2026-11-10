@@ -113,7 +113,7 @@ class Commands:
                 or re.fullmatch(r'(?:补充)?性别\s*[:：]?\s*(?:男|女)', text)
                 or re.fullmatch(r'自评\s*(?:\d+|[一二三四五六七八九])\s*级', text)):
             require_capability(self.ctx, 'registration')
-        if (text in ('名单', '') or re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', text)
+        if (text in ('名单', '', '手动报名') or text.startswith('确认网页登录 ') or re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', text)
                 or re.match(r'^报名(?:\s+接龙)?[,，]', text)
                 or text.startswith('取消') and not re.fullmatch(r'取消\s+[a-f0-9]{12}', text, re.I) and text not in ('取消记录','取消计划','取消资料申请')):
             require_capability(self.ctx, 'enrollment')
@@ -160,14 +160,18 @@ class Commands:
 
     async def run(self, content, name=None, venue_id=None, allow_ai=True, expected=None):
         self.refresh_context()
-        message = normalize_message(content, self.ctx.bot_name)
+        message = normalize_message(content, self.ctx.bot_name, self.ctx.bot_aliases)
         if message.text in ('连接', '连接测试'):
             return self.say('entry.connected')
         text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())
+        automatic_enrollment = (venue_id is None and not re.search(r'场地\s*\d+', message.text)
+                                and not selection['at'] and not selection['number']
+                                and bool(re.match(r'^报名(?:$|\+|\s|[,，])', text)))
         venue_id = selection['venue_id']
         if message.text:
-            external = bool(selection['at'] or selection['number']) and (text == '名单' or text.startswith(('报名','取消')))
-            self.service.venue(venue_id, external=external)
+            external = text.startswith('报名') or bool(selection['at'] or selection['number']) and (text == '名单' or text.startswith('取消'))
+            if not automatic_enrollment:
+                self.service.venue(venue_id, external=external)
             self.require_command_capabilities(text)
         members = Members(self.ctx, self.clock)
         # A platform display name can prefill a record; it never approves membership.
@@ -296,6 +300,14 @@ class Commands:
             raise MembershipPrompt(entry(self.ctx,member,name=name))
         require_access(self.ctx,self.clock)
         members.require_approved()
+        if text == '手动报名' or re.fullmatch(r'确认网页登录\s+[A-Fa-f0-9]{10}', text):
+            from .enrollment_portal import EnrollmentPortal
+            from .security import Platform
+            portal = EnrollmentPortal(Platform(self.ctx.platform_root), self.clock)
+            if text == '手动报名':
+                return self.say('enrollment.manual', name=member['name'], form_link=form_link('选择报名场次', portal.link(self.ctx)))
+            portal.confirm_binding(self.ctx, text.split()[-1])
+            return self.say('enrollment.login_confirmed', name=member['name'])
         from .availability_dialog import handle_availability
         availability_reply = handle_availability(self.ctx,text,selection,self.clock)
         if availability_reply is not None:
@@ -370,8 +382,11 @@ class Commands:
         match = re.fullmatch(r'报名(?:\+(\d+))?(?:\s+(接龙))?', text)
         if match:
             guests = int(match[1] or 0)
+            if automatic_enrollment:
+                selection['venue_id'] = None
             data = self.service.enroll(self.ctx.actor, name, guests, **selection, guest_names=guest_names)
             session = data['sessions'][0]
+            venue_id = session['venue_id']
             if match[2]:
                 return roster(data, venue_id, ctx=self.ctx)
             owned = [r for r in data['registrations'] if r['user_id'] == self.ctx.actor and r['status'] == 'active']
@@ -582,7 +597,7 @@ class Commands:
                 'resumable_tournament_ids': [e['id'] for e in events if 'resume' in e['actions']]}
 
     def snapshot(self, command):
-        text, selection = parse_selection(command)
+        text, selection = parse_selection(command, self.ctx.default_venue_id, today=self.clock().date())
         self.require_command_capabilities(text)
         result = {'bot_capabilities':list(self.ctx.capabilities) if self.ctx.capabilities is not None else None}
         if re.fullmatch(r'自评[1-9]级', text):
@@ -599,7 +614,10 @@ class Commands:
                 self.tournaments().engine._registration_allowed(event, self.clock())
             result['event_digest'] = hashlib.sha256(dumps(event).encode()).hexdigest()
         if not event_mutation and (re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?|取消报名', text) or re.match(r'^报名(?:\s+接龙)?[,，]', text) or cancellation_guests(text) is not None or text.startswith('组织比赛')):
-            session = self.service.resolve_session(**selection, registration=text.startswith(('报名','取消')))
+            if text.startswith('报名') and not re.search(r'场地\s*\d+', command) and not selection['at'] and not selection['number']:
+                selection['venue_id'] = None
+            session = self.service.resolve_session(**selection, registration=text.startswith(('报名','取消')), available_only=text.startswith('报名'))
+            selection['venue_id'] = session['venue_id']
             command = f"场地{selection['venue_id']} {session['date']} {session['start']} {text}"
             result['session_id'] = session['id']
             result['session'] = session

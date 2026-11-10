@@ -75,7 +75,7 @@ def _after_address(text):
     return text.rstrip()
 
 
-def normalize_message(content, bot_name=''):
+def normalize_message(content, bot_name='', aliases=()):
     """Normalize once, after authentication; raw string callers are legacy.
 
     A supplied name is a text-only compatibility hint. It never chooses a bot,
@@ -108,8 +108,11 @@ def normalize_message(content, bot_name=''):
             raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
         return CommandText(body, 'legacy_tag')
     if text.startswith(('@', '＠')):
-        letters = ''.join(html.unescape(bot_name).split())
-        if letters:
+        names = sorted({bot_name, *aliases}, key=len, reverse=True)
+        for alias in names:
+            letters = ''.join(html.unescape(alias).split())
+            if not letters:
+                continue
             name = r'[^\S\r\n]*'.join(re.escape(letter) for letter in letters)
             address = re.match(r'[@＠][^\S\r\n]*' + name + r'(?=\s|[:：,，]|$)', text)
             if address:

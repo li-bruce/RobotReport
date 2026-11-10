@@ -478,16 +478,32 @@ class Service:
         result = self.registrations(session['date'], session['venue_id'], session_id)
         return result['sessions'][0] | {'ineligible_registrations': [r['id'] for r in result['registrations'] if r['status'] == 'active' and not r['eligible']]}
 
-    def resolve_session(self, day=None, venue_id=1, session_id=None, at=None, number=None, for_write=True, *, registration=False):
-        external = registration and any(value is not None for value in (session_id,at,number))
-        self.venue(venue_id, active=for_write, external=external)
+    def registration_sessions(self, day=None, venue_id=None):
+        """Primary and explicitly selected substitute slots, in booking order."""
+        ids = ({venue_id} if venue_id is not None else
+               {v['id'] for v in self.venues() if v['active']} | self.external_venue_ids())
+        rows = []
+        for current in sorted(ids):
+            if self.venue(current, external=True)['active']:
+                rows.extend(self.sessions(day, current, external=True))
+        return sorted(rows, key=lambda row: (row['start'], row['external_substitute'],
+                      row['venue_id'] != self.ctx.default_venue_id, row['venue_id'], row['id']))
+
+    def resolve_session(self, day=None, venue_id=1, session_id=None, at=None, number=None, for_write=True, *, registration=False, available_only=False):
+        external = registration
+        if venue_id is not None:
+            self.venue(venue_id, active=for_write, external=external)
+        elif not registration:
+            venue_id = self.ctx.default_venue_id
+            self.venue(venue_id, active=for_write)
         day = day or self.clock().date().isoformat()
         target = day_value(day)
         if for_write and target < self.clock().date():
             raise ValueError('过去日期不能报名或取消；查询历史请使用 日期 名单')
         if for_write and target > self.clock().date() + timedelta(days=366):
             raise ValueError('最多可提前366天预约')
-        rows = self.sessions(day, venue_id, external=external)
+        rows = (self.registration_sessions(day, venue_id) if registration else
+                self.sessions(day, venue_id))
         if session_id is not None:
             candidates = [r for r in rows if r['id'] == int(session_id)]
         elif number is not None:
@@ -496,7 +512,8 @@ class Service:
             time_value(at)
             candidates = [r for r in rows if r['start'] <= at < r['end']]
         else:
-            candidates = [r for r in rows if not for_write or r['status'] != 'ended'][:1]
+            candidates = [r for r in rows if not for_write or
+                          (r['can_enroll'] if available_only else r['status'] != 'ended')][:1]
         if len(candidates) != 1:
             hint = '；'.join(f"第{r['number']}场 {r['start']}–{r['end']}" for r in rows) or '当日无场次'
             raise ValueError(f'未找到唯一可用场次。{hint}。可用：日期 时间 报名')
@@ -544,7 +561,7 @@ class Service:
                     records.append(item)
         return {'sessions': sessions, 'registrations': records}
 
-    def enroll(self, user_id, name, guests=0, day=None, venue_id=1, session_id=None, at=None, number=None, guest_names=None):
+    def enroll(self, user_id, name, guests=0, day=None, venue_id=None, session_id=None, at=None, number=None, guest_names=None, request_id=None):
         user_id = identifier(user_id)
         if user_id != self.ctx.actor and (self.ctx.source in ('callback', 'simulator') or not self.ctx.can('activity.manage')):
             raise PermissionError('只能操作本人及本人的同行人员')
@@ -557,9 +574,11 @@ class Service:
             guest_names = [clean_name(value) for value in guest_names]
             if len({value.casefold() for value in guest_names}) != len(guest_names):
                 raise ValueError('同行姓名不能重复')
-        session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
+        session = self.resolve_session(day, venue_id, session_id, at, number, registration=True, available_only=True)
         timestamp = stamp(self.clock())
+        from .enrollment_receipts import begin, finish
         with connect(self.path, True) as db:
+            receipt = begin(db,self.ctx,request_id,['enroll',session['id'],guests,guest_names])
             # Re-read both policy and member state inside the same write transaction:
             # approval/group/level revocations cannot race an accepted registration.
             current_session = db.execute('SELECT * FROM sessions WHERE id=?', (session['id'],)).fetchone()
@@ -618,14 +637,17 @@ class Service:
                 changed = True
             if changed:
                 audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id, 'bot_id':self.ctx.id, 'substitute_only':substitute_only})
-        return self.registrations(session['date'], venue_id, session['id'], registration=True)
+            finish(db,self.ctx,request_id,receipt,self.clock())
+        return self.registrations(session['date'], session['venue_id'], session['id'], registration=True)
 
-    def cancel(self, user_id, day=None, venue_id=1, session_id=None, at=None, number=None):
+    def cancel(self, user_id, day=None, venue_id=1, session_id=None, at=None, number=None, request_id=None):
         user_id = identifier(user_id)
         if user_id != self.ctx.actor and (self.ctx.source in ('callback', 'simulator') or not self.ctx.can('activity.manage')):
             raise PermissionError('只能取消本人报名；同行人员请按姓名单独取消')
         session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
+        from .enrollment_receipts import begin, finish
         with connect(self.path, True) as db:
+            receipt=begin(db,self.ctx,request_id,['cancel',session['id']])
             Members(self.ctx, self.clock).require_approved(db=db)
             current = db.execute('SELECT * FROM sessions WHERE id=?', (session['id'],)).fetchone()
             if not current or session_time(current, 'end') <= self.clock():
@@ -634,9 +656,10 @@ class Service:
             changed = db.execute("UPDATE registrations SET status='cancelled',updated_at=? WHERE session_id=? AND chat_id=? AND user_id=? AND guest_index=0 AND status='active'", (stamp(self.clock()), session['id'], self.ctx.scope_id, user_id)).rowcount
             if changed:
                 audit(db, self.ctx.actor, 'registration.cancel', {'user_id': user_id, 'session_id': session['id'], 'count': changed, 'chat_id': self.ctx.scope_id})
+            finish(db,self.ctx,request_id,receipt,self.clock())
         return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': changed}
 
-    def cancel_guests(self, user_id, guest_names, day=None, venue_id=1, session_id=None, at=None, number=None):
+    def cancel_guests(self, user_id, guest_names, day=None, venue_id=1, session_id=None, at=None, number=None, request_id=None):
         """Cancel only the caller's named active guests, all or none."""
         user_id = identifier(user_id)
         if user_id != self.ctx.actor:
@@ -649,7 +672,9 @@ class Service:
         if len({value.casefold() for value in names}) != len(names):
             raise ValueError('取消名单中的同行姓名不能重复')
         session = self.resolve_session(day, venue_id, session_id, at, number, registration=True)
+        from .enrollment_receipts import begin, finish
         with connect(self.path, True) as db:
+            receipt=begin(db,self.ctx,request_id,['cancel_guests',session['id'],names])
             member = Members(self.ctx, self.clock).require_approved(user_id, db=db, allow_admin=False)
             current = db.execute('SELECT * FROM sessions WHERE id=?', (session['id'],)).fetchone()
             if not current or session_time(current, 'end') <= self.clock():
@@ -667,6 +692,7 @@ class Service:
             timestamp = stamp(self.clock())
             db.executemany("UPDATE registrations SET status='cancelled',updated_at=? WHERE id=?", [(timestamp, target) for target in targets])
             audit(db, self.ctx.actor, 'registration.cancel_guests', {'user_id': user_id, 'session_id': session['id'], 'registration_ids': targets, 'count': len(targets), 'chat_id': self.ctx.scope_id})
+            finish(db,self.ctx,request_id,receipt,self.clock())
         return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': len(targets)}
 
     def cancel_person(self, registration_id):

@@ -161,3 +161,13 @@ Use synthetic state for callback/API tests. A test bot inside production shares 
 
 
 [Member imports and scheduling API](MEMBER_OPERATIONS.md): automatic Excel/CSV mappings, generated preregistration IDs, reviewed profile completion, broadcast rules and bot feature time windows.
+
+## Member enrollment and robot feedback
+
+`手动报名` returns a single-use, 20-minute personal link to `/enroll`. The browser exchanges its URL fragment at `POST /member/exchange`; the server sets an HttpOnly, SameSite=Strict member cookie and returns a CSRF token. Member and admin authentication are separate. All member mutations require `X-CSRF-Token` and a same-origin request.
+
+`GET /member/sessions?day=YYYY-MM-DD` lists all permitted primary and selected external-substitute sessions for that day (today through 366 days ahead), including the member's own entries. `POST /member/enrollments` accepts `action` (`enroll`, `cancel`, `cancel_guests`), `day`, integer `venue_id` and `session_id`, a 32-hex `request_id`, optional `guests` and `guest_count`. The actor comes from the session; caller-supplied identities are rejected. Identical retries are atomic and do not append guests again.
+
+Persistent login setup uses `POST /member/account/request`, a confirmation sent by the same user through an authenticated bot callback, `GET /member/account/status`, then `POST /member/account` with `login` and `password`. Login uses `POST /member/login`; passwords are hashed and login failures rate-limited. Only password-authenticated sessions can switch eligible bots using `POST /member/bot`. Recheck current membership, bot policy, scope and enrollment rules on every operation.
+
+Bot create/update accepts `aliases` (up to 12 display names) and `notification_types`. Null notification configuration preserves the previous capability-derived behavior; an explicit list selects independent feedback categories. Categories are returned with `/api/bot-capabilities`. `announcement` is always enabled. Message-center sends ignore recipient subsets and cover all active connected groups once. Aliases affect command normalization and examples, never callback authentication.

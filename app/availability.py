@@ -264,7 +264,10 @@ def dispatch_notices(platform, clock=now):
         groups = {}
         if datetime.fromisoformat(block['date']+'T'+block['end']).replace(tzinfo=TZ) > clock():
             for channel in channels:
-                if not channel.daily_notifications or not supports(channel,'enrollment'):
+                from .feedback import enabled as feedback_enabled
+                from .time_rules import bind_clock
+                channel=bind_clock(channel,clock)
+                if not channel.daily_notifications or not feedback_enabled(channel,'occupancy'):
                     continue
                 try:
                     sessions = [s for s in Service(channel,clock).sessions(block['date'],block['venue_id'])
