@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 · 2026-11-11 · Message formatting
+
+- Share Markdown and HTML presentation cleanup across callbacks and the simulator, preserving raw mention offsets, sender identity and event deduplication.
+- Accept common numeric glyphs, explicit date formats, spacing and score separators in their appropriate command fields; retain names and literal internal commands.
+- Expand parsing guidance and regression coverage for formatted registration, scores, AI input and permission checks.
+
 ## v1.0 · 2026-11-11
 
 - Expand robot settings within the robot row, with section navigation, a configuration area and shared footer actions; adapt the drawer to mobile screens.

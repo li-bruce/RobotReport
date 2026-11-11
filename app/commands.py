@@ -14,8 +14,9 @@ from .planning import DailyPlanning, STRATEGIES
 from .score_parser import parse_score
 from .tournaments import Tournaments
 from .bot_capabilities import require_capability, supports
-from .message_parser import MessageInput, normalize_message, parse, strip_mention
+from .message_parser import LiteralCommand, normalize_message, parse, strip_mention
 from .selection_parser import parse_selection
+from .input_formats import NUMBER
 
 from .help import command_help, scoped_help
 from .dialogue import render, entry, command as example, link as form_link, Markup
@@ -167,7 +168,7 @@ class Commands:
         if message.text in ('连接', '连接测试'):
             return self.say('entry.connected')
         text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())
-        automatic_enrollment = (venue_id is None and not re.search(r'场地\s*\d+', message.text)
+        automatic_enrollment = (venue_id is None and not re.search(rf'场地\s*{NUMBER}', message.text)
                                 and not selection['at'] and not selection['number']
                                 and bool(re.match(r'^报名(?:$|\+|\s|[,，])', text)))
         venue_id = selection['venue_id']
@@ -289,7 +290,7 @@ class Commands:
         ai_entry = re.fullmatch(r'(?:/?ai)(?:[\s:：]+(.*))?', text, re.I | re.S)
         ai_body = (ai_entry[1] or '').strip() if ai_entry else None
         if re.fullmatch(r'AI\s*帮助', text, re.I) or ai_entry and ai_body in ('', '帮助', 'help', '?', '？'):
-            return await self.run(MessageInput('帮助 AI'),name,venue_id,allow_ai=False)
+            return await self.run(LiteralCommand('帮助 AI'),name,venue_id,allow_ai=False)
         if re.fullmatch(r'AI\s*状态', text, re.I) or ai_entry and ai_body == '状态':
             enabled = self.service.config()['ai']['enabled']
             return self.say('ai.status',status='已开启' if enabled else '已关闭',ai_command=example(self.ctx,'AI'),ai_example=example(self.ctx,'AI 查看帮助'))
@@ -499,7 +500,7 @@ class Commands:
             if not candidates:
                 return self.say('event.no_resume')
             if len(candidates) == 1:
-                return await self.run(MessageInput(f'场地{venue_id} 继续比赛 {candidates[0]["id"]}'), name, allow_ai=False)
+                return await self.run(LiteralCommand(f'场地{venue_id} 继续比赛 {candidates[0]["id"]}'), name, allow_ai=False)
             return self.say('event.choose_resume',choices=Markup('\n\n'.join(str(example(self.ctx,f"继续比赛 {e['id']}"))+' · '+escape(e['title']) for e in candidates)))
         event_command = re.fullmatch(r'赛事\s*(\d+)\s+(报名(?:\+(\d+))?|取消报名|名单)', text)
         if event_command:
@@ -529,7 +530,7 @@ class Commands:
         require_capability(self.ctx, 'ai')
         feature = feature_descriptor(self.ctx, feature_id, self.clock)
         if feature['allowed'] and feature['mode'] == 'command' and feature.get('command'):
-            return await self.run(MessageInput(feature['command']), allow_ai=False)
+            return await self.run(LiteralCommand(feature['command']), allow_ai=False)
         return feature['message']
 
     def event_ai_actions(self, event):
@@ -617,7 +618,7 @@ class Commands:
                 self.tournaments().engine._registration_allowed(event, self.clock())
             result['event_digest'] = hashlib.sha256(dumps(event).encode()).hexdigest()
         if not event_mutation and (re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?|取消报名', text) or re.match(r'^报名(?:\s+接龙)?[,，]', text) or cancellation_guests(text) is not None or text.startswith('组织比赛')):
-            if text.startswith('报名') and not re.search(r'场地\s*\d+', command) and not selection['at'] and not selection['number']:
+            if text.startswith('报名') and not re.search(rf'场地\s*{NUMBER}', command) and not selection['at'] and not selection['number']:
                 selection['venue_id'] = None
             session = self.service.resolve_session(**selection, registration=text.startswith(('报名','取消')), available_only=text.startswith('报名'))
             selection['venue_id'] = session['venue_id']
@@ -786,7 +787,7 @@ class Commands:
                 label = next((k for k,v in STRATEGIES.items() if v == arguments['assignment_strategy']), '随机')
                 detail = f'\n\n分配方式：{label}；确认后显示人数与可选赛制，再选择比赛形式。'
             return self.say('ai.confirm',steps=Markup('1. '+escape(command)+detail),edit_command=example(self.ctx,'AI 修改意见'))
-        return self.say('ai.query',content=Markup(await self.run(MessageInput(command),allow_ai=False)))
+        return self.say('ai.query',content=Markup(await self.run(LiteralCommand(command),allow_ai=False)))
 
     def ai_policy_epoch(self):
         with connect(self.ctx.db_path) as db:
@@ -856,7 +857,7 @@ class Commands:
                 _, selection = parse_selection(payload['command'])
                 result = DailyPlanning(self.ctx,self.clock).begin(selection,arguments.discipline,arguments.assignment_strategy,arguments.title,doubles_category=arguments.doubles_category)
             else:
-                result = await self.run(MessageInput(payload['command']), name, allow_ai=False, expected=payload['snapshot'])
+                result = await self.run(LiteralCommand(payload['command']), name, allow_ai=False, expected=payload['snapshot'])
         except BaseException:
             with connect(self.ctx.transport_db_path, True) as db:
                 db.execute("UPDATE ai_pending SET status='failed' WHERE token=?", (token,))

@@ -8,6 +8,8 @@ inferred. See docs/MESSAGE_PARSING.md for the wire contract and fallback policy.
 from dataclasses import dataclass
 import html
 import re
+import uuid
+from .message_styles import clean_styles
 
 
 MAX_TEXT = 4000
@@ -35,6 +37,12 @@ class CommandText:
     text: str
     addressing: str
     recipient_name: str = ''
+
+
+@dataclass(frozen=True)
+class LiteralCommand:
+    """Internal generated command; never constructed from callback metadata."""
+    text: str
 
 
 def message_input(text, text_format='command', mentions=None):
@@ -82,27 +90,44 @@ def normalize_message(content, bot_name=''):
     A supplied name is only a compatibility hint for old unstructured clients.
     Authenticated transport identity never depends on a displayed name.
     """
+    if isinstance(content, LiteralCommand):
+        return CommandText(message_input(content.text).text.strip(), 'command')
     if isinstance(content, MessageInput):
         value = message_input(content.text, content.text_format,
                               [dict(start=s.start, end=s.end, kind=s.kind) for s in content.mentions])
     else:
         value = message_input(content, 'legacy')
     if value.text_format == 'command':
-        return CommandText(value.text.strip(), 'command')
+        return CommandText(clean_styles(value.text), 'command')
     if value.text_format == 'mentions':
         if value.mentions:
+            marker = 'ROBORTMENTION' + uuid.uuid4().hex
+            fragments, offset, labels = [], 0, {}
+            for index, span in enumerate(value.mentions):
+                key = marker + str(index) + 'END'
+                fragments.extend((value.text[offset:span.start], key))
+                labels[key] = value.text[span.start:span.end]
+                offset = span.end
+            fragments.append(value.text[offset:])
+            text = clean_styles(''.join(fragments))
             first = value.mentions[0]
-            if first.kind == 'bot' and not value.text[:first.start].strip():
-                body = _after_address(value.text[first.end:])
+            first_key = next(iter(labels))
+            if first.kind == 'bot' and text.startswith(first_key):
+                body = _after_address(text[len(first_key):])
                 # Multiple leading addressees are ambiguous; never discard
                 # the next recipient and reinterpret the rest as a command.
-                if any(not value.text[first.end:s.start].strip() for s in value.mentions[1:]):
+                if any(body.startswith(key) for key in list(labels)[1:]):
                     raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
-                label = value.text[first.start:first.end].strip().lstrip('@＠').strip()
+                for key, original in labels.items():
+                    body = body.replace(key, original)
+                label = html.unescape(labels[first_key]).strip().lstrip('@＠').strip()
                 return CommandText(body, 'mentions', label)
-        return CommandText(value.text.strip(), 'mentions')
+            for key, original in labels.items():
+                text = text.replace(key, original)
+            return CommandText(text, 'mentions')
+        return CommandText(clean_styles(value.text), 'mentions')
 
-    text = html.unescape(value.text).strip()
+    text = clean_styles(value.text, bot_name)
     tag = _AT.match(text)
     if tag:
         body = _after_address(text[tag.end():])

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.commands import Commands
 from app.db import connect
 from app.main import create_app
-from app.message_parser import MessageInput, message_input, normalize_message
+from app.message_parser import LiteralCommand, MessageInput, message_input, normalize_message
 from app import env_settings
 from tests.test_core import CoreFixture, TOKEN
 
@@ -29,11 +29,13 @@ def test_every_command_uses_the_same_address_boundary(name, command):
 @pytest.mark.parametrize('body', ['报名，<at user_id="person">张三</at>，李四',
                                  'AI 查询 @张 三 的资料\n不要修改', '申请分组 A&amp;B',
                                  '记录 女双：张三，李四 VS 王五，赵六 21-19', '@literal remains'])
-def test_command_and_structured_modes_preserve_business_text_exactly(body):
-    assert normalize_message(MessageInput(body)).text == body
+def test_command_and_structured_modes_preserve_business_text_after_one_entity_decode(body):
+    expected = body.replace('&amp;', '&')
+    assert normalize_message(MessageInput(body)).text == expected
+    assert normalize_message(LiteralCommand(body)).text == body
     prefix = '@一个名称 '
     message = message_input(prefix + body, 'mentions', [{'start': 0, 'end': len(prefix)-1, 'kind': 'bot'}])
-    assert normalize_message(message, '完全不同的后台名称').text == body
+    assert normalize_message(message, '完全不同的后台名称').text == expected
 
 
 def test_only_the_leading_legacy_tag_is_removed_not_people_in_arguments():
@@ -156,7 +158,7 @@ class UnifiedEntryTests(CoreFixture):
             assert router.ctx.actor == '1001' and not router.ctx.is_admin
         # A literal command body must not accidentally decode an entity twice.
         with patch('app.commands.parse_selection', wraps=__import__('app.selection_parser', fromlist=['parse_selection']).parse_selection) as selection:
-            asyncio.run(router.run(MessageInput('帮助 A&amp;B')))
+            asyncio.run(router.run(LiteralCommand('帮助 A&amp;B')))
             assert selection.call_args.args[0] == '帮助 A&amp;B'
 
     def test_json_spans_ignore_display_name_changes_and_keep_permissions_and_dedupe(self):

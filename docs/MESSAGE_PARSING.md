@@ -7,16 +7,16 @@
 ```text
 Authenticated callback / authenticated simulator
   → MessageInput (text + declared format + optional mention spans)
-  → normalize_message (remove only the leading bot address)
+  → normalize_message (validate raw mention offsets, clean styles, remove the leading bot address)
   → CommandText (business text, no identity or authority)
   → parse_selection (venue / date / session)
   → Commands (fixed business commands / AI workflow)
   → existing capability, scope, membership and permission checks
 ```
 
-`app/message_parser.py` owns addressing, input validation and format handling. `app/selection_parser.py` owns literal activity selectors; `app/score_parser.py` owns score syntax. Domain modules keep business validation. Adding a command must not add a new mention-removal expression.
+`app/message_parser.py` owns addressing and input validation. `app/message_styles.py` removes chat presentation; `app/input_formats.py` reads numeric tokens and explicit dates. `app/selection_parser.py` owns activity selectors; `app/score_parser.py` owns score syntax. Domain modules keep business validation. Adding a command must not add a separate cleanup expression.
 
-`Commands.run` refreshes the authenticated context, normalizes once and dispatches. Connection checks use this same path. The old `app.commands.parse` and `strip_mention` imports remain compatibility facades. Backend-generated AI commands explicitly use `MessageInput(text)` (command format) so their arguments are not treated as chat markup. Semantic AI operations continue calling authorized domain APIs. Admin AI navigation/test endpoints accept plain prose and never infer chat identity from it.
+`Commands.run` refreshes the authenticated context, normalizes once and dispatches. Connection checks use this same path. The old `app.commands.parse` and `strip_mention` imports remain compatibility facades. Backend-generated AI commands use the internal `LiteralCommand(text)` type, preserving already resolved names and tokens without a second cleanup. This type cannot be selected through callback metadata. Semantic AI operations continue calling authorized domain APIs. Admin AI navigation/test endpoints never infer chat identity from prose.
 
 ## Adapter contract
 
@@ -24,8 +24,8 @@ Use the generic callback fields documented in [Integration](INTEGRATION.md). Opt
 
 | Format | Meaning |
 | --- | --- |
-| `command` (default) | The adapter already extracted the command body. Trim outer whitespace only; preserve mentions, entities and names in the body. |
-| `mentions` | Original text plus explicit mention spans. Remove only the first span when it is a bot address at the start, allowing leading whitespace. |
+| `command` (default) | The adapter already extracted the body. Clean presentation without removing a leading person mention. |
+| `mentions` | Original text plus explicit mention spans. Validate offsets before cleanup, protect every span, then remove only the leading bot span. Surrounding style wrappers are allowed. |
 | `legacy` | Raw text using the legacy address syntax below. Prefer the other formats for new integrations. |
 
 Example independent of the bot's configured/display name:
@@ -65,3 +65,20 @@ There is no aliases property. Backend and group names can differ. If a platform 
 - Tests cover renamed/spaced/punctuated/emoji bot names, all command families, both callback routes, simulator, AI input, embedded user mentions, entity handling, malformed spans, rejected ambiguous prefixes, duplicate events and permission denial.
 
 For business help see `/guide` and `/guide/admin`; this document is for maintainers and adapter authors.
+
+## Formatting and input variants
+
+All three callback text formats and the authenticated simulator share the cleaner. It accepts bold, italic, strike-through, underline/color HTML wrappers, headings, quotations, list markers, inline code, fenced code, and visible link captions. HTML entities are decoded once. It does not fetch link destinations or extract commands from attributes, images, scripts, comments or hidden content. Unsupported non-text content is rejected. User mention IDs, raw URLs, account underscores and emoji joiners are preserved; Markdown escapes keep punctuation literal. Unknown tags remain text rather than disappearing into an executable command.
+
+| Context | Accepted examples |
+| --- | --- |
+| Styling | `**报名**`, `<font color="blue">名单</font>`, a code-wrapped command |
+| Whitespace | Spaces around date separators, ordinal/clock/score components; `报 名 ＋ 两 接 龙`, `取消 报名` |
+| Numeric fields | Arabic/fullwidth digits, Chinese numerals, financial Chinese numerals and circled 1–20, such as `第２场`, `第贰场`, `第②场` |
+| Explicit dates | `2026-11-12`, `2026/11/12`, `2026.11.12`, `20261112`, `二〇二六年十一月十二日` |
+| Relative dates | Today, tomorrow, the day after and yesterday using the existing Chinese command words |
+| 24-hour times | `20:30`, `２０：３０`, `二十点半`, `二十时三十分` |
+| Scores | `周三赛，第贰场２１－１９`; colon, fullwidth colon, common hyphen/dash/minus characters, slash and `比` |
+| Levels / guest counts | `自评 叁 级`, `报名＋两`; existing business limits still apply |
+
+Numeric conversion is restricted to recognized numeric fields. It does not rewrite `A＋２杯`, member names or arbitrary punctuation in event titles. A title such as `21-19挑战赛` is retained. Invalid dates and contradictory selectors fail validation. Month/day-only dates, decimal/Roman numerals and ambiguous merged Arabic match/score numbers are not guessed. For example, use `12场21:19` or `12 21:19`, not `1221:19`. Separate paragraphs or list items are not automatically executed as a sequence; use the existing confirmed AI workflow for multi-step requests.
