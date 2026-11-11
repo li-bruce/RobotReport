@@ -891,7 +891,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
                         return {'result':'ok','reply':prior['reply']}
                 return {'result': 'ok'}
         try:
-            message = body['_message'] if generic else message_input(content, 'legacy')
+            message = body['_message'] if generic else message_input(content, body.get('text_format', 'legacy'), body.get('mentions'))
             reply = await Commands(ctx, clock).run(message, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)
         except (ValueError, PermissionError) as exc:
             from .dialogue import render, MembershipPrompt

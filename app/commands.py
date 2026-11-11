@@ -64,7 +64,7 @@ class Commands:
                 raise PermissionError('机器人或群通道已变化，请重新发送指令')
             if ctx.source in ('callback', 'simulator') and not fresh.receive_commands:
                 raise PermissionError('该群通道已关闭机器人指令')
-            ctx = fresh
+            ctx = replace(fresh, recipient_name=ctx.recipient_name)
         if ctx.source in ('callback', 'simulator'):
             with connect(ctx.db_path) as db:
                 approved = db.execute('SELECT 1 FROM member_records WHERE chat_id=? AND user_id=? AND status=\'approved\'', (ctx.scope_id, ctx.actor)).fetchone()
@@ -160,7 +160,10 @@ class Commands:
 
     async def run(self, content, name=None, venue_id=None, allow_ai=True, expected=None):
         self.refresh_context()
-        message = normalize_message(content, self.ctx.bot_name, self.ctx.bot_aliases)
+        message = normalize_message(content, self.ctx.bot_name)
+        if message.recipient_name:
+            self.ctx = replace(self.ctx, recipient_name=message.recipient_name)
+            self.service = Service(self.ctx, self.clock)
         if message.text in ('连接', '连接测试'):
             return self.say('entry.connected')
         text, selection = parse_selection(message.text or '帮助', venue_id or self.ctx.default_venue_id, today=self.clock().date())

@@ -49,13 +49,12 @@ The simulator accepts the same optional fields but defaults to `legacy` to retai
 
 ## Legacy compatibility
 
-1. Decode HTML entities once.
-2. A complete leading `<at ...>label</at>` is the legacy protocol's recipient boundary; its display label is irrelevant. Never remove later tags. Platforms where the first tag can refer to someone else must use the structured adapter contract.
-3. Otherwise, match the complete configured bot name after `@`/`＠`. Allow horizontal whitespace differences, escape punctuation literally, and require a whitespace, `:`/`：`, `,`/`，` or end boundary. Never match across a newline.
-4. Remove at most one address and one optional address delimiter. A bare address opens help.
-5. If a leading plain-text address cannot be resolved, return a specific reselect-the-bot message without creating a member or running a command. Do not drop the first word, search ahead for “注册”, or treat an unrelated bot as this one.
+1. Decode HTML entities once and remove a complete leading `<at ...>label</at>` when present.
+2. Recognize Unicode whitespace at a known or structurally unambiguous address boundary; do not jump to later whitespace in the command. Structured spans remain the preferred format for names containing arbitrary spaces.
+3. Old plain-text clients support a single name token, including spaced hyphen separators such as `@喂 - 一组专用 注册`. The configured name is an optional compatibility hint, never a required identity match. One optional colon or comma separates the address from the command.
+4. Preserve every business argument and reject multiple leading recipients. Never scan arguments for a later command keyword or infer identity from a name.
 
-Plain text alone cannot reliably reveal where an arbitrary display name ends. Name matching is therefore a compatibility fallback, not the primary protocol or an identity mechanism. For that fallback, keep the configured name aligned with the group display name; structured/command formats do not depend on the name.
+There is no aliases property. Backend and group names can differ. If a platform flattens an ambiguous multiword mention into ordinary spaces, its adapter must send `command`, `<at>` or `mentions` metadata instead of guessing the name boundary. Both callback routes accept the validated format metadata. Incoming mention labels affect this reply only and are not saved as robot configuration.
 
 ## Trust, state and regression coverage
 
@@ -66,6 +65,3 @@ Plain text alone cannot reliably reveal where an arbitrary display name ends. Na
 - Tests cover renamed/spaced/punctuated/emoji bot names, all command families, both callback routes, simulator, AI input, embedded user mentions, entity handling, malformed spans, rejected ambiguous prefixes, duplicate events and permission denial.
 
 For business help see `/guide` and `/guide/admin`; this document is for maintainers and adapter authors.
-
-
-Display names and up to 12 configured aliases are normalized longest-first only at the leading mention. Structured bot mentions do not depend on a configured name. Identity always comes from the authenticated callback route, never a display name.

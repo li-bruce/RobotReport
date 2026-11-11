@@ -52,7 +52,6 @@ def refresh_context(ctx):
                        allow_external_substitute=bool(bot['allow_external_substitute']) if 'allow_external_substitute' in bot.keys() else False,
                        external_slot_keys=tuple(json.loads(bot['external_slot_keys'])) if 'external_slot_keys' in bot.keys() else (),
                        default_venue_id=default, capabilities=capabilities, bot_name=bot['name'],
-                       bot_aliases=tuple(json.loads(bot['aliases'])) if 'aliases' in bot.keys() else (),
                        notification_types=(tuple(json.loads(bot['notification_types'])) if bot['notification_types']!='null' else None) if 'notification_types' in bot.keys() else None,
                        capability_rules=tuple(json.loads(bot['capability_rules'])) if 'capability_rules' in bot.keys() else (),
                        receive_commands=bool(channel['receive_commands']) if channel else ctx.receive_commands,

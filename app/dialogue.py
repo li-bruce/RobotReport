@@ -242,7 +242,7 @@ def read(ctx):
 
 
 def command(ctx, text):
-    name = (next(iter(getattr(ctx,'bot_aliases',())), '') or getattr(ctx, 'bot_name', '') or '机器人').strip()
+    name = (getattr(ctx, 'recipient_name', '') or getattr(ctx, 'bot_name', '') or '机器人').strip()
     return Markup('<font color="#0066b2"><b>' + html_escape('@' + name + ' ' + text) + '</b></font>')
 
 
@@ -268,7 +268,7 @@ def render(ctx, key, *, settings=None, **values):
         # authenticated account so the platform can resolve its display name.
         recipient = mention(ctx.actor, name)
     common = {'system_name': settings.get('system_name') or '聚场',
-              'bot_name': getattr(ctx, 'bot_name', '') or '机器人',
+              'bot_name': getattr(ctx, 'recipient_name', '') or getattr(ctx, 'bot_name', '') or '机器人',
               'greeting': Markup((recipient + '，' if recipient else '') + '您好！')}
     for key_name, cmd in {'register':'注册', 'profile':'注册资料', 'help':'帮助', 'organize':'组织比赛',
                           'resume':'继续比赛', 'enroll':'报名', 'roster':'名单', 'confirm':'确认',
@@ -326,7 +326,7 @@ def settings_api(platform, user, bot_id, data=None):
     platform.require_platform(user)
     bot = platform.bot(bot_id)
     from dataclasses import replace
-    ctx = replace(platform.workspace_context(actor=user.id, source='admin'), id=bot_id, bot_name=bot['name'], bot_aliases=tuple(json.loads(bot.get('aliases') or '[]')))
+    ctx = replace(platform.workspace_context(actor=user.id, source='admin'), id=bot_id, bot_name=bot['name'])
     with connect(ctx.db_path, data is not None) as db:
         row = db.execute('SELECT value FROM config WHERE key=?', (_key(ctx),)).fetchone()
         current = json.loads(row[0]) if row else {'system_name': '聚场', 'overrides': {}}
@@ -358,7 +358,7 @@ def preview(platform, user, bot_id, data):
     key, text = data.get('id'), data.get('text')
     validate(key, text)
     from dataclasses import replace
-    ctx = replace(platform.workspace_context(), id=bot_id, bot_name=bot['name'], bot_aliases=tuple(json.loads(bot.get('aliases') or '[]')))
+    ctx = replace(platform.workspace_context(), id=bot_id, bot_name=bot['name'])
     values = {f: f'〈{variable_label(f)}〉' for f in fields(TEMPLATES[key].text)}
     values.update(name='小林', person=Markup('**小林**'), reason='这场活动暂时不能报名',
                   event='周末友谊赛', count=8, number=12, level=5, groups='兴趣组', gender='女',

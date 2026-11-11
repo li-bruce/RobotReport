@@ -169,4 +169,4 @@ AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有
 
 首次设置密码：`POST /member/account/request` 获取确认指令 → 同一用户在真实群回调确认 → `GET /member/account/status` → `POST /member/account` 保存登录名及密码。之后 `POST /member/login` 支持登录名或唯一登记手机号。密码散列保存，失败限流；密码登录会话可通过 `POST /member/bot` 切换符合本人条件的机器人。每次操作重检会员、机器人范围与用户条件、会籍和活动报名规则。
 
-机器人新增/修改支持 `aliases`（最多12个）及 `notification_types`。通知配置为 null 时继承旧业务开关规则，显式列表则按通知类型独立启用。目录见 `/api/bot-capabilities` 的 notifications；公告 announcement 固定启用。消息中心忽略接收者子集，向全部有效连接群各发一次。别名仅影响文本解析及示例，不参与回调身份认证。
+机器人新增/修改支持 `notification_types`。通知配置为 null 时继承旧业务开关规则，显式列表则按类型独立启用。目录见 `/api/bot-capabilities` 的 notifications；announcement 固定开启。消息中心向全部有效连接群各发一次。后台名称与群内名称独立，不提供 aliases 属性。机器人及群身份仅由回调凭据和通道绑定确认。

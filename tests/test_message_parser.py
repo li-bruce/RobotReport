@@ -45,10 +45,13 @@ def test_only_the_leading_legacy_tag_is_removed_not_people_in_arguments():
         normalize_message('<at user_id="bot">未闭合 注册')
 
 
-@pytest.mark.parametrize('body', ['@其他机器人 注册', '@注册 助手其他 注册', '@注册\n助手 注册', '@注册 注册', '@未知 注册'])
-def test_no_keyword_scan_or_partial_name_guess(body):
-    with pytest.raises(ValueError, match='完整的机器人提及'):
-        normalize_message(body, '注册 助手')
+@pytest.mark.parametrize('body,expected', [('@其他机器人 注册','注册'), ('@喂 - 一组专用 注册','注册'), ('@外部\u2005报名，张三，李四','报名，张三，李四'), ('@注册 助手其他 注册','助手其他 注册')])
+def test_unknown_display_names_do_not_require_manual_configuration(body, expected):
+    assert normalize_message(body, '内部名称').text == expected
+
+def test_free_text_arguments_are_never_scanned_for_a_later_command():
+    assert normalize_message('@外部 AI 帮张三报名', '内部').text == 'AI 帮张三报名'
+    assert normalize_message('@外部 不能 注册', '内部').text == '不能 注册'
 
 
 def test_user_mentions_do_not_become_the_address_or_sender():
@@ -104,7 +107,7 @@ class UnifiedEntryTests(CoreFixture):
         assert len(expected) < len(asyncio.run(router.run(MessageInput('帮助'))))
         for message in ('@俱乐部 - 注册 助手', '<at user_id="bot">任意名称</at>',
                         message_input('@Club A', 'mentions', [{'start': 0, 'end': 7, 'kind': 'bot'}])):
-            assert asyncio.run(router.run(message)) == expected
+            assert '您好' in asyncio.run(router.run(message))
         assert self.s.registrations()['registrations'] == []
 
     def test_current_legacy_and_simulator_share_registration_and_connection_routing(self):
@@ -129,18 +132,20 @@ class UnifiedEntryTests(CoreFixture):
             with connect(self.ctx.transport_db_path) as db:
                 assert db.execute('SELECT count(*) FROM inbox').fetchone()[0] == 4
 
-    def test_unrecognized_name_does_not_create_member_and_wrong_token_cannot_parse(self):
+    def test_different_name_registers_real_sender_but_wrong_token_cannot_parse(self):
         app = create_app(self.temp.name, TOKEN, False, False, self.clock)
         with TestClient(app) as client:
             body = {'robot_key': 'robot-test', 'chatid': '266382', 'creator': 'never-registered',
                     'ctime': '123', 'content': '@俱乐部 - 未知 注册'}
             assert client.post(self.bots[0]['callback_path'] + 'bad', json=body).status_code == 403
+            with connect(self.ctx.transport_db_path) as db:
+                assert db.execute('SELECT count(*) FROM registration_forms').fetchone()[0] == 0
             assert client.post(self.bots[0]['callback_path'], json=body).status_code == 200
         with connect(self.ctx.transport_db_path) as db:
-            assert '完整的机器人提及' in db.execute('SELECT reply FROM inbox').fetchone()[0]
-            assert db.execute('SELECT count(*) FROM registration_forms').fetchone()[0] == 0
+            assert '确认本人资料' in db.execute('SELECT reply FROM inbox').fetchone()[0]
+            assert db.execute('SELECT user_id FROM registration_forms').fetchone()[0] == 'never-registered'
         with connect(self.ctx.db_path) as db:
-            assert db.execute("SELECT count(*) FROM member_records WHERE user_id='never-registered'").fetchone()[0] == 0
+            assert db.execute("SELECT status FROM member_records WHERE user_id='never-registered'").fetchone()[0] != 'approved'
 
     def test_normalized_body_is_not_reinterpreted_and_ai_uses_the_same_identity(self):
         router = Commands(self.member, self.clock)

@@ -133,7 +133,7 @@ class BotContext:
     policy_clock: object = now
     allow_external_substitute: bool = False
     external_slot_keys: tuple = ()
-    bot_aliases: tuple = ()
+    recipient_name: str = ''
     notification_types: tuple | None = None
 
     def can(self, permission, db=None):
@@ -177,7 +177,7 @@ class Platform:
                 db.execute('ALTER TABLE bots ADD COLUMN allow_external_substitute INTEGER NOT NULL DEFAULT 0')
             if 'external_slot_keys' not in bot_columns:
                 db.execute("ALTER TABLE bots ADD COLUMN external_slot_keys TEXT NOT NULL DEFAULT '[]'")
-            for field, default in (('deleted_at', ''), ('user_policy', 'null'), ('capability_rules','[]'), ('aliases','[]'), ('notification_types','null')):
+            for field, default in (('deleted_at', ''), ('user_policy', 'null'), ('capability_rules','[]'), ('notification_types','null')):
                 if field not in bot_columns:
                     db.execute(f"ALTER TABLE bots ADD COLUMN {field} TEXT NOT NULL DEFAULT '{default}'")
             for table, fields in (('bots', ('venue_ids','slot_keys','capabilities')), ('bot_channels', ('slot_keys',))):
@@ -387,7 +387,7 @@ class Platform:
             'external_slot_keys': json.loads(bot['external_slot_keys']),
             'capabilities': list(normalize_capabilities(json.loads(bot['capabilities']))),
             'capability_rules': json.loads(bot['capability_rules']),
-            'aliases': json.loads(bot['aliases']), 'notification_types': json.loads(bot['notification_types'])}
+            'notification_types': json.loads(bot['notification_types'])}
 
     def list(self, principal):
         with connect(self.path) as db:
@@ -602,9 +602,9 @@ class Platform:
         capability_rules = normalize_capability_rules(data.get('capability_rules'),capabilities)
         from .bot_access import normalize
         user_policy = normalize(data.get('user_policy'),self.workspace_context())
-        from .bot_aliases import normalize as normalize_aliases
         from .feedback import normalize as normalize_notices
-        aliases=normalize_aliases(data.get('aliases',[]))
+        if 'aliases' in data:
+            raise ValueError('机器人不需要配置别名')
         notices=normalize_notices(data.get('notification_types'))
         bot_id = uuid.uuid4().hex
         secrets_data = {'callback_token':callback}
@@ -614,7 +614,7 @@ class Platform:
             if record and record['webhook_url'] and db.execute("SELECT 1 FROM bot_channels WHERE webhook_url=? AND active=1", (record['webhook_url'],)).fetchone():
                 raise ValueError('该Webhook已用于另一个群通道')
             db.execute('INSERT INTO bots(id,name,active,chat_id,webhook_url,robot_key,callback_hash,legacy,created_at,capabilities) VALUES(?,?,1,?,?,?,?,?,?,?)', (bot_id,name,chat,record['webhook_url'] if record else '',record['robot_key'] if record else '',digest(callback),int(bool(data.get('legacy',False))),stamp(),dumps(capabilities)))
-            db.execute('UPDATE bots SET aliases=?,notification_types=? WHERE id=?',(dumps(aliases),dumps(notices),bot_id))
+            db.execute('UPDATE bots SET notification_types=? WHERE id=?',(dumps(notices),bot_id))
             db.execute('UPDATE bots SET user_policy=? WHERE id=?',(dumps(user_policy),bot_id))
             db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=? WHERE id=?', (int(external_enabled),dumps(external_keys),bot_id))
             db.execute('UPDATE bots SET capability_rules=? WHERE id=?',(dumps(capability_rules),bot_id))
@@ -634,9 +634,7 @@ class Platform:
     def update(self, principal, bot_id, data):
         self.require_platform(principal)
         old = self.bot(bot_id)
-        from .bot_aliases import normalize as normalize_aliases
         from .feedback import normalize as normalize_notices
-        aliases=normalize_aliases(data.get('aliases',json.loads(old['aliases'])))
         notices=normalize_notices(data.get('notification_types',json.loads(old['notification_types'])))
         external_enabled, external_keys = self._external_registration(data, old)
         validated_scope = {k:self._scope_value(k,data[k]) for k in ('venue_ids','slot_keys') if k in data}
@@ -650,7 +648,7 @@ class Platform:
         capability_rules=normalize_capability_rules(rules,selected)
         from .bot_access import normalize
         user_policy = normalize(data['user_policy'],self.workspace_context()) if 'user_policy' in data else None
-        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy','capability_rules','allow_external_substitute','external_slot_keys','aliases','notification_types'}
+        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy','capability_rules','allow_external_substitute','external_slot_keys','notification_types'}
         if set(data)-allowed:
             raise ValueError('不支持的机器人配置字段')
         if data.get('admin_user_ids'):
@@ -678,7 +676,7 @@ class Platform:
         secrets_data = {key:data[key] for key in ('callback_token',) if key in data}
         with env_settings.change(self.root, bot_id=bot_id, bot_values=secrets_data), connect(self.path,True) as db:
             self._live_record(db,bot_id)
-            db.execute('UPDATE bots SET aliases=?,notification_types=? WHERE id=?',(dumps(aliases),dumps(notices),bot_id))
+            db.execute('UPDATE bots SET notification_types=? WHERE id=?',(dumps(notices),bot_id))
             db.execute('UPDATE bots SET name=?,active=?,callback_hash=?,legacy=? WHERE id=?',tuple(old[k] for k in ('name','active','callback_hash','legacy','id')))
             db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=? WHERE id=?', (int(external_enabled),dumps(external_keys),bot_id))
             if capabilities is not None:

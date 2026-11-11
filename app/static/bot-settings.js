@@ -29,9 +29,9 @@ function settingsPanel(title,description,body,extra=''){
 function uniqueBotFields(html,id){return html.replace(/\b(id|for)="f-([^"]+)"/g,(_,key,name)=>`${key}="f-${attr(id)}-${name}"`);}
 function inlineBotForm(bot,slots){
   const enabled=new Set(botCapabilities(bot));
-  const basics=field('机器人名称','name',bot.name,'text','required maxlength="80"')+textfield('群内别名','aliases',(bot.aliases||[]).join('\n'),'rows="2" maxlength="960" placeholder="每行一个，可与管理名称不同"')+`<label class="check-label"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label><fieldset class="robot-capability-field"><legend>业务功能</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong></span></label>`).join('')}</div></fieldset>`;
+  const basics=field('机器人名称','name',bot.name,'text','required maxlength="80"')+`<label class="check-label"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label><fieldset class="robot-capability-field"><legend>业务功能</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong></span></label>`).join('')}${feedbackFeature(bot)}</div></fieldset>`;
   let policy=botPolicyForm(bot.user_policy).replace(/<details[^>]*><summary>.*?<\/summary>/,'').replace(/<\/details>$/,'');
-  return uniqueBotFields(`<form id="robot-form-${attr(bot.id)}" class="bot-inline-form"><div class="bot-settings-grid">${settingsPanel('名称与功能','',basics)}${settingsPanel('反馈通知','',feedbackControls(bot))}${settingsPanel('服务范围','',scopeControls(bot,slots,{bot:true}))}${settingsPanel('用户条件','',policy)}${settingsPanel('功能开放时间','设置日期与时间范围。','<div data-bot-time-rules></div>')}</div><div class="bot-inline-save"><span data-save-status role="status"></span><div class="inline-error" role="alert"></div><button type="submit" class="btn primary">保存机器人设置</button></div></form>`,bot.id);
+  return uniqueBotFields(`<form id="robot-form-${attr(bot.id)}" class="bot-inline-form"><div class="bot-settings-grid">${settingsPanel('名称与功能','',basics)}${settingsPanel('服务范围','',scopeControls(bot,slots,{bot:true}))}${settingsPanel('用户条件','',policy)}${settingsPanel('功能开放时间','设置日期与时间范围。','<div data-bot-time-rules></div>')}</div><div class="bot-inline-save"><span data-save-status role="status"></span><div class="inline-error" role="alert"></div><button type="submit" class="btn primary">保存机器人设置</button></div></form>`,bot.id);
 }
 function markBotDirty(form){
   form.dataset.dirty='true';const status=form.querySelector('[data-save-status]');if(status)status.textContent='有未保存的修改';
@@ -67,13 +67,13 @@ async function loadInlineBot(card){
     const readBroadcast=bindTimeRules(broadcastForm.querySelector('[data-broadcast-rules]'),broadcasts.rules,{mode:'broadcast',ownerId:id,bots:[]});
     const refreshBroadcast=()=>{
       const enabled=bot.notification_types==null?botCapabilities(bot).includes('enrollment'):bot.notification_types.some(v=>v.startsWith('activity_')),channel=state.channels.find(c=>c.bot_id===id&&!c.archived);
-      broadcastForm.querySelector('[data-broadcast-notice]').innerHTML=!enabled?'<p class="notice">请在“反馈通知”中开启需要的活动提醒。</p>':!isActive(bot.active)?'<p class="notice">机器人已停用，定时播报暂停。</p>':!channel?'<p class="notice">关联群后开始播报。</p>':!isActive(channel.active)||!channel.daily_notifications?'<p class="notice">群连接的活动提醒已暂停。</p>':!broadcasts.daily_enabled?'<p class="notice">全局播报已暂停。</p>':'';
+      broadcastForm.querySelector('[data-broadcast-notice]').innerHTML=!enabled?'<p class="notice">请在“名称与功能 → 反馈通知”中开启活动提醒。</p>':!isActive(bot.active)?'<p class="notice">机器人已停用，定时播报暂停。</p>':!channel?'<p class="notice">关联群后开始播报。</p>':!isActive(channel.active)||!channel.daily_notifications?'<p class="notice">群连接的活动提醒已暂停。</p>':!broadcasts.daily_enabled?'<p class="notice">全局播报已暂停。</p>':'';
       broadcastForm.querySelector('[data-broadcast-rules]').hidden=!enabled;
       broadcastForm.querySelector('[type=submit]').disabled=!enabled;
     };
     refreshBroadcast();trackBotDraft(form);trackBotDraft(broadcastForm);
     bindForm(form.id,async(data,_form,epoch)=>{
-      const saved=await botSaveRequest(form,`/api/bots/${encodeURIComponent(id)}`,{method:'PATCH',body:{name:data.get('name').trim(),active:data.has('active'),capabilities:capabilitiesToSave(bot,data),aliases:String(data.get('aliases')||'').split(/[\n,，]/).map(v=>v.trim()).filter(Boolean),notification_types:data.getAll('notification_types'),...scopeBody(data,true),user_policy:readPolicy(),capability_rules:readTime().filter(r=>r.capabilities.length)}});
+      const saved=await botSaveRequest(form,`/api/bots/${encodeURIComponent(id)}`,{method:'PATCH',body:{name:data.get('name').trim(),active:data.has('active'),capabilities:capabilitiesToSave(bot,data),notification_types:data.getAll('notification_types'),...scopeBody(data,true),user_policy:readPolicy(),capability_rules:readTime().filter(r=>r.capabilities.length)}});
       if(epoch!==state.epoch||!card.isConnected)return;
       bot=saved;state.bots=state.bots.map(b=>b.id===id?saved:b);robotSaved(form);updateRobotSummary(card,bot);refreshBroadcast();toast('机器人设置已保存。');
     });
@@ -106,7 +106,7 @@ async function loadInlineBot(card){
 }
 function bindInlineBotEditors(){
   document.querySelectorAll('.robot-manager>.robot-card').forEach(card=>{
-    card.querySelector('.robot-card-summary').onclick=()=>openBotDrawer(card);
+    card.querySelector('.robot-card-summary').onclick=()=>card.classList.contains('is-expanded')?closeBotDrawer(card):openBotDrawer(card);
   });
 }
 async function revealBotSettings(id,section){

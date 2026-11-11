@@ -34,6 +34,7 @@ class MessageInput:
 class CommandText:
     text: str
     addressing: str
+    recipient_name: str = ''
 
 
 def message_input(text, text_format='command', mentions=None):
@@ -75,11 +76,11 @@ def _after_address(text):
     return text.rstrip()
 
 
-def normalize_message(content, bot_name='', aliases=()):
+def normalize_message(content, bot_name=''):
     """Normalize once, after authentication; raw string callers are legacy.
 
-    A supplied name is a text-only compatibility hint. It never chooses a bot,
-    group, user or permission. Unknown/partial plain-text addresses fail closed.
+    A supplied name is only a compatibility hint for old unstructured clients.
+    Authenticated transport identity never depends on a displayed name.
     """
     if isinstance(content, MessageInput):
         value = message_input(content.text, content.text_format,
@@ -97,7 +98,8 @@ def normalize_message(content, bot_name='', aliases=()):
                 # the next recipient and reinterpret the rest as a command.
                 if any(not value.text[first.end:s.start].strip() for s in value.mentions[1:]):
                     raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
-                return CommandText(body, 'mentions')
+                label = value.text[first.start:first.end].strip().lstrip('@＠').strip()
+                return CommandText(body, 'mentions', label)
         return CommandText(value.text.strip(), 'mentions')
 
     text = html.unescape(value.text).strip()
@@ -106,11 +108,11 @@ def normalize_message(content, bot_name='', aliases=()):
         body = _after_address(text[tag.end():])
         if _AT.match(body) or body.startswith(('@', '＠')):
             raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
-        return CommandText(body, 'legacy_tag')
+        label = re.sub(r'^<at\b[^<>]*>|</at\s*>$', '', tag.group(), flags=re.I).strip()
+        return CommandText(body, 'legacy_tag', label)
     if text.startswith(('@', '＠')):
-        names = sorted({bot_name, *aliases}, key=len, reverse=True)
-        for alias in names:
-            letters = ''.join(html.unescape(alias).split())
+        for display_hint in (bot_name,):
+            letters = ''.join(html.unescape(display_hint).split())
             if not letters:
                 continue
             name = r'[^\S\r\n]*'.join(re.escape(letter) for letter in letters)
@@ -119,7 +121,16 @@ def normalize_message(content, bot_name='', aliases=()):
                 body = _after_address(text[address.end():])
                 if _AT.match(body) or body.startswith(('@', '＠')):
                     raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
-                return CommandText(body, 'legacy_name')
+                return CommandText(body, 'legacy_name', text[1:address.end()].strip().rstrip(':：,，'))
+        # Unicode spaces may also appear inside labels and arguments. Never
+        # jump ahead to a later separator or business keyword. Arbitrary
+        # multiword labels use the explicit tag/span contract above.
+        boundary = re.match(r'[@＠][^\S\r\n]*([^\s@＠:：,，]+(?:[^\S\r\n]+[-—–·][^\S\r\n]+[^\s@＠:：,，]+)*)(?=\s|[:：,，]|$)', text)
+        if boundary:
+            body = _after_address(text[boundary.end():])
+            if _AT.match(body) or body.startswith(('@', '＠')):
+                raise ValueError('请一次只 @ 一个机器人，并在后面填写指令')
+            return CommandText(body, 'legacy_address', boundary[1].strip())
         raise ValueError(_ADDRESS_ERROR)
     if text.lower().startswith('<at'):
         raise ValueError(_ADDRESS_ERROR)

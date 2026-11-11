@@ -36,9 +36,10 @@ def test_only_leading_complete_name_is_removed_and_command_arguments_are_preserv
     assert strip_mention('@喂 - 一组专用 注册 张三 男 3级', name) == '注册 张三 男 3级'
     assert strip_mention('@喂 - 一组专用 AI 帮我查明天的名单', name) == 'AI 帮我查明天的名单'
     assert strip_mention('报名，@张三，李四', name) == '报名，@张三，李四'
-    for message in ('@喂 - 一组专用其他 注册', '@喂\n- 一组专用 注册', '@喂 - 二组专用 注册', '@喂 注册'):
-        with pytest.raises(ValueError, match='完整的机器人提及'):
-            strip_mention(message, name)
+    for message in ('@喂 - 一组专用其他 注册', '@喂 - 二组专用 注册', '@喂 注册'):
+        assert strip_mention(message, name) == '注册'
+    assert strip_mention('@喂\n- 一组专用 注册', name) == '- 一组专用 注册'
+    assert strip_mention('@外部 AI 帮我\u2005报名', name) == 'AI 帮我\u2005报名'
 
 
 class MentionRegistrationTests(CoreFixture):

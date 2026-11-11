@@ -216,7 +216,7 @@ class EnrollmentPortal:
             db.execute('DELETE FROM member_web_bindings WHERE session_hash=? OR expires_at<=?',(row['token_hash'],stamp(self.clock())))
             db.execute('INSERT INTO member_web_bindings(code_hash,session_hash,user_id,bot_id,channel_id,expires_at) VALUES(?,?,?,?,?,?)',
                        (PasswordAuth._digest(code),row['token_hash'],ctx.actor,ctx.id,ctx.channel_id,stamp(self.clock()+timedelta(minutes=10))))
-        name=next(iter(ctx.bot_aliases),ctx.bot_name)
+        name=ctx.recipient_name or ctx.bot_name
         return {'command':f'@{name} 确认网页登录 {code}'}
 
     def confirm_binding(self, ctx, code):

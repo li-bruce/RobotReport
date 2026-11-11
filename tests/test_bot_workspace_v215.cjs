@@ -26,9 +26,9 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
   run("state.route='bot-links'");await run('renderBotWorkspace(3)');html=node('#main').innerHTML;for(const action of ['group-new','group-delete','channel-edit'])assert.match(html,new RegExp('data-action=\"'+action+'\"'));assert.match(html,/relation-viewport/);assert.match(html,/class=\"relation-node relation-bot/);run("state.route='bots'");
   const groups=plain(run('groupedBots(bots,channels,groups)'));assert.equal(groups[0].entries.length,2);assert.equal(groups[1].entries.length,0);
   assert.equal(run("groupedBots(bots,[],[])[0].name"),'未绑定群');assert.doesNotMatch(run('botCapabilityBadges(bots[0])'),/每日赛事|AI 助手/);
-  run("state.botDisclosure.set('bot:student:settings',true)");await run('renderBotWorkspace(3)');assert.match(node('#main').innerHTML,/<dialog class="bot-drawer"/);assert.doesNotMatch(node('#main').innerHTML,/<dialog[^>]* open/);
+  run("state.botDisclosure.set('bot:student:settings',true)");await run('renderBotWorkspace(3)');assert.match(node('#main').innerHTML,/<section class="bot-drawer" hidden/);assert.doesNotMatch(node('#main').innerHTML,/<dialog class="bot-drawer"/);
   run("bots[0].name='<img src=x onerror=alert(1)>'");await run('renderBotWorkspace(3)');assert.doesNotMatch(node('#main').innerHTML,/<img src=x/);assert.match(node('#main').innerHTML,/&lt;img/);run("bots[0].name='学生机器人'");
-  assert.equal(ctx.sent.some(x=>x.path.includes('/connection')),false,'list does not fetch credential addresses');
+  assert.doesNotMatch(run('botDrawerMarkup(bots[0])'),/data-drawer-section="feedback"|<dialog/);assert.match(run('inlineBotForm(bots[0],[])'),/robot-feedback-feature/);assert.doesNotMatch(run('inlineBotForm(bots[0],[])'),/name="aliases"/);assert.equal(ctx.sent.some(x=>x.path.includes('/connection')),false,'list does not fetch credential addresses');
   await run('editBotScope(null)');assert.match(ctx.modal,/value="daily_events" checked/);assert.doesNotMatch(ctx.modal,/value="daily_events"[^>]*disabled/);
   for(const key of ['ai','large_events','management','member_notifications'])assert.doesNotMatch(ctx.modal,new RegExp('value="'+key+'" checked'));
   run("bots[0].capabilities=['member_notifications']");
@@ -39,7 +39,7 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
   run("bots[0].capabilities=['registration']");
   await run("editBotScope('student')");assert.doesNotMatch(ctx.modal,/value="daily_events" checked/);assert.match(ctx.modal,/value="registration" checked/);
   ctx.data={name:'学生机器人',active:'on',capabilities:[],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
-  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:['messages'],aliases:[],notification_types:[],capability_rules:[],venue_ids:[1],slot_keys:null,allow_external_substitute:false,external_slot_keys:[],user_policy:{enabled:false,match:'all',rules:[]}});
+  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:['messages'],notification_types:[],capability_rules:[],venue_ids:[1],slot_keys:null,allow_external_substitute:false,external_slot_keys:[],user_policy:{enabled:false,match:'all',rules:[]}});
   await run('editGroup(null)');assert.doesNotMatch(ctx.modal,/name="chat_id"|Robot Key/);await run("forms['group-form'](new FormData({name:'新建群'}),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'新建群'});
   const form=node('#channel-form');form.elements={group_id:{value:'group-a'},webhook_url:{value:''}};
   await run("editChannelScope('student','student-channel')");for(const name of ['group_id','callback_url','webhook_url'])assert.match(ctx.modal,new RegExp('name="'+name+'"'));

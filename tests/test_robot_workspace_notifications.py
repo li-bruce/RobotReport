@@ -13,25 +13,26 @@ from tests.test_core import CoreFixture
 
 
 class RobotWorkspaceNotificationsTests(CoreFixture):
-    def test_alias_changes_do_not_change_identity_or_group_and_preserve_arguments(self):
+    def test_display_name_changes_do_not_change_identity_or_group_and_preserve_arguments(self):
         original=self.platform.bot(self.member.id)
-        self.platform.update(self.admin,self.member.id,{'name':'内部登记名','aliases':['喂 - 一组专用','一组助理']})
+        self.platform.update(self.admin,self.member.id,{'name':'内部登记名'})
         router=Commands(self.member,self.clock)
-        for name in ['内部登记名','喂-一组专用','一组助理']:
+        for name in ['内部登记名','喂-一组专用','喂 - 一组专用','一组助理']:
             reply=asyncio.run(router.run('@'+name+' 名单'))
             self.assertIn('无人报名',reply)
         current=self.platform.bot(self.member.id)
         self.assertEqual(current['callback_hash'],original['callback_hash'])
         self.assertEqual(current['id'],original['id']);self.assertEqual(current['chat_id'],original['chat_id'])
-        with self.assertRaises(ValueError):asyncio.run(router.run('@未登记的机器人 名单'))
+        self.assertIn('无人报名',asyncio.run(router.run('@未登记的机器人 名单')))
         # Structured addressing does not depend on any display name.
         self.assertEqual(normalize_message(message_input('@任意名字 报名','mentions',[{'start':0,'end':5,'kind':'bot'}]),'内部登记名').text,'报名')
-        self.assertEqual(normalize_message('@一组助理 报名，内部登记名','内部登记名',('一组助理',)).text,'报名，内部登记名')
+        self.assertEqual(normalize_message('@一组助理 报名，内部登记名','内部登记名').text,'报名，内部登记名')
 
-    def test_alias_validation_and_longest_name(self):
+    def test_alias_property_is_removed_and_structured_names_need_no_configuration(self):
         for aliases in ('name',['@bad'],['bad\nname'],['x'*81],['<at>']):
             with self.assertRaises(ValueError):self.platform.update(self.admin,self.member.id,{'aliases':aliases})
-        text=normalize_message('@A B 报名','A',('A B',)).text
+        self.assertNotIn('aliases',self.platform.visible_bot(self.platform.bot(self.member.id),self.admin))
+        text=normalize_message(message_input('@A B 报名','mentions',[{'start':0,'end':4,'kind':'bot'}]),'A').text
         self.assertEqual(text,'报名')
 
     def test_feedback_configuration_is_independent_from_commands_and_roles(self):

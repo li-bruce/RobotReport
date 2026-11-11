@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 · 2026-11-11
+
+- Expand robot settings within the robot row, with section navigation, a configuration area and shared footer actions; adapt the drawer to mobile screens.
+- Place feedback notification categories inside business functions and show the group directory beside its connection graph.
+- Remove the alias setting. Authenticated bot identity stays independent of displayed names; mention metadata preserves command boundaries and the current reply label.
+- Refresh the administrator guide and screenshots. Add previewed, transaction-based offline membership maintenance with backup verification and an audit record.
 
 ## v1.0 · 2026-11-10
 
