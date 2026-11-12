@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 · 2026-11-12 · Reserve policy and batch membership periods
+
+- Configure same-day external reserve promotion per robot, using the booking origin rather than the querying robot. Preserve admitted seats and historical rosters.
+- Add batch validity-period entry with member selection, a conflict preview and atomic confirmation. Changed records require a new preview; existing renewal history stays intact.
+- Update robot settings, member administration and usage instructions for desktop and mobile.
+
 ## v1.0 · 2026-11-12 · Enrollment and daily queues
 
 - Include populated rosters in scheduled opening and closing reminders; place registration totals and free formal seats after the table image.

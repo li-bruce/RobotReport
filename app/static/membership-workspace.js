@@ -28,3 +28,33 @@ async function memberMembershipDialog(userId){
   bindForm('membership-period-form',async(data,form,context)=>{const startDate=data.get('start_date'),endDate=data.get('end_date');if(!membershipDay(startDate)||!membershipDay(endDate))throw new Error('请填写有效的开始日期和结束日期。');if(endDate<startDate)throw new Error('结束日期不能早于开始日期。');const amount=data.get('amount')?.trim();await api(`/api/members/${encodeURIComponent(userId)}/membership/periods`,{method:'POST',body:{start_date:startDate,end_date:endDate,...(amount?{amount}:{}),note:data.get('note').trim()}});if(context===state.epoch){toast('有效期已保存。');await renderRoute();await memberMembershipDialog(userId);}});
 }
 function membershipVoidDialog(userId,period,name){if(!period||period.status!=='valid')return;openModal('作废有效期记录',`<form id="membership-void-form"><p class="member-review-name">${e(name)}</p><p class="notice warning">${e(membershipDates(period))}<br>作废后此段不再用于报名资格判断，原记录仍保留。</p>${textfield('作废原因','note','','required maxlength="500"')}${formFooter('确认作废')}</form>`);bindForm('membership-void-form',async(data,form,epoch)=>{await api(`/api/members/${encodeURIComponent(userId)}/membership/periods/${encodeURIComponent(period.id)}/void`,{method:'POST',body:{expected_version:period.version,note:data.get('note').trim()}});if(epoch===state.epoch){toast('该段有效期已作废。');await renderRoute();await memberMembershipDialog(userId);}});}
+
+function membershipBatchDialog(){
+  const members=(state.page.members||[]).filter(m=>['approved','suspended'].includes(m.status));
+  const groups=state.page.memberGroups||[],selected=new Set();let preview=null,request=0;
+  const modal=openModal('批量设置有效期',`<form id="membership-batch-form"><div class="membership-batch-filters">${field('查找会员','batch_search','','search','placeholder="姓名"')}${selectfield('组别','batch_group',[['','全部组别'],...groups.map(g=>[g.id,g.name])],'')}${selectfield('会籍状态','batch_status',[['','全部状态'],...Object.entries(membershipStates).map(([key,[label]])=>[key,label])],'')}</div><div class="membership-batch-selection"><label class="check-label"><input type="checkbox" data-batch-all>全选当前结果</label><span data-batch-count role="status">已选 0 人</span></div><div class="membership-batch-members" data-batch-members></div><div class="form-grid">${field('开始日期','start_date',today(),'date','required')}${field('结束日期','end_date','','date','required')}</div><div class="membership-year-action"><button type="button" class="btn small" data-batch-year>填写一年</button></div><div class="form-grid">${field('每人金额（元，选填）','amount','','number','min="0" max="9999999.99" step="0.01"')}${field('备注（选填）','note','','text','maxlength="500"')}</div><div data-batch-preview aria-live="polite"></div>${formFooter('预览有效期')}</form>`,true);
+  const form=$('#membership-batch-form',modal),list=$('[data-batch-members]',form),all=$('[data-batch-all]',form),submit=$('button[type=submit]',form);
+  function visible(){return members.filter(m=>(!form.elements.batch_search.value||memberName(m).toLowerCase().includes(form.elements.batch_search.value.trim().toLowerCase()))&&(!form.elements.batch_group.value||(m.group_ids||[]).map(String).includes(form.elements.batch_group.value))&&(!form.elements.batch_status.value||membershipSummary(m).status===form.elements.batch_status.value));}
+  function invalidate(){preview=null;request++;$('[data-batch-preview]',form).innerHTML='';submit.textContent=submit.dataset.idleLabel='预览有效期';}
+  function count(){const rows=visible();all.checked=!!rows.length&&rows.every(m=>selected.has(m.user_id));all.indeterminate=!all.checked&&rows.some(m=>selected.has(m.user_id));all.disabled=!rows.length;$('[data-batch-count]',form).textContent=`已选 ${selected.size} 人`;}
+  function paint(){const rows=visible();list.innerHTML=rows.length?rows.map(m=>`<label class="membership-batch-person"><input type="checkbox" data-batch-member="${attr(m.user_id)}"${selected.has(m.user_id)?' checked':''}><span><strong>${e(memberName(m))}</strong>${membershipCell(m)}</span></label>`).join(''):'<p class="caption">暂无符合条件的已审核会员。</p>';$$('[data-batch-member]',list).forEach(box=>box.onchange=()=>{if(box.checked)selected.add(box.dataset.batchMember);else selected.delete(box.dataset.batchMember);invalidate();count();});count();}
+  ['batch_search','batch_group','batch_status'].forEach(key=>form.elements[key].oninput=paint);
+  all.onchange=()=>{visible().forEach(m=>all.checked?selected.add(m.user_id):selected.delete(m.user_id));invalidate();paint();};
+  ['start_date','end_date','amount','note'].forEach(key=>form.elements[key].oninput=invalidate);
+  $('[data-batch-year]',form).onclick=()=>{form.elements.end_date.value=membershipYearEnd(form.elements.start_date.value);invalidate();};
+  paint();
+  bindForm('membership-batch-form',async(data,_form,epoch)=>{
+    if(selected.size<1||selected.size>200)throw new Error('请勾选1至200位会员。');
+    const payload={user_ids:[...selected],period:{start_date:data.get('start_date'),end_date:data.get('end_date'),amount:data.get('amount').trim()||null,note:data.get('note').trim()}};
+    if(preview?.can_apply){
+      try{const result=await api('/api/membership/periods/batch',{method:'POST',body:{...payload,expected_revision:preview.revision}});if(epoch===state.epoch){closeModal();toast(`已为 ${result.count} 位会员保存有效期。`);await renderRoute();}}
+      catch(error){invalidate();throw error;}
+      return;
+    }
+    const turn=++request,result=await api('/api/membership/periods/batch-preview',{method:'POST',body:payload});
+    if(turn!==request||epoch!==state.epoch||!form.isConnected)return;
+    preview=result;
+    $('[data-batch-preview]',form).innerHTML=`<section class="membership-batch-review"><h3>核对 ${result.rows.length} 位会员 · ${e(membershipDates(result.period))}</h3><div class="table-wrap"><table><thead><tr><th>姓名</th><th>已有有效期至</th><th>处理结果</th></tr></thead><tbody>${result.rows.map(row=>`<tr><td>${e(row.name)}</td><td>${e(row.last_end_date||'未登记')}</td><td><span class="badge ${row.error?'red':'green'}">${e(row.error||'可登记')}</span></td></tr>`).join('')}</tbody></table></div>${result.can_apply?'':'<p class="notice warning">请调整冲突人员或日期后重新预览，本次尚未保存。</p>'}</section>`;
+    submit.textContent=submit.dataset.idleLabel=result.can_apply?'确认保存有效期':'重新预览';
+  });
+}

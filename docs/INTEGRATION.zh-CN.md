@@ -170,3 +170,9 @@ AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有
 首次设置密码：`POST /member/account/request` 获取确认指令 → 同一用户在真实群回调确认 → `GET /member/account/status` → `POST /member/account` 保存登录名及密码。之后 `POST /member/login` 支持登录名或唯一登记手机号。密码散列保存，失败限流；密码登录会话可通过 `POST /member/bot` 切换符合本人条件的机器人。每次操作重检会员、机器人范围与用户条件、会籍和活动报名规则。
 
 机器人新增/修改支持 `notification_types`。通知配置为 null 时继承旧业务开关规则，显式列表则按类型独立启用。目录见 `/api/bot-capabilities` 的 notifications；announcement 固定开启。消息中心向全部有效连接群各发一次。后台名称与群内名称独立，不提供 aliases 属性。机器人及群身份仅由回调凭据和通道绑定确认。
+
+### 范围外递补与批量会籍
+
+机器人创建、更新接口支持布尔字段 `external_auto_promote`，默认 true；当前天按报名来源机器人的设置递补，关闭后未递补人员保留替补，已取得的正式席位保留。
+
+有效期批量预览：`POST /api/membership/periods/batch-preview`，提交 `user_ids`（1至200位不重复会员）及 `period`（`start_date`、`end_date`，可选每人金额字符串 `amount` 和备注 `note`）。确认：`POST /api/membership/periods/batch`，提交相同参数及预览返回的 `revision`，字段名为 `expected_revision`。需要会员管理权限；未审核、日期重叠或预览后记录变化时拒绝，整批事务保存，不替代注册审核，不覆盖已有续费记录。

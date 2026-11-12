@@ -103,6 +103,10 @@ def initialize(path):
     with connect(path, True) as db:
         if 'substitute_only' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
             db.execute('ALTER TABLE registrations ADD COLUMN substitute_only INTEGER NOT NULL DEFAULT 0')
+        if 'source_bot_id' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
+            db.execute("ALTER TABLE registrations ADD COLUMN source_bot_id TEXT NOT NULL DEFAULT ''")
+            from .registration_queue import backfill_source_bots
+            backfill_source_bots(db)
         if 'formal_admitted_at' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
             db.execute("ALTER TABLE registrations ADD COLUMN formal_admitted_at TEXT NOT NULL DEFAULT ''")
         if 'attributes' not in {r['name'] for r in db.execute('PRAGMA table_info(venues)')}:

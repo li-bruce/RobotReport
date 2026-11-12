@@ -446,7 +446,7 @@ class Service:
             row['can_enroll'] = bool(venue['active']) and row['can_manage'] and not row['occupancies']
             row['status'] = 'ended' if session_time(row,'end') <= self.clock() else ('ongoing' if session_time(row,'start') <= self.clock() else 'upcoming')
             from .registration_queue import promote_today
-            promote_today(db, row, self.ctx.scope_id, self.clock())
+            promote_today(db, row, self.ctx.scope_id, self.clock(), self.ctx.platform_root)
             entries = db.execute('SELECT id,queue_seq,status,substitute_only,formal_admitted_at FROM registrations WHERE session_id=? AND chat_id=?', (row['id'],self.ctx.scope_id)).fetchall()
             row.update(queue_counts(entries,row))
         ctx = self.ctx
@@ -462,7 +462,7 @@ class Service:
         at = self.clock()
         with connect(self.path, True) as db:
             for session in db.execute('SELECT * FROM sessions WHERE date=? AND end>?', (at.date().isoformat(), at.strftime('%H:%M'))).fetchall():
-                promote_today(db, dict(session), self.ctx.scope_id, at)
+                promote_today(db, dict(session), self.ctx.scope_id, at, self.ctx.platform_root)
 
     def save_session_constraints(self, session_id, rules):
         self.require_admin('activity.manage')
@@ -629,7 +629,7 @@ class Service:
             if session_time(session, 'end') <= self.clock():
                 raise ValueError('该场次已经结束')
             from .registration_queue import promote_today
-            promote_today(db, session, self.ctx.scope_id, self.clock())
+            promote_today(db, session, self.ctx.scope_id, self.clock(), self.ctx.platform_root)
             seq = db.execute('SELECT COALESCE(MAX(queue_seq),0) FROM registrations WHERE session_id=?', (session['id'],)).fetchone()[0]
             changed = False
             if own and own['status'] == 'active':
@@ -639,15 +639,15 @@ class Service:
             else:
                 seq += 1
                 if own:
-                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=?,substitute_only=?,formal_admitted_at='' WHERE id=?", (name, seq, timestamp, int(substitute_only), own['id']))
+                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=?,substitute_only=?,formal_admitted_at='',source_bot_id=? WHERE id=?", (name, seq, timestamp, int(substitute_only), self.ctx.id, own['id']))
                 else:
-                    db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,0,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, name, '', seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
+                    db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only,source_bot_id) VALUES(?,?,?,?,0,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, name, '', seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only),self.ctx.id))
                 changed = True
             for guest, guest_name, display in additions:
                 seq += 1
-                db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, display, guest, guest_name, seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
+                db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only,source_bot_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, display, guest, guest_name, seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only),self.ctx.id))
                 changed = True
-            promote_today(db, session, self.ctx.scope_id, self.clock())
+            promote_today(db, session, self.ctx.scope_id, self.clock(), self.ctx.platform_root)
             if changed:
                 audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id, 'bot_id':self.ctx.id, 'substitute_only':substitute_only})
             finish(db,self.ctx,request_id,receipt,self.clock())

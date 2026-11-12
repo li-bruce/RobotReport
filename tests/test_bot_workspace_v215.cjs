@@ -39,7 +39,7 @@ run("api=async(path,options={})=>{sent.push({path,...options});if(path==='/api/b
   run("bots[0].capabilities=['registration']");
   await run("editBotScope('student')");assert.doesNotMatch(ctx.modal,/value="daily_events" checked/);assert.match(ctx.modal,/value="registration" checked/);
   ctx.data={name:'学生机器人',active:'on',capabilities:[],venue_mode:'selected',scope_venue_ids:['1'],slot_mode:'all'};
-  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:['messages'],notification_types:[],capability_rules:[],venue_ids:[1],slot_keys:null,allow_external_substitute:false,external_slot_keys:[],user_policy:{enabled:false,match:'all',rules:[]}});
+  await run("forms['bot-form'](new FormData(data),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'学生机器人',active:true,capabilities:['messages'],notification_types:[],capability_rules:[],venue_ids:[1],slot_keys:null,allow_external_substitute:false,external_auto_promote:false,external_slot_keys:[],user_policy:{enabled:false,match:'all',rules:[]}});
   await run('editGroup(null)');assert.doesNotMatch(ctx.modal,/name="chat_id"|Robot Key/);await run("forms['group-form'](new FormData({name:'新建群'}),{},3)");assert.deepEqual(plain(ctx.sent.at(-1).body),{name:'新建群'});
   const form=node('#channel-form');form.elements={group_id:{value:'group-a'},webhook_url:{value:''}};
   await run("editChannelScope('student','student-channel')");for(const name of ['group_id','callback_url','webhook_url'])assert.match(ctx.modal,new RegExp('name="'+name+'"'));

@@ -21,12 +21,47 @@ def queue_counts(rows, session):
             for key, label in [('formal_count','正式'), ('substitute_count','替补'), ('waitlist_count','候补')]}
 
 
-def promote_today(db, session, scope_id, at):
+def backfill_source_bots(db):
+    """Recover only unambiguous booking origins; never guess across robots."""
+    import json
+    from collections import defaultdict
+    events = defaultdict(list)
+    for row in db.execute("SELECT detail,created_at FROM audit WHERE action='registration.enroll'"):
+        try:
+            detail = json.loads(row['detail'])
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(detail, dict) or not detail.get('substitute_only') or not detail.get('bot_id'):
+            continue
+        key = (detail.get('chat_id'), detail.get('session_id'), detail.get('user_id'))
+        events[key].append((row['created_at'], detail['bot_id']))
+    for row in db.execute('SELECT * FROM registrations WHERE substitute_only=1'):
+        matches = events[(row['chat_id'], row['session_id'], row['user_id'])]
+        exact = {bot for at, bot in matches if at in (row['created_at'], row['updated_at'])}
+        candidates = exact or {bot for _, bot in matches}
+        if len(candidates) == 1:
+            db.execute('UPDATE registrations SET source_bot_id=? WHERE id=?', (candidates.pop(), row['id']))
+
+
+def promotion_policies(platform_root):
+    """Existing bookings follow their originating robot, regardless of the reader."""
+    from .db import connect
+    if not platform_root:
+        return {}
+    registry = platform_root / 'registry.sqlite3'
+    if not registry.exists():
+        return {}
+    with connect(registry) as db:
+        return {row['id']: bool(row['external_auto_promote']) for row in db.execute(
+            "SELECT id,external_auto_promote FROM bots WHERE deleted_at=''")}
+
+
+def promote_today(db, session, scope_id, at, platform_root=None):
     """Admit the oldest reserve into today's vacancies in the caller's transaction.
 
     Keep the booking's external origin and completed-day history unchanged.
     Existing formal reservations have priority when the day's queue starts.
-    After that point, a new primary booking cannot jump an older reserve.
+    After that point, a new primary booking cannot jump an older eligible reserve.
     """
     from datetime import datetime
     from .db import TZ, audit, stamp
@@ -50,7 +85,9 @@ def promote_today(db, session, scope_id, at):
         db.execute("UPDATE registrations SET formal_admitted_at='' WHERE id=?", (row['id'],))
         row['formal_admitted_at'] = ''
     vacancies = max(0, session['capacity'] - min(len(admitted), session['capacity']))
-    promoted = [row for row in rows if not row['formal_admitted_at']][:vacancies]
+    policies = promotion_policies(platform_root)
+    promoted = [row for row in rows if not row['formal_admitted_at']
+                and (not row['substitute_only'] or policies.get(row.get('source_bot_id'), False))][:vacancies]
     for row in promoted:
         db.execute('UPDATE registrations SET formal_admitted_at=? WHERE id=?', (timestamp, row['id']))
     if promoted:

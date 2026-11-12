@@ -12,7 +12,7 @@ assert.match(html,/范围外替补报名/);assert.match(html,/必选场次/);ass
 assert.ok(!html.includes('<script>'));
 ctx.data={get:key=>({allow_external_substitute:'on',venue_mode:'selected',slot_mode:'selected'})[key]??null,
   getAll:key=>({external_slot_keys:['slot:2'],scope_venue_ids:['1'],slot_keys:['slot:1']})[key]||[]};
-assert.deepEqual(JSON.parse(JSON.stringify(run('scopeBody(data,true)'))),{venue_ids:[1],slot_keys:['slot:1'],allow_external_substitute:true,external_slot_keys:['slot:2']});
+assert.deepEqual(JSON.parse(JSON.stringify(run('scopeBody(data,true)'))),{venue_ids:[1],slot_keys:['slot:1'],allow_external_substitute:true,external_auto_promote:false,external_slot_keys:['slot:2']});
 ctx.data={get:key=>key==='allow_external_substitute'?'on':null,getAll:()=>[]};
 assert.throws(()=>run('scopeBody(data,true)'),/至少选择/);
 const label=()=>({hidden:false});
@@ -27,3 +27,6 @@ run('refreshExternalScope(form)');assert.equal(first.disabled,true);assert.equal
 second.checked=false;run('refreshExternalScope(form)');assert.match(toggle.validation,/至少选择/);
 toggle.checked=false;run('refreshExternalScope(form)');assert.equal(toggle.validation,'');assert.equal(panel.hidden,true);assert.equal(second.disabled,true);
 console.log('External scope UI: explicit selection, validation, exclusion, escaping and toggle state passed.');
+
+ctx.settings.external_auto_promote=false;assert.doesNotMatch(run('externalScopeControls(settings,slots)'),/name="external_auto_promote" checked/);
+ctx.settings.external_auto_promote=true;assert.match(run('externalScopeControls(settings,slots)'),/name="external_auto_promote" checked/);

@@ -186,7 +186,7 @@ def scoped_help(ctx, member, category=None, clock=None):
             value+='\n\n**还可报名替补**\n'+'\n'.join(labels[:8])
             if len(labels)>8:value+=f'\n另有 {len(labels)-8} 个可选时段。'
             value+='\n例如 '+example(ctx,f"场地{s['venue_id']} 明天 {s['start']} 报名")+'；相同场次可发送 '+command('名单')+'、'+command('取消报名')+'。'
-            value+='\n活动当天正式有空位时，按报名顺序递补。'
+            value+=('\n活动当天正式有空位时，按报名顺序递补。' if ctx.external_auto_promote else '\n以上场次保持替补席位。')
     if category or not set(ctx.capabilities or ()) & {'enrollment','daily_events','large_events','match_records'}:return value
     venues=[v for v in service.venues() if v['active']]
     lines=[]

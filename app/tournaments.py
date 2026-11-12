@@ -236,7 +236,7 @@ class Tournaments:
         self.service.assert_session_scope(session)
         formal, substitutes = [], []
         from .registration_queue import promote_today
-        promote_today(db, session, self.scope_id, self.clock())
+        promote_today(db, session, self.scope_id, self.clock(), self.ctx.platform_root)
         rows = db.execute("SELECT * FROM registrations WHERE session_id=? AND chat_id=? AND status='active' ORDER BY queue_seq,id",
                           (session['id'], self.scope_id)).fetchall()
         from .registration_queue import ranked_entries

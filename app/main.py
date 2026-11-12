@@ -344,6 +344,16 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
         return {'summary': terms.summary(user_id), 'periods': terms.list(user_id),
                 'applications': terms.application_history(user_id)}
 
+    @app.post('/api/membership/periods/batch-preview')
+    def membership_batch_preview(data: dict, ctx=Depends(context)):
+        from .membership_batch import MembershipBatch
+        return MembershipBatch(ctx, clock).preview(data)
+
+    @app.post('/api/membership/periods/batch')
+    def membership_batch_apply(data: dict, ctx=Depends(context)):
+        from .membership_batch import MembershipBatch
+        return MembershipBatch(ctx, clock).apply(data)
+
     @app.post('/api/members/{user_id}/membership/periods')
     def membership_create_period(user_id: str, data: dict, ctx=Depends(context)):
         svc(ctx).require_admin()

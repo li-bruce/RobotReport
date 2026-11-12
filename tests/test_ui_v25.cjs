@@ -16,8 +16,8 @@ for(const [category,label] of [['mens','男双'],['womens','女双'],['mixed','�
 assert.equal(run("disciplineName('singles','mixed')"),'单打');
 const scopes=run("scopeControls({venue_ids:[1],slot_keys:['slot:9']},[{slot_key:'slot:9',venue_name:'主场地',name:'晚场',start:'17:30',end:'20:30',weekdays:[0]}],{bot:true})");
 assert.match(scopes,/value="1" checked/);assert.match(scopes,/value="slot:9" checked/);assert.match(scopes,/17:30/);assert.ok(!scopes.includes('<img src=x>'));
-assert.deepEqual(plain(run("scopeBody(new FormData({venue_mode:'selected',slot_mode:'selected'}),true)")),{venue_ids:[],slot_keys:[],allow_external_substitute:false,external_slot_keys:[]});
-assert.deepEqual(plain(run("scopeBody(new FormData({venue_mode:'all',slot_mode:'all',scope_venue_ids:['1'],slot_keys:['slot:9']}),true)")),{venue_ids:null,slot_keys:null,allow_external_substitute:false,external_slot_keys:[]});
+assert.deepEqual(plain(run("scopeBody(new FormData({venue_mode:'selected',slot_mode:'selected'}),true)")),{venue_ids:[],slot_keys:[],allow_external_substitute:false,external_auto_promote:false,external_slot_keys:[]});
+assert.deepEqual(plain(run("scopeBody(new FormData({venue_mode:'all',slot_mode:'all',scope_venue_ids:['1'],slot_keys:['slot:9']}),true)")),{venue_ids:null,slot_keys:null,allow_external_substitute:false,external_auto_promote:false,external_slot_keys:[]});
 assert.deepEqual(plain(run("scopeBody(new FormData({slot_mode:'selected',slot_keys:['slot:9']}))")),{slot_keys:['slot:9']});
 const preview=run("importPreviewTable({rows:[{line:2,name:'张三',gender:'female',phone_masked:'138****0001',status:'create',warning:'性别待补齐',level:9,groups:[]}]})");
 assert.match(preview,/<th>性别<\/th>/);assert.match(preview,/>女<\/td>/);assert.match(preview,/性别待补齐/);
