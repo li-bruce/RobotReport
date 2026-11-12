@@ -56,3 +56,27 @@ function feedbackFeature(bot){
   const selected=bot.notification_types,enabled=selected==null||selected.length>0;
   return `<details class="robot-feedback-feature"><summary><span><strong>反馈通知</strong><small>系统与活动通知</small></span><span class="feedback-summary">${enabled?'已配置':'仅公告'}<span aria-hidden="true">⌄</span></span></summary><div class="feedback-subpermissions">${feedbackControls(bot)}</div></details>`;
 }
+
+// Creation uses the same settings controls, with one form and one save action.
+const botCreateSections=[['feedback','反馈通知'],['scope','场地与场次'],['policy','用户使用条件'],['hours','功能开放时间']];
+function botCreateMarkup(bot,slots){
+  const enabled=new Set(botCapabilities(bot));
+  const panels={feedback:feedbackControls(bot),scope:scopeControls(bot,slots,{bot:true}),policy:botPolicyFields(bot.user_policy),hours:'<div id="bot-time-rules"></div>'};
+  return `<form id="bot-form" class="bot-create-form"><div class="bot-create-basics">${field('机器人名称','name',bot.name||'','text','required maxlength="80"')}<fieldset class="robot-capability-field"><legend>业务组合</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong></span></label>`).join('')}</div></fieldset>${bot.id?`<label class="check-label"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label>`:''}</div><div class="bot-drawer-layout bot-create-layout"><nav class="bot-drawer-nav" aria-label="新建机器人设置分类">${botCreateSections.map(([id,label])=>`<button type="button" id="bot-create-tab-${id}" data-create-section="${id}" aria-controls="bot-create-panel-${id}">${label}<span aria-hidden="true">›</span></button>`).join('')}</nav><label class="bot-drawer-mobile-nav">设置分类<select data-create-mobile>${botCreateSections.map(([id,label])=>`<option value="${id}">${label}</option>`).join('')}</select></label><div class="bot-drawer-content">${botCreateSections.map(([id,label])=>`<section id="bot-create-panel-${id}" class="bot-setting-panel" data-create-pane="${id}" aria-labelledby="bot-create-title-${id}"${id==='feedback'?'':' hidden'}><header><h3 id="bot-create-title-${id}">${label}</h3></header><div class="bot-setting-body">${panels[id]}</div></section>`).join('')}</div></div><footer class="bot-drawer-footer bot-create-footer"><div class="inline-error" role="alert"></div><div class="drawer-footer-actions">${btn('取消','modal-close','ghost')}<button type="submit" class="btn primary">${bot.id?'保存设置':'创建机器人'}</button></div></footer></form>`;
+}
+function bindBotCreatePanels(form){
+  const select=id=>{
+    if(!botCreateSections.some(([key])=>key===id))id='feedback';
+    form.querySelectorAll('[data-create-section]').forEach(button=>{const active=button.dataset.createSection===id;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
+    form.querySelector('[data-create-mobile]').value=id;
+    form.querySelectorAll('[data-create-pane]').forEach(panel=>panel.hidden=panel.dataset.createPane!==id);
+    form.querySelector('.bot-drawer-content').scrollTop=0;
+  };
+  form.querySelectorAll('[data-create-section]').forEach(button=>button.addEventListener('click',()=>select(button.dataset.createSection)));
+  form.querySelector('[data-create-mobile]').addEventListener('change',event=>select(event.target.value));
+  form.addEventListener('invalid',event=>{
+    const pane=event.target.closest('[data-create-pane]');if(pane)select(pane.dataset.createPane);
+    let parent=event.target.parentElement;while(parent&&parent!==form){if(parent.tagName==='DETAILS')parent.open=true;parent=parent.parentElement;}
+  },true);
+  select('feedback');
+}

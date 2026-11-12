@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 · 2026-11-12 · Unified robot creation settings
+
+- Keep name and business modules at the top of the creation form; switch notifications, venue/session scope, user conditions and opening hours in the shared settings layout.
+- Preserve values between panels, reveal invalid fields before submitting, and provide the same controls on mobile.
+- Update the illustrated administrator guide.
+
 ## v1.0 · 2026-11-12 · Pre-activity admission and personal profiles
 
 - Keep external registrations in reserve until the source robot’s configurable pre-start cutoff (30 minutes by default), independently of announcements. Preserve admitted seats and history.

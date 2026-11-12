@@ -10,3 +10,46 @@
 @media(max-width:800px){.group-relations-layout{grid-template-columns:190px minmax(0,1fr);gap:12px}.group-relations-layout .group-directory-card{padding:12px}.bot-drawer{margin:8px}.bot-drawer-content{padding:20px}.robot-feedback-feature>summary small{display:none}}
 @media(max-width:700px){.bot-drawer-layout{max-height:75dvh}.bot-drawer-heading{padding:12px 14px}.bot-drawer-heading h2{font-size:16px}.bot-drawer-content{padding:18px 12px}.bot-drawer-footer{padding:10px 12px}.feedback-subpermissions{padding:12px}}
 @media(max-width:600px){.group-relations-layout{grid-template-columns:minmax(0,1fr)}.group-relations-layout .group-directory{display:flex;flex-wrap:wrap}.group-directory-heading{width:100%;padding:12px}.group-relations-layout .group-directory-card{flex:1 1 150px;min-width:0;border-right:1px solid #edf0ee}}
+
+/* New robots: essentials above, the same split settings surface below. */
+#modal:has(.bot-create-form){width:1040px}
+#modal:has(.bot-create-form)>.modal-body{padding:0}
+.bot-create-form{margin:0;min-width:0}
+.bot-create-basics{padding:20px 24px;background:#fff}
+.bot-create-basics>.field{margin-bottom:18px;max-width:520px}
+.bot-create-basics .robot-capability-field{margin:0}
+.bot-create-basics .robot-capability-field>legend{font-size:13px;margin-bottom:10px}
+.bot-create-basics .robot-capabilities{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.bot-create-basics .robot-capability{min-height:44px;padding:10px 12px;align-items:center;border-radius:8px}
+.bot-create-basics .robot-capability input{margin:0}
+.bot-create-basics .robot-capability strong{font-size:13px;font-weight:550}
+.bot-create-basics>.check-label{margin-top:14px}
+.bot-create-layout{height:clamp(240px,43dvh,430px);min-height:240px;max-height:none;border-top:1px solid #e1e6e3;border-bottom:1px solid #e1e6e3;grid-template-columns:166px minmax(0,1fr)}
+.bot-create-layout .bot-drawer-content{background:#fff;padding:24px}
+.bot-create-layout .bot-setting-body .robot-rule-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bot-create-layout .bot-setting-body .scope-slot-options{max-height:none}
+.bot-create-layout .feedback-permissions section{margin-bottom:20px}
+.bot-create-layout .feedback-options{gap:8px}
+.bot-create-layout .robot-user-body{gap:14px}
+.bot-create-layout .robot-user-body>.caption{margin:0}
+.bot-create-layout .robot-user-body>[data-rule-add]{justify-self:start}
+.bot-create-layout .robot-rule-controls>label{font-size:12px;color:var(--muted)}
+.bot-create-layout .robot-rule-controls .control{color:var(--ink);font-family:inherit;font-size:14px;min-height:44px}
+.bot-create-form [hidden]{display:none!important}
+.bot-create-footer{position:sticky;bottom:0;z-index:2;padding:14px 24px;border-top:0;background:#fbfcfb}
+.bot-create-footer>.inline-error{margin:0;min-height:0;max-width:620px}
+.bot-create-footer>.inline-error:empty{display:none}
+.bot-create-footer .drawer-footer-actions{width:auto}
+@media(max-width:700px){
+  .bot-create-basics{padding:16px}
+  .bot-create-basics>.field{max-width:none;margin-bottom:14px}
+  .bot-create-basics .robot-capabilities{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .bot-create-basics .robot-capability{padding:9px 10px;min-height:44px}
+  .bot-create-basics .robot-capability strong{font-size:12px}
+  .bot-create-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:clamp(250px,39dvh,360px);min-height:250px}
+  .bot-create-layout .bot-drawer-content{padding:20px 16px}
+  .bot-create-layout .bot-setting-body .robot-rule-controls{grid-template-columns:minmax(0,1fr)}
+  .bot-create-layout .robot-rule-controls .control{font-size:16px}
+  .bot-create-footer{padding:12px 16px max(12px,env(safe-area-inset-bottom))}
+  .bot-create-footer>.inline-error{width:100%}
+}

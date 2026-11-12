@@ -30,7 +30,7 @@ function uniqueBotFields(html,id){return html.replace(/\b(id|for)="f-([^"]+)"/g,
 function inlineBotForm(bot,slots){
   const enabled=new Set(botCapabilities(bot));
   const basics=field('机器人名称','name',bot.name,'text','required maxlength="80"')+`<label class="check-label"><input type="checkbox" name="active"${isActive(bot.active)?' checked':''}>启用机器人</label><fieldset class="robot-capability-field"><legend>业务功能</legend><div class="robot-capabilities">${botCapabilityCatalog().map(c=>`<label class="robot-capability"><input type="checkbox" name="capabilities" value="${attr(c.id)}"${enabled.has(c.id)?' checked':''}><span><strong>${e(c.name)}</strong></span></label>`).join('')}${feedbackFeature(bot)}</div></fieldset>`;
-  let policy=botPolicyForm(bot.user_policy).replace(/<details[^>]*><summary>.*?<\/summary>/,'').replace(/<\/details>$/,'');
+  const policy=botPolicyFields(bot.user_policy);
   return uniqueBotFields(`<form id="robot-form-${attr(bot.id)}" class="bot-inline-form"><div class="bot-settings-grid">${settingsPanel('名称与功能','',basics)}${settingsPanel('服务范围','',scopeControls(bot,slots,{bot:true}))}${settingsPanel('用户条件','',policy)}${settingsPanel('功能开放时间','设置日期与时间范围。','<div data-bot-time-rules></div>')}</div><div class="bot-inline-save"><span data-save-status role="status"></span><div class="inline-error" role="alert"></div><button type="submit" class="btn primary">保存机器人设置</button></div></form>`,bot.id);
 }
 function markBotDirty(form){
