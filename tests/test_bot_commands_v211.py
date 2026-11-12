@@ -103,7 +103,7 @@ class BotCommandsV211Tests(CoreFixture):
                 self.send(text)
         self.capabilities(['large_events'])
         self.assertIn('已更新', self.send('周末友谊杯报名'))
-        with self.assertRaisesRegex(PermissionError, '活动报名'):
+        with self.assertRaisesRegex(PermissionError, '@二号'):
             self.send('报名')
 
     def test_hidden_large_event_with_same_title_does_not_block_daily_lookup(self):

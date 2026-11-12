@@ -126,6 +126,9 @@ def test_scheduled_lists_use_one_footer_and_preserve_delivery_deduplication(bot,
     messages = Outbox(ctx).list()
     assert len(messages) == 1
     text = messages[0]['text']
+    assert text.count('小林') == populated
+    assert text.count('已报名 **1 人**') == populated
+    assert text.count('暂时无人报名') == 2 - populated
     assert '第1场' in text and '第2场' in text and '**20:30–22:00**' in text
     if kind == 'roster' and populated == 2:
         assert '@喂-大型赛事' not in text

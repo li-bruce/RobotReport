@@ -892,7 +892,7 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
                 return {'result': 'ok'}
         try:
             message = body['_message'] if generic else message_input(content, body.get('text_format', 'legacy'), body.get('mentions'))
-            reply = await Commands(ctx, clock).run(message, body.get('creator_name') or body.get('display_name'), ctx.default_venue_id)
+            reply = await Commands(ctx, clock).run(message, body.get('creator_name') or body.get('display_name'))
         except (ValueError, PermissionError) as exc:
             from .dialogue import render, MembershipPrompt
             reply = str(exc) if isinstance(exc,MembershipPrompt) else render(ctx,'entry.error',reason=str(exc),name=body.get('creator_name') or body.get('display_name'))

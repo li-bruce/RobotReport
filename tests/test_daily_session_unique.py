@@ -116,6 +116,29 @@ class DailySessionUniqueTests(CoreFixture):
             manager.delete(event['id'], None)
         self.assertEqual(manager.delete(event['id'], event['version'])['status'], 'deleted')
 
+    def test_late_enrollment_keeps_draw_and_scores_until_organizer_rebuilds(self):
+        self.s.save_session_constraints(self.session['id'], {'capacity':12})
+        event=self.create()
+        self.send(0,'联合双打，第1场21:19')
+        original=self.events[0].get(event['id'])
+        self.now=self.now.replace(hour=18)
+        for index,user in enumerate(('1002','1003')):
+            reply=self.send(index,'第一场 报名',user)
+            self.assertIn('报名成功',reply)
+            self.assertIn('本场已有赛程，本次报名不加入现有比赛',reply)
+        self.assertEqual(self.events[0].get(event['id']),original)
+        with self.assertRaisesRegex(ValueError,'不在报名阶段'):
+            self.events[0].engine.enroll(event['id'],'1002','球友1002',now=self.now)
+        with self.assertRaises(PermissionError): self.send(1,'联合双打，删除比赛','1002')
+        self.send(1,'联合双打，删除比赛')
+        rebuilt=self.create(1)
+        self.assertEqual(len(rebuilt['participants']),10)
+        self.assertTrue({'1002','1003'} <= {p['user_id'] for p in rebuilt['participants']})
+        self.assertNotIn('本场已有赛程',self.send(1,'第一场 报名','1002'))
+        with connect(self.ctx.db_path) as db:
+            self.assertEqual(db.execute('SELECT status FROM tour_events WHERE id=?',(event['id'],)).fetchone()[0],'deleted')
+            self.assertGreater(db.execute('SELECT count(*) FROM tour_matches WHERE tournament_id=?',(event['id'],)).fetchone()[0],0)
+
     def test_different_sessions_and_dates_remain_independent(self):
         first = self.create()
         second = self.s.sessions()[1]

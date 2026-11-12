@@ -58,7 +58,8 @@ class AudienceTests(test_core.CoreFixture):
         self.policy(('gender','in',['female']),('level','gte',9))
         for text in ('帮助','身份','注册资料','注册','使用说明','我的权限','性别 女','自评9级'):
             with self.subTest(text=text):self.run_command(text)
-        for text in ('报名','名单','组织比赛','我的统计','AI 帮我报名','确认'):
+        with self.assertRaisesRegex(PermissionError,'@二号'): self.run_command('报名')
+        for text in ('名单','组织比赛','我的统计','AI 帮我报名','确认'):
             with self.subTest(text=text),self.assertRaisesRegex(PermissionError,'使用条件'):self.run_command(text)
         newcomer=replace(self.member,actor='brand-new')
         result=self.run_command('注册 测试新用户 女 3级',newcomer)

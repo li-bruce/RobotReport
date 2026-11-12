@@ -31,7 +31,7 @@ class TimePolicyTests(CoreFixture):
     def test_open_close_boundaries_help_and_business(self):
         self.install([self.rule()])
         self.at('2026-10-12T16:59:59')
-        with pytest.raises(PermissionError,match='当前时段'):
+        with pytest.raises(PermissionError,match='请通过以下机器人报名'):
             asyncio.run(Commands(self.member,self.clock).run('报名'))
         help_text=scoped_help(self.member,{'status':'approved'},clock=self.clock)
         assert '报名与预约' not in help_text

@@ -153,7 +153,20 @@ class MemberPortalTests(CoreFixture):
         data=self.selection()|{'session_id':rows[1]['id']}
         self.assertEqual(self.post('enrollments',data).status_code,200)
         choices=self.client.get('/member/sessions',params={'day':data['day']}).json()['sessions']
-        self.assertEqual(choices[1]['own'][0]['category'],'替补')
+        self.assertEqual(choices[1]['own'][0]['category'],'正式')
+
+    def test_ongoing_session_accepts_enrollment_but_finished_session_does_not(self):
+        self.now=self.now.replace(hour=18)
+        self.session()
+        data=self.selection()
+        response=self.post('enrollments',data)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(sum(len(s['own']) for s in response.json()['sessions']),1)
+        self.now=self.now.replace(hour=20,minute=30)
+        self.session()
+        data['request_id']='a'*32
+        response=self.post('enrollments',data)
+        self.assertEqual(response.status_code,400,response.text)
 
     def test_future_date_and_non_nearest_session_are_freely_selectable(self):
         self.session()

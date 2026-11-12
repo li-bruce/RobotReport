@@ -32,10 +32,10 @@ class ExternalSubstituteTests(CoreFixture):
 
     def enroll(self,ctx=None,user=None,**kwargs):
         service=self.service(ctx,user)
-        return service.enroll(service.ctx.actor,'ignored',number=2,**kwargs)
+        return service.enroll(service.ctx.actor,'ignored',number=2,day=kwargs.pop('day',self.target['date']),**kwargs)
 
     def active(self):
-        return [r for r in self.all.registrations(session_id=self.target['id'])['registrations'] if r['status']=='active']
+        return [r for r in self.all.registrations(day=self.target['date'],session_id=self.target['id'])['registrations'] if r['status']=='active']
 
     def test_configuration_requires_explicit_nonempty_external_selection(self):
         old=self.platform.visible_bot(self.platform.bot(self.a.id),self.admin)
@@ -60,7 +60,8 @@ class ExternalSubstituteTests(CoreFixture):
         with self.assertRaises(ValueError):self.service().resolve_session(number=2)
         self.assertEqual([r['number'] for r in self.service().registrations()['sessions']],[1])
 
-    def test_cross_entries_and_guests_never_fill_formal_vacancies(self):
+    def test_future_cross_entries_and_guests_keep_reserve_priority(self):
+        self.target=self.all.sessions('2026-10-13')[1]
         self.enroll(guests=2,guest_names=['同行甲','同行乙'])
         self.assertEqual([r['category'] for r in self.active()],['替补','替补','候补'])
         self.enroll(self.b)
@@ -69,9 +70,9 @@ class ExternalSubstituteTests(CoreFixture):
         rows=self.active()
         self.assertEqual([r['category'] for r in rows],['正式','正式','替补','替补','候补','候补'])
         self.assertEqual([r['user_id'] for r in rows[:2]],['1002','1003'])
-        self.service(self.b).cancel('1002',number=2)
+        self.service(self.b).cancel('1002',number=2,day=self.target['date'])
         self.assertEqual([r['user_id'] for r in self.active()[:2]],['1003','1004'])
-        self.service(self.b,'1003').cancel('1003',number=2)
+        self.service(self.b,'1003').cancel('1003',number=2,day=self.target['date'])
         self.assertEqual(sum(r['category']=='正式' for r in self.active()),1)
         self.assertTrue(all(r['category']!='正式' for r in self.active() if r['substitute_only']))
 
@@ -93,7 +94,7 @@ class ExternalSubstituteTests(CoreFixture):
     def test_commands_enroll_roster_and_cancel_selected_external_session(self):
         router=Commands(self.a,self.clock)
         reply=asyncio.run(router.run('第二场 报名，同行甲'))
-        self.assertIn('替补',reply)
+        self.assertIn('正式',reply)
         self.assertIn('同行甲',asyncio.run(router.run('第二场 名单')))
         self.assertNotIn('同行甲',asyncio.run(router.run('名单')))
         self.assertIn('已取消',asyncio.run(router.run('第二场 取消同行甲')))
@@ -107,7 +108,7 @@ class ExternalSubstituteTests(CoreFixture):
         self.platform.update(self.admin,self.a.id,{'venue_ids':[1],'external_slot_keys':[rules[0]['slot_key']]})
         router=Commands(self.a,self.clock)
         reply=asyncio.run(router.run(f"场地{venue['id']} 第一场 报名"))
-        self.assertIn('替补',reply)
+        self.assertIn('正式',reply)
         self.assertIn('小李',asyncio.run(router.run(f"场地{venue['id']} 第一场 名单")))
         with self.assertRaises(PermissionError):asyncio.run(router.run(f"场地{venue['id']} 第一场 组织比赛"))
         with self.assertRaises(ValueError):self.enroll()
@@ -145,9 +146,9 @@ class ExternalSubstituteTests(CoreFixture):
         from app.activity_operations import ActivityOperations
         day=ActivityOperations(self.workspace,self.clock).day(self.target['date'])
         row=next(s for v in day['venues'] for s in v['sessions'] if s['id']==self.target['id'])
-        self.assertEqual((row['formal_count'],row['substitute_count'],row['waitlist_count']),(1,2,0))
+        self.assertEqual((row['formal_count'],row['substitute_count'],row['waitlist_count']),(2,1,0))
         candidates=Tournaments(self.b,self.clock).planning_candidates(self.target['date'],1,self.target['id'])
-        self.assertEqual((len(candidates['formal']),len(candidates['substitutes'])),(1,2))
+        self.assertEqual((len(candidates['formal']),len(candidates['substitutes'])),(2,1))
         self.enroll(self.b,'1003')
         with patch('app.competitions._now',self.clock):
             event=Tournaments(self.b,self.clock).create({'kind':'daily','format':'round_robin',
@@ -199,7 +200,7 @@ class ExternalSubstituteTests(CoreFixture):
             reply=asyncio.run(Commands(self.a,self.clock).run(f"AI 今天场地{venue['id']}第一场报名，然后看名单"))
         self.assertIn('确认',reply)
         result=asyncio.run(Commands(self.a,self.clock).run('确认'))
-        self.assertIn('替补',result)
+        self.assertIn('正式',result)
         records=self.all.registrations(venue_id=venue['id'])['registrations']
         self.assertEqual(len(records),1)
         self.assertTrue(records[0]['substitute_only'])
@@ -210,4 +211,4 @@ class ExternalSubstituteTests(CoreFixture):
         self.assertEqual(weekend['registrations'][0]['category'],'替补')
         self.all.save_session_constraints(self.target['id'],{'substitute_capacity':0})
         self.enroll()
-        self.assertEqual(self.active()[0]['category'],'候补')
+        self.assertEqual(self.active()[0]['category'],'正式')

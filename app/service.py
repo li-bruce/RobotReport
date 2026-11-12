@@ -445,7 +445,9 @@ class Service:
             row['can_manage'] = session_time(row,'end') > self.clock()
             row['can_enroll'] = bool(venue['active']) and row['can_manage'] and not row['occupancies']
             row['status'] = 'ended' if session_time(row,'end') <= self.clock() else ('ongoing' if session_time(row,'start') <= self.clock() else 'upcoming')
-            entries = db.execute('SELECT id,queue_seq,status,substitute_only FROM registrations WHERE session_id=? AND chat_id=?', (row['id'],self.ctx.scope_id)).fetchall()
+            from .registration_queue import promote_today
+            promote_today(db, row, self.ctx.scope_id, self.clock())
+            entries = db.execute('SELECT id,queue_seq,status,substitute_only,formal_admitted_at FROM registrations WHERE session_id=? AND chat_id=?', (row['id'],self.ctx.scope_id)).fetchall()
             row.update(queue_counts(entries,row))
         ctx = self.ctx
         from .bot_capabilities import supports
@@ -453,6 +455,14 @@ class Service:
         def owned(row):
             return (not (ctx.venue_restricted or ctx.venue_ids) or row['venue_id'] in ctx.venue_ids) and (ctx.slot_keys is None or row['slot_key'] in ctx.slot_keys)
         return [row | {'external_substitute':not owned(row)} for row in rows if owned(row) or row['slot_key'] in external_keys]
+
+    def promote_today(self):
+        """Maintain existing current-day queues even when reminders are disabled."""
+        from .registration_queue import promote_today
+        at = self.clock()
+        with connect(self.path, True) as db:
+            for session in db.execute('SELECT * FROM sessions WHERE date=? AND end>?', (at.date().isoformat(), at.strftime('%H:%M'))).fetchall():
+                promote_today(db, dict(session), self.ctx.scope_id, at)
 
     def save_session_constraints(self, session_id, rules):
         self.require_admin('activity.manage')
@@ -618,6 +628,8 @@ class Service:
                 additions.append((index, guest_name, display))
             if session_time(session, 'end') <= self.clock():
                 raise ValueError('该场次已经结束')
+            from .registration_queue import promote_today
+            promote_today(db, session, self.ctx.scope_id, self.clock())
             seq = db.execute('SELECT COALESCE(MAX(queue_seq),0) FROM registrations WHERE session_id=?', (session['id'],)).fetchone()[0]
             changed = False
             if own and own['status'] == 'active':
@@ -627,7 +639,7 @@ class Service:
             else:
                 seq += 1
                 if own:
-                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=?,substitute_only=? WHERE id=?", (name, seq, timestamp, int(substitute_only), own['id']))
+                    db.execute("UPDATE registrations SET name=?,status='active',queue_seq=?,updated_at=?,substitute_only=?,formal_admitted_at='' WHERE id=?", (name, seq, timestamp, int(substitute_only), own['id']))
                 else:
                     db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,0,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, name, '', seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
                 changed = True
@@ -635,10 +647,21 @@ class Service:
                 seq += 1
                 db.execute('INSERT INTO registrations(session_id,chat_id,user_id,name,guest_index,guest_name,queue_seq,created_at,updated_at,session_snapshot,substitute_only) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (session['id'], self.ctx.scope_id, user_id, display, guest, guest_name, seq, timestamp, timestamp, dumps(snapshot(session)),int(substitute_only)))
                 changed = True
+            promote_today(db, session, self.ctx.scope_id, self.clock())
             if changed:
                 audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id, 'bot_id':self.ctx.id, 'substitute_only':substitute_only})
             finish(db,self.ctx,request_id,receipt,self.clock())
-        return self.registrations(session['date'], session['venue_id'], session['id'], registration=True)
+        result = self.registrations(session['date'], session['venue_id'], session['id'], registration=True)
+        with connect(self.path) as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tour_events'").fetchone():
+                event = db.execute("""SELECT e.id FROM tour_events e WHERE e.kind='daily' AND e.chat_id=?
+                    AND e.venue_id=? AND e.status<>'deleted' AND json_extract(e.options,'$.session_id')=?
+                    AND EXISTS(SELECT 1 FROM tour_matches m WHERE m.tournament_id=e.id) LIMIT 1""",
+                    (self.ctx.scope_id, session['venue_id'], session['id'])).fetchone()
+                if event:
+                    participants = {row['guest_index'] for row in db.execute("SELECT guest_index FROM tour_participants WHERE tournament_id=? AND user_id=? AND status='active'", (event['id'], user_id))}
+                    result['outside_daily_schedule'] = any(row['user_id'] == user_id and row['status'] == 'active' and row['guest_index'] not in participants for row in result['registrations'])
+        return result
 
     def cancel(self, user_id, day=None, venue_id=1, session_id=None, at=None, number=None, request_id=None):
         user_id = identifier(user_id)

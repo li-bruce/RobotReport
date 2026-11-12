@@ -180,11 +180,23 @@ def empty_session_notice(session, ctx=None):
     return render(ctx,'roster.empty_status')
 
 
-def roster(data, venue_id=1, *, ctx=None):
+def enrollment_summary(data, session, ctx=None):
+    from .dialogue import render
+    rows = [row for row in data['registrations'] if row['session_id'] == session['id'] and row['status'] == 'active']
+    vacant = max(0, session['capacity'] - sum(registration_category(row) == '正式' for row in rows))
+    return render(ctx, 'enrollment.summary', count=len(rows), vacant=vacant)
+
+
+def enrollment_schedule_note(data, ctx=None):
+    from .dialogue import render
+    return render(ctx, 'enrollment.fixed_schedule') if data.get('outside_daily_schedule') else ''
+
+
+def roster(data, venue_id=1, *, ctx=None, title='', guidance=True):
     lines, inviting = [], []
     for session in data['sessions']:
         rows = [r for r in data['registrations'] if r['session_id'] == session['id'] and r['status'] == 'active']
-        lines.append(session_heading(session, venue_id))
+        lines.append(session_heading(session, venue_id, title))
         if session.get('occupancies'):
             lines.append('🔴 **已占用 · 不可报名** '+escape(session['booking_notice']))
         if not rows:
@@ -193,15 +205,17 @@ def roster(data, venue_id=1, *, ctx=None):
                 if can_invite(session):
                     inviting.append(session)
             continue
-        lines.append(f"**{len(rows)} 人** · 正式 {session['capacity']} · 替补 {session['substitute_capacity']}")
         lines.append(registration_table(rows))
+        lines.append(enrollment_summary(data, session, ctx))
+    if data.get('outside_daily_schedule'):
+        lines.append(enrollment_schedule_note(data, ctx))
     from .dialogue import render
     if not lines:
         return render(ctx,'roster.no_sessions') if ctx else '暂无场次安排。'
-    guidance = []
-    if ctx is not None and inviting:
-        guidance.append(('enrollment:' + ctx.id, render(ctx, 'roster.empty', enroll_command=enrollment_example(ctx, inviting[0], venue_id))))
-    return ListReply('\n\n'.join(lines), guidance)
+    tips = []
+    if guidance and ctx is not None and inviting:
+        tips.append(('enrollment:' + ctx.id, render(ctx, 'roster.empty', enroll_command=enrollment_example(ctx, inviting[0], venue_id))))
+    return ListReply('\n\n'.join(lines), tips)
 
 
 def tournament_text(item, mode='schedule'):

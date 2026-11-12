@@ -16,7 +16,7 @@ class Markup(str):
 
 
 class MembershipPrompt(PermissionError):
-    """A denied operation with an already-rendered registration next step."""
+    """A denied operation with an already-rendered next step."""
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ VARIABLE_LABELS = {'greeting':'称呼','name':'姓名','person':'通知对象','
                   'event':'赛事名称','result':'处理结果','count':'人数','number':'编号','venue':'场地',
                   'date':'日期','start':'开始时间','end':'结束时间','level':'级别','gender':'性别','groups':'组别',
                   'names':'同行姓名','fields':'变更项目','field':'项目','decision':'审核结果','remaining':'保留的同行',
-                  'ai_hint':'AI入口','choices':'可选赛事','form_link':'本人表单链接'}
+                  'ai_hint':'AI入口','choices':'可选赛事','form_link':'本人表单链接','vacant':'正式空位'}
 
 
 def variable_label(key):
@@ -80,6 +80,9 @@ define('roster.ended', '结束场次无人报名', '活动报名', '暂时无人
 define('roster.unavailable', '暂不可报名', '活动报名', '暂时无人报名 · 本场暂不可报名。')
 define('roster.no_sessions', '没有场次', '活动报名', '当前没有可显示的场次安排，请换个日期查询。')
 define('enrollment.success', '报名成功', '活动报名', '{heading}\n\n已为您登记，期待见到您！\n\n{table}', image=True)
+define('enrollment.summary', '报名人数与余位', '活动报名', '已报名 **{count} 人** · 正式空位 **{vacant} 个**')
+define('enrollment.fixed_schedule', '已有赛程时报名', '活动报名', '本场已有赛程，本次报名不加入现有比赛。')
+define('enrollment.choose_bot', '推荐报名机器人', '活动报名', '{greeting}请通过以下机器人报名：\n\n{commands}')
 define('enrollment.manual', '手动报名入口', '活动报名', '**{name}**，请点击 {form_link}，选择您想参加的场次。')
 define('enrollment.login_confirmed', '确认网页登录', '活动报名', '**{name}**，身份已确认，请返回报名页面设置登录信息。')
 define('enrollment.cancelled', '取消本人报名', '活动报名', '**已取消本人报名**，下次有空再来！{remaining}')

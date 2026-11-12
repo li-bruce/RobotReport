@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from .db import now, TZ
 from .service import Service
-from .messages import Outbox, roster, escape, empty_roster, session_heading, empty_session_notice, can_invite, enrollment_example
+from .messages import Outbox, roster, empty_roster, can_invite, enrollment_example
 from .notifications import Notifications
 from .identity_notifications import IdentityNotifications
 from .scope import snapshot
@@ -30,7 +30,8 @@ class Scheduler:
         if self.last_cleanup is None or (at-self.last_cleanup).total_seconds()>=3600:
             from .table_images import cleanup
             cleanup(ctx,self.clock);self.last_cleanup=at
-        service=Service(ctx,self.clock);config=service.config()
+        service=Service(ctx,lambda:at);config=service.config()
+        service.promote_today()
         from .availability import dispatch_notices
         dispatch_notices(self.platform, self.clock)
         channels=self.platform.system_contexts()
@@ -66,15 +67,7 @@ class Scheduler:
                                 text=roster(data,venue['id'],ctx=channel)
                             else:
                                 title='报名即将结束' if kind=='closing' else '今日报名'
-                                sections=[]
-                                for item in shown:
-                                    section=session_heading(item,venue['id'],title)
-                                    if item.get('occupancies'):
-                                        section+='\n\n🔴 **已占用 · 不可报名** '+escape(item['booking_notice'])
-                                    elif not any(row['session_id']==item['id'] and row['status']=='active' for row in data['registrations']):
-                                        section+='\n\n'+empty_session_notice(dict(item,venue_id=venue['id']),channel)
-                                    sections.append(section)
-                                text='\n\n'.join(sections)
+                                text=roster(data,venue['id'],ctx=channel,title=title,guidance=False)
                                 inviting=next((item for item in shown if can_invite(item)),None)
                                 if inviting is not None:
                                     from .dialogue import render, Markup

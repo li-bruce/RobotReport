@@ -8,7 +8,7 @@ import secrets
 from .time_rules import effective_capabilities
 from .db import connect, dumps, stamp, now
 from .service import Service, day_value, time_value, clean_name
-from .messages import escape, roster, tournament_text, table, mention, registration_table, session_heading
+from .messages import escape, roster, tournament_text, table, mention, registration_table, session_heading, enrollment_summary, enrollment_schedule_note
 from .members import Members
 from .planning import DailyPlanning, STRATEGIES
 from .score_parser import parse_score
@@ -160,6 +160,21 @@ class Commands:
         return self.require_event(self.tournaments().get(found[0]['id'], venue_id))
 
     async def run(self, content, name=None, venue_id=None, allow_ai=True, expected=None):
+        try:
+            return await self._run(content, name, venue_id, allow_ai, expected)
+        except (PermissionError, ValueError) as exc:
+            if expected is not None:
+                raise
+            if isinstance(exc, ValueError) and not str(exc).startswith('未找到唯一可用场次'):
+                raise
+            from .enrollment_routing import recommendation
+            reply = recommendation(self.ctx, content, self.clock, venue_id)
+            if reply:
+                from .dialogue import MembershipPrompt
+                raise MembershipPrompt(reply) from exc
+            raise
+
+    async def _run(self, content, name=None, venue_id=None, allow_ai=True, expected=None):
         self.refresh_context()
         message = normalize_message(content, self.ctx.bot_name)
         if message.recipient_name:
@@ -394,7 +409,8 @@ class Commands:
             if match[2]:
                 return roster(data, venue_id, ctx=self.ctx)
             owned = [r for r in data['registrations'] if r['user_id'] == self.ctx.actor and r['status'] == 'active']
-            return self.say('enrollment.success',heading=Markup(session_heading(session,venue_id,'报名成功')),table=Markup(registration_table(owned)))
+            detail = '\n\n'.join(part for part in (registration_table(owned), enrollment_summary(data,session,self.ctx), enrollment_schedule_note(data,self.ctx)) if part)
+            return self.say('enrollment.success',heading=Markup(session_heading(session,venue_id,'报名成功')),table=Markup(detail))
         if text == '取消报名':
             result = self.service.cancel(self.ctx.actor, **selection)
             remaining = sum(r['user_id'] == self.ctx.actor and r['guest_index'] > 0 and r['status'] == 'active' for r in result['registrations'])

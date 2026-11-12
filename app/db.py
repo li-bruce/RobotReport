@@ -103,10 +103,12 @@ def initialize(path):
     with connect(path, True) as db:
         if 'substitute_only' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
             db.execute('ALTER TABLE registrations ADD COLUMN substitute_only INTEGER NOT NULL DEFAULT 0')
+        if 'formal_admitted_at' not in {r['name'] for r in db.execute('PRAGMA table_info(registrations)')}:
+            db.execute("ALTER TABLE registrations ADD COLUMN formal_admitted_at TEXT NOT NULL DEFAULT ''")
         if 'attributes' not in {r['name'] for r in db.execute('PRAGMA table_info(venues)')}:
             db.execute("ALTER TABLE venues ADD COLUMN attributes TEXT NOT NULL DEFAULT '[]'")
         columns = {r['name'] for r in db.execute('PRAGMA table_info(sessions)')}
-        for column, definition in [('min_level', 'INTEGER'), ('max_level', 'INTEGER'), ('allowed_group_ids', "TEXT NOT NULL DEFAULT '[]'"), ('settings_overridden', 'INTEGER NOT NULL DEFAULT 0')]:
+        for column, definition in [('min_level', 'INTEGER'), ('max_level', 'INTEGER'), ('allowed_group_ids', "TEXT NOT NULL DEFAULT '[]'"), ('settings_overridden', 'INTEGER NOT NULL DEFAULT 0'), ('queue_started_at', "TEXT NOT NULL DEFAULT ''")]:
             if column not in columns:
                 db.execute(f'ALTER TABLE sessions ADD COLUMN {column} {definition}')
         member_columns = {r['name'] for r in db.execute('PRAGMA table_info(member_records)')}

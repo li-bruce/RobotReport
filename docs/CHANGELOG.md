@@ -1,5 +1,13 @@
 # Changes
 
+## v1.0 · 2026-11-12 · Enrollment and daily queues
+
+- Include populated rosters in scheduled opening and closing reminders; place registration totals and free formal seats after the table image.
+- Fill current-day formal vacancies from the shared booking queue, retaining existing formal reservations, booking origins and historical records. Future external bookings stay in the reserve queue.
+- Recommend an eligible enrollment robot when a member uses the wrong one, respecting current permissions, time windows and session scope.
+- Accept bookings until the activity ends. Existing daily competition draws and scores stay fixed; the organizer or an event administrator can delete and rebuild the competition from the latest roster.
+- Update member and administrator instructions and the editable reply templates.
+
 ## v1.0 · 2026-11-11 · Message formatting
 
 - Share Markdown and HTML presentation cleanup across callbacks and the simulator, preserving raw mention offsets, sender identity and event deduplication.

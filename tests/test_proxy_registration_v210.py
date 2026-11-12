@@ -60,7 +60,10 @@ class ProxyRegistrationV210Tests(CoreFixture):
         result = self.mine.cancel('1001')
         self.assertEqual(result['cancelled'], 1)
         self.assertEqual([row['category'] for row in self.active(result)], ['正式', '替补', '候补'])
-        self.assertEqual([row for row in self.rows() if row['guest_index']], old_guests)
+        guests = [row for row in self.rows() if row['guest_index']]
+        self.assertTrue(guests[0]['formal_admitted_at'])
+        self.assertEqual([{k:v for k,v in row.items() if k!='formal_admitted_at'} for row in guests],
+                         [{k:v for k,v in row.items() if k!='formal_admitted_at'} for row in old_guests])
         self.assertEqual(self.mine.cancel('1001')['cancelled'], 0)
         result = self.mine.enroll('1001', 'ignored')
         self.assertEqual(self.active(result)[-1]['guest_index'], 0)
