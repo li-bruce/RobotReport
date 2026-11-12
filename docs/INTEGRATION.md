@@ -182,3 +182,12 @@ Administrators with member-management permission can preview `POST /api/membersh
 ### Personal profile and roster rating visibility
 
 `修改注册信息` returns an identity-bound `/register` link. Approved members edit their existing profile; other members follow registration. Profile changes still require approval. The optional boolean `show_level` defaults to false for all members. Registration and profile forms can save this personal preference immediately; it only controls rating display in enrollment receipts and rosters, not eligibility or team balancing. Ratings are displayed only after review. `GET /public/registration/{bot_id.token}` includes `profile.show_level`; POST accepts the preference with other profile fields. A preference-only save returns `request_id: null`. The personal token determines the account and group; new links replace old drafts and submitted receipts are idempotent.
+
+
+## Daily match sequence
+
+Create a daily event with `format="match_sequence"`; `options.discipline` defaults to `doubles`. Set `options.excluded_participant_ids` to trusted signup identities selected by the UI. `GET /api/formats` accepts the same comma-separated filter for availability previews. The backend rechecks the roster inside the creation transaction.
+
+`POST /api/tournaments/{event_id}/scores` accepts numerical `scores` or `outcome: "a" | "b"` for daily events. Supply `match_id` and `expected_version`. Outcome-only records keep an empty score list and a real winner. Every approved daily participant may record new results; corrections require organizer/event administrator permissions. Large-event scoring rules remain unchanged.
+
+`POST /api/tournaments/{event_id}/withdraw` accepts `names` or `participant_ids` plus `expected_version`. It removes people only from the dynamic sequence, preserving activity bookings and completed games. Members can remove themselves; organizers/event administrators can remove other people. The backend uses authenticated identity and never trusts a supplied role. New activity bookings made while the activity is in progress synchronize transactionally across all robots serving that session.

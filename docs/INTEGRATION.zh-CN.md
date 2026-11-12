@@ -181,3 +181,12 @@ AI 前缀请求 → 真实账号与可用业务上下文 → 结构化意图/有
 ### 本人资料与报名等级展示
 
 `修改注册信息` 返回绑定本人账号的 `/register` 链接；已审核会员修改现有资料，其他状态进入注册流程。姓名、性别、手机号、等级、分组变更仍需审核。布尔字段 `show_level` 为名单展示偏好，所有会员默认 false，注册及资料表可即时保存；仅控制报名回执和名单中的等级展示，不改变后台等级、报名约束或分组算法，未经审核的自评不公开显示。`GET /public/registration/{bot_id.token}` 的 `profile.show_level` 返回当前选项，POST 可随资料提交；仅保存展示偏好时 `request_id` 为 null。身份从个人令牌恢复，不接受调用方指定其他账号或群；新链接替换旧草稿，提交结果可幂等恢复。
+
+
+## Daily match sequence
+
+Create a daily event with `format="match_sequence"`; `options.discipline` defaults to `doubles`. Set `options.excluded_participant_ids` to trusted signup identities selected by the UI. `GET /api/formats` accepts the same comma-separated filter for availability previews. The backend rechecks the roster inside the creation transaction.
+
+`POST /api/tournaments/{event_id}/scores` accepts numerical `scores` or `outcome: "a" | "b"` for daily events. Supply `match_id` and `expected_version`. Outcome-only records keep an empty score list and a real winner. Every approved daily participant may record new results; corrections require organizer/event administrator permissions. Large-event scoring rules remain unchanged.
+
+`POST /api/tournaments/{event_id}/withdraw` accepts `names` or `participant_ids` plus `expected_version`. It removes people only from the dynamic sequence, preserving activity bookings and completed games. Members can remove themselves; organizers/event administrators can remove other people. The backend uses authenticated identity and never trusts a supplied role. New activity bookings made while the activity is in progress synchronize transactionally across all robots serving that session.

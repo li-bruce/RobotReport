@@ -593,12 +593,14 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
     @app.get('/api/formats')
     def formats(discipline: str = 'doubles', doubles_category: str = 'open', participant_count: int = None,
                 substitute_count: int = 0, date: str = None, session_id: int = None, venue_id: int = 1,
+                excluded_participant_ids: str = '',
                 min_level: int = None, max_level: int = None, allowed_group_ids: str = '',
                 group_count: int = 2, advance_per_group: int = 2, assignment_strategy: str = 'random',
                 ctx=Depends(context)):
         group_ids = [int(value) for value in allowed_group_ids.split(',') if value.strip()]
         options = {'doubles_category': doubles_category, 'group_count': group_count,
                    'advance_per_group': advance_per_group, 'assignment_strategy': assignment_strategy,
+                   'excluded_participant_ids': [p for p in excluded_participant_ids.split(',') if p],
                    'eligibility': {'min_level': min_level, 'max_level': max_level, 'allowed_group_ids': group_ids}}
         if date and session_id:
             candidates = events(ctx).planning_candidates(date, venue_id, session_id)
@@ -662,7 +664,17 @@ def create_app(state_dir=None, bootstrap_token=None, start_scheduler=True, live=
 
     @app.post('/api/tournaments/{event_id}/scores')
     def score(event_id: int, data: dict, ctx=Depends(context)):
-        return events(ctx).score(event_id, int(data['match_id']), data['scores'], data.get('expected_version'))
+        if data.get('outcome') is not None and data.get('scores'):
+            raise ValueError('请填写比分或胜负其中一种')
+        return events(ctx).score(event_id, int(data['match_id']), data.get('outcome') if data.get('outcome') is not None else data.get('scores'), data.get('expected_version'))
+
+    @app.post('/api/tournaments/{event_id}/withdraw')
+    def withdraw_daily(event_id: int, data: dict, ctx=Depends(context)):
+        ids = data.get('participant_ids')
+        names = data.get('names', []) if ids is None else ids
+        if not isinstance(names, list) or not 1 <= len(names) <= 40 or any(not isinstance(n, str) or not n.strip() for n in names):
+            raise ValueError('请填写退出人员姓名')
+        return events(ctx).withdraw(event_id, names if ids is None else [], expected_version=data.get('expected_version'), participant_ids=ids)
 
     @app.post('/api/tournaments/{event_id}/participants')
     def participants(event_id: int, data: dict, ctx=Depends(context)):

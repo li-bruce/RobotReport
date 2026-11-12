@@ -116,7 +116,7 @@ class NineLevelTests(unittest.TestCase):
                                 'options': {'assignment_strategy': 'high_low',
                                             'eligibility': {'min_level': 1, 'max_level': 9}}}, 'u0', False)
         self.assertEqual(sorted(p['level'] for p in event['participants']), [1, 4, 7, 9])
-        self.assertIn('9级', service.render(event['id']))
+        self.assertNotIn('9级', service.render(event['id']))
         for limits in ({'min_level': 9}, {'max_level': 9}, {'min_level': 4, 'max_level': 9}):
             with self.subTest(limits=limits):
                 self.assertEqual(TournamentService._options('round_robin', {'eligibility': limits})['eligibility'],

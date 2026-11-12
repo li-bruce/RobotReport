@@ -23,7 +23,7 @@ MODEL_TIMEOUT_SECONDS = 38
 FORMAT_NAMES = {
     "round_robin": "积分赛", "five_rotation": "五人转", "five_team": "五羽伦比",
     "single_elimination": "单淘汰", "double_elimination": "双败淘汰",
-    "group_knockout": "分组淘汰", "doubles_rotation": "双打轮转",
+    "group_knockout": "分组淘汰", "doubles_rotation": "双打轮转", "match_sequence": "对战序列",
 }
 STRATEGY_NAMES = {"random": "随机", "seeded": "种子分布", "balanced": "平均分布", "high_low": "高带低"}
 PositiveId = Annotated[int, Field(ge=1, le=2_147_483_647)]
@@ -96,6 +96,7 @@ class StartDailyPlan(_DatedIntent):
     doubles_category: Literal["open", "mens", "womens", "mixed"] = "open"
     assignment_strategy: Literal["random", "seeded", "balanced", "high_low"] = "random"
     title: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+    excluded_names: Annotated[list[str], Field(max_length=40)] = Field(default_factory=list)
 
     @field_validator("title")
     @classmethod
@@ -107,7 +108,7 @@ class StartDailyPlan(_DatedIntent):
 
 class DailyPlan(_VenueIntent):
     """Propose a daily tournament using today's registered participants."""
-    format: Literal["round_robin", "five_rotation", "five_team", "single_elimination", "double_elimination", "group_knockout", "doubles_rotation"]
+    format: Literal["round_robin", "five_rotation", "five_team", "single_elimination", "double_elimination", "group_knockout", "doubles_rotation", "match_sequence"]
 
 
 class _TournamentIntent(_VenueIntent):
@@ -130,7 +131,14 @@ class ResumeTournament(_TournamentIntent):
 class RecordScore(_TournamentIntent):
     """Propose a score for an event the caller is explicitly allowed to score."""
     match_id: PositiveId
-    scores: Annotated[list[list[Point]], Field(min_length=1, max_length=3)]
+    scores: Annotated[list[list[Point]], Field(max_length=3)] = Field(default_factory=list)
+    outcome: Literal['a', 'b'] | None = None
+
+    @model_validator(mode='after')
+    def one_result(self):
+        if bool(self.scores) == bool(self.outcome):
+            raise ValueError('Provide numerical scores or an explicit side outcome.')
+        return self
 
     @field_validator("scores")
     @classmethod
@@ -164,7 +172,8 @@ class SelfLevel(_StrictIntent):
 
 class EventAction(_TournamentIntent):
     """Propose one permitted lifecycle transition of an existing event."""
-    action: Literal["pause", "close", "advance", "delete"]
+    action: Literal["pause", "close", "advance", "delete", "withdraw"]
+    names: Annotated[list[str], Field(max_length=40)] = Field(default_factory=list)
 
 
 class EventRegistration(_TournamentIntent):
@@ -635,7 +644,7 @@ def _tool_schemas(context: dict[str, Any]) -> list[type[_StrictIntent]]:
         names = [name for name in names if name != 'RecordScore']
     if not any('query' in event['actions'] for event in context['events']):
         names = [name for name in names if name != 'TournamentQuery']
-    if not any(set(event['actions']) & {'pause', 'close', 'advance', 'delete'} for event in context['events']):
+    if not any(set(event['actions']) & {'pause', 'close', 'advance', 'delete', 'withdraw'} for event in context['events']):
         names = [name for name in names if name != 'EventAction']
     if not any(set(event['actions']) & {'enroll', 'cancel'} for event in context['events']):
         names = [name for name in names if name != 'EventRegistration']
@@ -777,6 +786,8 @@ def _ground_planner(text: str, args: dict[str, Any]) -> dict[str, Any]:
         if field in args and args[field] != value:
             raise _ClarificationRequired('AI识别的单打、双打或分配方式与原文不一致，请明确比赛模式。')
     title = args.get('title')
+    if any(not name or name not in text for name in args.get('excluded_names', [])):
+        raise _ClarificationRequired('不参与名单须使用原文明确提供的姓名。')
     if title is not None:
         quoted = re.findall(r'[“"「]([^”"」]+)[”"」]', text)
         direct = re.search(r'组织比赛(?:\s*(?:单打|双打|男双|女双|混双))?[\s，,]+([^，,\n]+)$', text)
@@ -830,7 +841,8 @@ def _ground_score(intent: RecordScore, text: str, event: dict[str, Any]) -> None
             raise _ClarificationRequired('请明确记分场次，例如“友谊赛，第2场21:19”。')
         number = next(iter(numbers))
         scores = [[int(match[1]), int(match[2])] for match in re.finditer(r'([0-9]+)\s*[:：\-－—–比/]\s*([0-9]+)', text)]
-    if number != intent.match_id or scores != intent.scores:
+    outcome = parsed.get('outcome') if parsed else None
+    if number != intent.match_id or scores != intent.scores or outcome != intent.outcome:
         raise _ClarificationRequired('AI识别的场次或比分与原文不一致，本次未记分；请发送“赛事名，第2场21:19”。')
     if number not in event['match_numbers']:
         raise _ClarificationRequired('该赛事没有这个场次，请先查询对战表。')
@@ -839,7 +851,9 @@ def _ground_score(intent: RecordScore, text: str, event: dict[str, Any]) -> None
 def _ground_event_action(intent: EventAction, text: str, event: dict[str, Any]) -> None:
     literal = text.replace(event['title'], '')
     patterns = {'pause': r'暂停|停赛', 'close': r'关闭|终止|结束比赛|结束赛事',
-                'advance': r'晋级|推进到?下一阶段|进入下一阶段', 'delete': r'删除'}
+                'advance': r'晋级|推进到?下一阶段|进入下一阶段', 'delete': r'删除|取消.{0,12}活动', 'withdraw': r'退出'}
+    if intent.action == 'withdraw' and (not intent.names or any(not n or n not in literal for n in intent.names)):
+        raise _ClarificationRequired('请明确退出人员姓名。')
     found = {action for action, pattern in patterns.items() if re.search(pattern, literal)}
     if found != {intent.action} or re.search(r'(?:不要|不用|别|不想|不再|禁止|取消)\s*(?:暂停|停赛|关闭|终止|结束|晋级|推进|进入|删除)', literal):
         raise _ClarificationRequired('请明确赛事名称及一个操作：暂停、关闭、晋级或删除比赛。')
@@ -920,6 +934,8 @@ def _proposal(name: str, args: dict[str, Any], context: dict[str, Any], text: st
         elif name == "StartDailyPlan":
             command = prefix + '组织比赛 ' + ('单打' if intent.discipline == 'singles' else {'open':'双打','mens':'男双','womens':'女双','mixed':'混双'}[intent.doubles_category])
             command += (' ' + intent.title) if intent.title else ''
+            if intent.excluded_names:
+                command += '，不参与 ' + '，'.join(intent.excluded_names)
             requires_confirmation = True
         else:
             command = prefix + "名单"
@@ -951,7 +967,7 @@ def _proposal(name: str, args: dict[str, Any], context: dict[str, Any], text: st
         event = _event_target(intent, context, text, 'score', venue_id)
         _ground_score(intent, text, event)
         values.update(tournament_id=event['id'], tournament_name=event['title'])
-        scores = ",".join(f"{left}:{right}" for left, right in intent.scores)
+        scores = ('甲方胜' if intent.outcome == 'a' else '乙方胜') if intent.outcome else ",".join(f"{left}:{right}" for left, right in intent.scores)
         command = venue_prefix + f"{event['date']} {event['title']}，第{intent.match_id}场{scores}"
         requires_confirmation = True
     elif name == "TournamentQuery":
@@ -980,7 +996,7 @@ def _proposal(name: str, args: dict[str, Any], context: dict[str, Any], text: st
         event = _event_target(intent, context, text, intent.action, venue_id)
         _ground_event_action(intent, text, event)
         values.update(tournament_id=event['id'], tournament_name=event['title'])
-        action = {'pause': '暂停比赛', 'close': '关闭比赛', 'advance': '晋级', 'delete': '删除比赛'}[intent.action]
+        action = ('，'.join(intent.names)+'退出') if intent.action == 'withdraw' else {'pause': '暂停比赛', 'close': '关闭比赛', 'advance': '晋级', 'delete': '删除比赛'}[intent.action]
         command = venue_prefix + f"{event['date']} {event['title']}，{action}"
         requires_confirmation = True
     elif name == "EventRegistration":

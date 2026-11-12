@@ -215,3 +215,5 @@
 - Configure announcements in the same robot, without a separate robot selector. Per-robot writes preserve shared-rule recipients and reject stale edits.
 - Collapsed rows separate activity times from broadcast times and group repeated periods.
 - Updated the administrator guide and illustrated workflows; mobile forms retain unsaved drafts while other robots are saved.
+
+- Daily participants can record any new result; organizers can cancel an activity with a short command. Add partial rosters, compact four-column tables, outcome-only results, and transactional dynamic match sequences with preserved completed history.

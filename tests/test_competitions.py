@@ -435,7 +435,7 @@ class TournamentTests(unittest.TestCase):
             "scheduled_at":"2026-12-01T19:00:00+08:00","court":"2号球场"}]},"admin",True)
         self.assertEqual(event["matches"][0]["court"],"2号球场")
         self.assertNotIn("<at",self.service.render(event["id"]))
-        self.assertIn("2号球场",self.service.render(event["id"]))
+        self.assertNotIn("2号球场",self.service.render(event["id"]))
         self.assertEqual(event["history"][-1]["action"],"update")
 
     def test_schedule_exact_conflicts_rollback_and_venue_isolation(self):

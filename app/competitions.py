@@ -144,8 +144,10 @@ CREATE TABLE IF NOT EXISTS tour_event_channels (
 
 
 class TournamentService:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, initialize=True):
         self.db_path = Path(db_path)
+        if not initialize:
+            return
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._connect()) as db:
             db.executescript(SCHEMA)
@@ -210,6 +212,8 @@ class TournamentService:
             if special:
                 event['options']['team_size'] = 5 if event['format'] == 'five_team' else 2
         event['options'].setdefault('doubles_category', 'open')
+        event['participant_user_ids'] = [r[0] for r in db.execute(
+            "SELECT DISTINCT user_id FROM tour_participants WHERE tournament_id=? AND status='active' AND guest_index=0", (event_id,))]
         organization = db.execute('SELECT description,rules_text,meeting_instructions,coordination FROM tour_organization WHERE tournament_id=?', (event_id,)).fetchone()
         event['organization'] = dict(organization) if organization else {'description': '', 'rules_text': '', 'meeting_instructions': '', 'coordination': ''}
         event['channel_ids'] = [r[0] for r in db.execute('SELECT channel_id FROM tour_event_channels WHERE tournament_id=? ORDER BY channel_id', (event_id,))]
@@ -244,7 +248,7 @@ class TournamentService:
             raise ValueError("options 必须为对象")
         allowed = {"scoring_mode", "leader_user_ids", "best_of", "points", "cap", "win_by", "team_size",
                    "advance_per_group", "rounds", "capacity", "relay_segment", "notes", "session_id",
-                   "discipline", "doubles_category", "assignment_strategy", "eligibility", "planner_token", "selected_substitute_names", "organizer_name", "session_snapshot", "reservations"}
+                   "discipline", "doubles_category", "assignment_strategy", "eligibility", "planner_token", "selected_substitute_names", "organizer_name", "session_snapshot", "reservations", "excluded_participant_ids"}
         if set(data) - allowed:
             raise ValueError("包含不支持的赛制设置：" + ",".join(sorted(set(data)-allowed)))
         opts = {"scoring_mode": "members", "leader_user_ids": [], "best_of": 1,
@@ -254,6 +258,10 @@ class TournamentService:
         if format_id == "five_team":
             opts.update(points=50, cap=50, win_by=1, relay_segment=10, team_size=5)
         opts.update(data)
+        excluded = opts.get('excluded_participant_ids', [])
+        if not isinstance(excluded, list) or len(excluded) > 256:
+            raise ValueError('不参与名单无效')
+        opts['excluded_participant_ids'] = list(dict.fromkeys(_clean(pid, '参赛者标识', 100) for pid in excluded))
         if 'reservations' in opts:
             from .availability import intervals
             opts['reservations'] = intervals(opts['reservations'])
@@ -357,7 +365,8 @@ class TournamentService:
                  and _time(s['starts_at']) <= moment < _time(s['expires_at'])}
         owner = bool(is_admin or str(actor) == event['creator'] or 'organizer' in roles)
         coordinator = owner or 'coordinator' in roles
-        return {'view': True, 'manage': owner, 'delete': owner and event.get('kind') == 'daily', 'score': owner or 'scorer' in roles,
+        daily_member = event.get('kind') == 'daily' and str(actor) in event.get('participant_user_ids', [])
+        return {'view': True, 'manage': owner, 'delete': owner and event.get('kind') == 'daily', 'score': owner or 'scorer' in roles or daily_member,
                 'correct_score': owner, 'coordinate': coordinator, 'manage_staff': owner,
                 'appoint_organizer': bool(is_admin), 'manage_channels': owner,
                 'role': 'administrator' if is_admin else 'organizer' if owner else
@@ -411,6 +420,8 @@ class TournamentService:
                 raise PermissionError('只有管理员可以指定其他组织者')
             creator = _clean(str(data['organizer_user_id']), '组织者身份', 80)
         format_id = data.get("format", "round_robin")
+        if format_id == 'match_sequence' and kind != 'daily':
+            raise ValueError('对战序列仅用于每日活动')
         module = get_format(format_id)
         title = _clean(data.get("title", module.META["name"]), "赛事名称")
         venue = _integer(data.get("venue_id", 1), 1, 1000000000, "场地编号")
@@ -550,7 +561,8 @@ class TournamentService:
             event["matches"] = self._matches(db,tournament_id)
             # Names are presentation data. Rebuild them from the participant
             # snapshot without changing persisted identities or the draw.
-            names = {p["id"]: player_name(p) for p in event["participants"]}
+            names = {p["id"]: (p['name'] + ('（代报）' if p['is_proxy'] or p['guest_index'] else '')
+                               if event['kind'] == 'daily' else player_name(p)) for p in event["participants"]}
             def rename(entry):
                 if entry:
                     entry["name"] = " / ".join(names.get(pid, "待完善姓名") for pid in entry["members"])
@@ -1003,10 +1015,16 @@ class TournamentService:
                 raise ValueError("比分版本已变化，请刷新后重试")
             if target["status"] not in ("ready","completed"):
                 raise ValueError("此场对手尚未确定或为轮空，不能记分")
-            winner_index = self._validate_scores(scores,event["options"])
+            if isinstance(scores, str):
+                if event['kind'] != 'daily' or scores not in ('a', 'b'):
+                    raise ValueError('仅每日比赛支持甲方胜或乙方胜')
+                winner_index = 0 if scores == 'a' else 1
+                scores = []  # A result is not a fabricated numerical score.
+            else:
+                winner_index = self._validate_scores(scores,event["options"])
             winner = target["side_a" if winner_index == 0 else "side_b"]["id"]
             if target["status"] == "completed":
-                if target["scores"] == scores:
+                if target["scores"] == scores and target['winner'] == winner:
                     return self.get(tournament_id)
                 if not can_correct:
                     raise PermissionError("已有比分仅赛事组织者或管理员可以修正")
@@ -1098,7 +1116,7 @@ class TournamentService:
         for group_id in dict.fromkeys(key[0] for key in results):
             rows = [r for (g,_),r in results.items() if g == group_id]
             def rating(row):
-                first = Fraction(row["won"],max(1,row["played"])) if event["format"] == "doubles_rotation" else row["won"]
+                first = Fraction(row["won"],max(1,row["played"])) if event["format"] in ("doubles_rotation", "match_sequence") else row["won"]
                 return (first,row["game_diff"],row["point_diff"])
             rows.sort(key=lambda r:(rating(r),r["id"]),reverse=True)
             previous, rank = None,0
@@ -1164,6 +1182,10 @@ class TournamentService:
     def _finish_or_advance(self, db, event_id):
         event = self._event(db,event_id)
         matches = self._matches(db,event_id)
+        if event['format'] == 'match_sequence' and matches and all(m['status'] == 'completed' for m in matches):
+            from .daily_sequence import advance_batch
+            if advance_batch(self, db, event):
+                return
         if event["format"] == "group_knockout":
             self._advance_groups(db,event)
             event = self._event(db,event_id)
@@ -1298,6 +1320,21 @@ class TournamentService:
         if section not in ("schedule", "mine"):
             raise ValueError("未知赛事消息模板")
         own_ids = {p['id'] for p in event['participants'] if p['user_id'] == str(actor)}
+        if event['kind'] == 'daily':
+            rows = []
+            for item in event['matches']:
+                if section == 'mine' and not any(own_ids.intersection((item.get(side) or {}).get('members', [])) for side in ('side_a', 'side_b')):
+                    continue
+                status = '未开始'
+                if item['status'] == 'completed':
+                    status = ' / '.join(f'{a} : {b}' for a, b in item['scores']) if item['scores'] else ('胜 / 负' if item['winner'] == item['side_a']['id'] else '负 / 胜')
+                elif item['status'] == 'bye':
+                    status = '轮空'
+                rows.append([f"第{item['number']}场", item['side_a_name'].replace(' / ', '，'), status, item['side_b_name'].replace(' / ', '，')])
+            body = _table(['场次', '甲方', '状态', '乙方'], rows) if rows else '暂无对局。'
+            if event.get('plan', {}).get('sequence', {}).get('waiting'):
+                body += '\n\n人数不足，等待成员加入。'
+            return header + '\n\n' + body
         rows = []
         for item in event["matches"]:
             if section == 'mine' and not any(own_ids.intersection((item.get(side) or {}).get('members', [])) for side in ('side_a', 'side_b')):

@@ -119,7 +119,7 @@ class BotCommandsV211Tests(CoreFixture):
             self.s.enroll(user, '球友'+user)
         self.capabilities(['daily_events'])
         self.assertIn('积分赛', self.send('组织比赛'))
-        self.assertIn('对战', self.send('积分赛'))
+        self.assertIn('| 甲方 |', self.send('积分赛'))
 
     def test_context_and_single_ai_snapshots_refresh_after_revocation(self):
         self.make_event('daily', '每日双打')

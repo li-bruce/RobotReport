@@ -104,8 +104,9 @@ class Tournaments:
             if rules['max_level'] is not None and grade > rules['max_level']:
                 return False
             return not rules['allowed_group_ids'] or bool(set(rules['allowed_group_ids']) & set(person.get('group_ids', [])))
-        formal = [p for p in candidates['formal'] if allowed(p)]
-        subs = [p for p in candidates['substitutes'] if allowed(p)]
+        excluded = set(options.get('excluded_participant_ids', []))
+        formal = [p for p in candidates['formal'] if allowed(p) and p['id'] not in excluded]
+        subs = [p for p in candidates['substitutes'] if allowed(p) and p['id'] not in excluded]
         rows = self.available_formats(len(formal), discipline,
             {**options, 'participants': formal, 'substitutes': subs}, len(subs))
         omitted = len(candidates['formal']) + len(candidates['substitutes']) - len(formal) - len(subs)
@@ -326,9 +327,42 @@ class Tournaments:
         if len(matches) != 1:
             raise ValueError('赛事场次不存在')
         match = matches[0]
-        if match.get('scores') and version is None:
+        if match.get('status') == 'completed' and version is None:
             raise ValueError('修改已记分比赛需要 expected_version，请在管理页刷新后操作')
         return self.engine.score(event_id, match['id'], scores, self.ctx.actor, self.ctx.can('event.manage'), expected_version=match['version'] if version is None else version)
+
+    def withdraw(self, event_id, names, venue_id=None, expected_version=None, participant_ids=None):
+        item = self.get(event_id, venue_id)
+        if item['kind'] != 'daily' or item['format'] != 'match_sequence':
+            raise ValueError('退出并重排仅用于对战序列；固定赛程请由组织者取消后重新生成')
+        if expected_version is not None and item['version'] != expected_version:
+            raise ValueError('赛事已更新，请刷新后重试')
+        matches = []
+        for name in participant_ids if participant_ids is not None else names:
+            found = [p for p in item['participants'] if p['status'] == 'active' and
+                     (p['id'] == name if participant_ids is not None else p['name'] == name or name in ('我', '本人') and p['user_id'] == self.ctx.actor and not p['guest_index'])]
+            if len(found) != 1:
+                raise ValueError(f'“{name}”未参加或有同名人员，请由组织者在网页选择')
+            matches.append(found[0])
+        if not matches:
+            raise ValueError('请指定退出人员')
+        if not item['permissions']['manage'] and any(p['user_id'] != self.ctx.actor or p['guest_index'] for p in matches):
+            raise PermissionError('仅可退出本人；其他人员请由组织者或赛事管理员处理')
+        with self.engine._transaction() as db:
+            self.members.require_approved(db=db)
+            current = self.engine._event(db, event_id)
+            if current['version'] != item['version'] or current['status'] not in ('running', 'paused'):
+                raise ValueError('赛事已更新或已结束，请刷新后重试')
+            if not self.engine.permissions(current, self.ctx.actor, self.ctx.can('event.manage', db=db), self.clock())['manage'] and any(p['user_id'] != self.ctx.actor or p['guest_index'] for p in matches):
+                raise PermissionError('请由组织者或赛事管理员处理')
+            ids = {p['id'] for p in matches}
+            options = dict(current['options'])
+            options['excluded_participant_ids'] = sorted(set(options.get('excluded_participant_ids', [])) | ids)
+            db.execute('UPDATE tour_events SET options=? WHERE id=?', (dumps(options), event_id))
+            db.executemany("UPDATE tour_participants SET status='withdrawn',cancelled_at=? WHERE tournament_id=? AND id=?", [(self.clock().isoformat(), event_id, pid) for pid in ids])
+            from .daily_sequence import replan
+            replan(self.engine, db, self.engine._event(db, event_id), self.ctx.actor, 'withdraw')
+        return self.get(event_id)
 
     def enroll(self, event_id, user_id, name, guests=0, venue_id=None, guest_names=None):
         self.get(event_id, venue_id)

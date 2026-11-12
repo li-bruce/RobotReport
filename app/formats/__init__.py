@@ -2,7 +2,7 @@
 import importlib
 from ..gender import category, eligible, validate_roster
 FORMAT_IDS = ("round_robin", "five_rotation", "five_team", "single_elimination",
-              "double_elimination", "group_knockout", "doubles_rotation")
+              "double_elimination", "group_knockout", "doubles_rotation", "match_sequence")
 def get_format(format_id):
     if format_id not in FORMAT_IDS:
         raise ValueError("未知赛制，请使用帮助中列出的赛制")
@@ -15,8 +15,8 @@ def metadata(discipline="doubles", participant_count=None, options=None, substit
     result = []
     for key in FORMAT_IDS:
         item = dict(get_format(key).META)
-        special = key in ("five_rotation", "five_team", "doubles_rotation")
-        item["disciplines"] = ["doubles"] if special else ["singles", "doubles"]
+        special = key in ("five_rotation", "five_team", "doubles_rotation", "match_sequence")
+        item["disciplines"] = ["doubles"] if special and key != 'match_sequence' else ["singles", "doubles"]
         item["discipline"] = discipline
         item['doubles_category'] = kind
         item["player_step"] = 5 if key == "five_team" else 1 if special or discipline == "singles" else 2
@@ -26,6 +26,8 @@ def metadata(discipline="doubles", participant_count=None, options=None, substit
             item["min_players"] *= size
             if key == "group_knockout":
                 item["min_players"] = max(item["min_players"], int(options.get("group_count", 2)) * (int(options.get("advance_per_group", 1))+1) * size)
+        if key == 'match_sequence':
+            item['min_players'] = 2 if discipline == 'singles' else 4
         reason = ""
         if discipline not in item["disciplines"]:
             reason = "此赛制仅支持双打"
@@ -58,7 +60,7 @@ def metadata(discipline="doubles", participant_count=None, options=None, substit
                     men = sum(p.get('gender') == 'male' for p in selected)
                     women = sum(p.get('gender') == 'female' for p in selected)
                     wanted = None
-                    if kind == 'mixed' and key != 'doubles_rotation' and men != women:
+                    if kind == 'mixed' and key not in ('doubles_rotation', 'match_sequence') and men != women:
                         wanted = 'male' if men < women else 'female'
                     elif kind == 'mixed' and min(men, women) < 2:
                         wanted = 'male' if men < 2 else 'female'
@@ -79,6 +81,16 @@ def metadata(discipline="doubles", participant_count=None, options=None, substit
                     except ValueError as error:
                         reason = str(error)
             selected_count = len(selected)
+            if key == 'match_sequence' and not reason:
+                selected = formal + [p for p in all_subs if eligible(p, kind)]
+                if len(selected) > item['max_players']:
+                    reason = f"对战序列最多{item['max_players']}人，请先设置不参与名单"
+                else:
+                    try:
+                        validate_roster(selected, {**options, 'discipline': discipline}, key)
+                    except ValueError as error:
+                        reason = str(error)
+                selected_count = len(selected)
             item['selected_ids'] = [p['id'] for p in selected] if not reason else []
             item['excluded_count'] = len(all_formal) + len(all_subs) - len(formal) - len([p for p in all_subs if eligible(p, kind)])
             item['gender_counts'] = {g: sum(p.get('gender', 'unknown') == g for p in selected) for g in ('male', 'female', 'unknown')}

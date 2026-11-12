@@ -86,7 +86,7 @@ class TournamentV2Tests(unittest.TestCase):
         self.assertEqual(proxy['level'], 0)
         self.assertEqual(proxy['group_ids'], [])
         self.assertEqual(proxy['is_proxy'], 1)
-        self.assertIn('王小明（代报·无级别）', self.engine.render(event['id']))
+        self.assertIn('王小明（代报）', self.engine.render(event['id']))
 
     def test_special_formats_reject_singles_in_engine_and_cli_builders(self):
         for key, count in [('five_rotation', 5), ('five_team', 10), ('doubles_rotation', 8)]:
@@ -160,8 +160,8 @@ class TournamentV2Tests(unittest.TestCase):
             self.assertNotIn('private-id-', result)
             self.assertIn(r'张\|三' if section == 'registration' else '张｜三', result)
             self.assertNotIn('\n\n| ---', result)
-        self.assertIn('3级', self.engine.render(event['id']))
-        self.assertIn('无级别', self.engine.render(event['id']))
+        self.assertNotIn('3级', self.engine.render(event['id']))
+        self.assertNotIn('无级别', self.engine.render(event['id']))
         self.assertEqual(next(p for p in event['participants'] if p['user_id'] == people[1]['user_id'])['name'], '待完善姓名')
 
     def test_old_draw_and_scoring_options_are_preserved(self):
@@ -209,9 +209,11 @@ class TournamentV2Tests(unittest.TestCase):
     def test_organizer_correction_close_and_personal_schedule(self):
         event = self.create(players([3, 2, 1, 1]), discipline='singles')
         match = event['matches'][0]
+        self.engine.score(event['id'], match['id'], [[21, 19]], 'private-id-0', False)
         for actor in ('private-id-0', 'spectator'):
-            with self.assertRaises(PermissionError):
-                self.engine.score(event['id'], match['id'], [[21, 19]], actor, False)
+            if actor == 'spectator':
+                with self.assertRaises(PermissionError):
+                    self.engine.score(event['id'], match['id'], [[21, 19]], actor, False)
             with self.assertRaises(PermissionError):
                 self.engine.transition(event['id'], 'pause', actor, False)
         self.engine.score(event['id'], match['id'], [[21, 19]], 'u', False)
@@ -219,10 +221,9 @@ class TournamentV2Tests(unittest.TestCase):
             self.engine.score(event['id'], match['id'], [[21, 18]], 'u', False)
         changed = self.engine.score(event['id'], match['id'], [[21, 18]], 'u', False, expected_version=1)
         self.assertEqual(changed['matches'][0]['version'], 2)
-        self.assertIn('（21） VS ', self.engine.render(event['id']))
-        self.assertIn('（18）', self.engine.render(event['id']))
+        self.assertIn('21 : 18', self.engine.render(event['id']))
         mine = self.engine.render(event['id'], 'mine', actor='private-id-0')
-        self.assertEqual(mine.count(' VS '), 3)
+        self.assertEqual(mine.count('| 第'), 3)
         self.engine.transition(event['id'], 'pause', 'u', False)
         closed = self.engine.transition(event['id'], 'close', 'u', False)
         self.assertEqual(closed['status'], 'cancelled')
@@ -357,7 +358,7 @@ class TournamentBoundaryV2Tests(unittest.TestCase):
         owner = Tournaments(replace(self.ctx, actor='p0', is_admin=False), self.clock)
         other = Tournaments(replace(self.ctx, actor='p1', is_admin=False), self.clock)
         self.assertTrue(owner.can_score(event))
-        self.assertFalse(other.can_score(event))
+        self.assertTrue(other.can_score(event))
         with self.assertRaises(PermissionError):
             other.create({'kind': 'daily', 'organizer_user_id': 'p0'})
         with self.assertRaises(PermissionError):

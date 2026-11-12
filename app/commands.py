@@ -26,7 +26,7 @@ HELP = command_help({'status':'approved'})
 
 def cancellation_guests(text):
     """Read a literal list of the caller's guests, never a different account."""
-    if text == '取消报名' or not text.startswith('取消'):
+    if text in ('取消报名', '取消活动') or not text.startswith('取消'):
         return None
     value = text[len('取消'):].lstrip()
     # An optional command label needs a delimiter: an actual guest name may
@@ -83,6 +83,29 @@ class Commands:
     def tournaments(self):
         return Tournaments(self.ctx, self.clock)
 
+    def current_daily(self, selection):
+        events = self.tournaments()
+        if selection.get('at') or selection.get('number'):
+            session = self.service.resolve_session(**selection)
+            found = events.daily_for_session(session)
+            if found:
+                return events.get(found['id'])
+        else:
+            candidates = [e for e in events.list(selection['venue_id']) if e['kind'] == 'daily'
+                          and e['date'] == (selection['day'] or self.clock().date().isoformat())]
+            live = [e for e in candidates if e['status'] in ('running', 'paused')]
+            candidates = live or candidates
+            if len(candidates) == 1:
+                return events.get(candidates[0]['id'])
+            if len(candidates) > 1:
+                from .service import session_time
+                active = [e for e in candidates if e['options'].get('session_snapshot') and
+                          session_time(e['options']['session_snapshot'], 'start') <= self.clock() < session_time(e['options']['session_snapshot'], 'end')]
+                if len(active) == 1:
+                    return events.get(active[0]['id'])
+                raise ValueError('今天有多个活动，请加场次，或发送“赛事名称，取消活动/姓名退出”')
+        raise ValueError('本场次没有每日活动')
+
     def event_allowed(self, event):
         return supports(self.ctx, 'daily_events' if event.get('kind') == 'daily' else 'large_events')
 
@@ -103,7 +126,7 @@ class Commands:
         if not supports(self.ctx, 'daily_events'):
             from .formats import metadata
             daily_names = {value for item in metadata() for value in (item['id'], item['name'], item['name'] + '比赛')}
-            if (text.startswith('组织比赛') or text in ('单打', '双打', '男双', '女双', '混双')
+            if (text.startswith(('组织比赛', '不参与')) or text in ('单打', '双打', '男双', '女双', '混双', '取消活动') or text.endswith('退出')
                     or re.fullmatch(r'分配\s*(随机|种子分布|平均分布|高带低)', text) or text in daily_names):
                 require_capability(self.ctx, 'daily_events')
         if text != '占用查询' and re.match(r'^(?:占用|释放占用|开启节假日|关闭节假日|节假日设置)',text):
@@ -117,7 +140,7 @@ class Commands:
             require_capability(self.ctx, 'registration')
         if (text in ('名单', '', '手动报名') or text.startswith('确认网页登录 ') or re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', text)
                 or re.match(r'^报名(?:\s+接龙)?[,，]', text)
-                or text.startswith('取消') and not re.fullmatch(r'取消\s+[a-f0-9]{12}', text, re.I) and text not in ('取消记录','取消计划','取消资料申请')):
+                or text.startswith('取消') and not re.fullmatch(r'取消\s+[a-f0-9]{12}', text, re.I) and text not in ('取消记录','取消计划','取消资料申请','取消活动')):
             require_capability(self.ctx, 'enrollment')
         if (re.fullmatch(r'(?:我的)?(?:对战历史|对局历史|对战记录|对战统计|对局统计)(?:\s+.+)?', text)
                 or re.match(r'^(?:修改记录|作废记录|撤销记录|记录)', text)
@@ -428,6 +451,9 @@ class Commands:
         named_enrollment = re.fullmatch(r'(.+?)[,，]\s*(报名(?:\+(\d+))?|报名[,，].+|取消报名|取消.+)', text)
         if named_enrollment:
             event = self.event_by_name(named_enrollment[1].strip(), venue_id, selection['day'])
+            if named_enrollment[2] == '取消活动':
+                tournaments.delete(event['id'], event['version'], venue_id)
+                return self.say('event.activity_cancelled', event=event['title'])
             if named_enrollment[2] == '取消报名':
                 tournaments.cancel(event['id'], self.ctx.actor, venue_id)
                 return self.say('event.cancelled',event=event['title'])
@@ -439,13 +465,30 @@ class Commands:
             event_names = [v.strip() for v in re.split(r'[,，、]', named[1])] if named else None
             tournaments.enroll(event['id'], self.ctx.actor, name, len(event_names) if event_names is not None else int(named_enrollment[3] or 0), venue_id, guest_names=event_names)
             return tournaments.describe(event['id'], 'registration')
+        if text == '取消活动':
+            event = self.current_daily(selection)
+            tournaments.delete(event['id'], (expected or {}).get('daily_version', event['version']), venue_id)
+            return self.say('event.activity_cancelled', event=event['title'])
+        withdrawal = re.fullmatch(r'(?:(.+?)[,，]\s*)?(.+?)退出', text)
+        if withdrawal:
+            event = self.event_by_name(withdrawal[1].strip(), venue_id, selection['day']) if withdrawal[1] else self.current_daily(selection)
+            names = [n.strip() for n in re.split('[、,，]', withdrawal[2])]
+            result = tournaments.withdraw(event['id'], names, venue_id, (expected or {}).get('daily_version'))
+            return self.say('event.sequence_withdrawn', names='、'.join(names)) + '\n\n' + tournaments.describe(result['id'])
         cancel_names = cancellation_guests(text)
         if cancel_names is not None:
             result = self.service.cancel_guests(self.ctx.actor, cancel_names, **selection)
             return self.say('enrollment.guests_cancelled',names='、'.join(cancel_names),count=result['cancelled'])
-        organizing = re.fullmatch(r'组织比赛(?:\s*(单打|双打|男双|女双|混双))?(?:[\s，,]+(.+))?', text)
+        organize_text, excluded_names = text, []
+        exclusion = re.search(r'(?:[\s，,]+)(?:不参与|排除)\s*[:：]?\s*(.+)$', text)
+        if exclusion and text.startswith('组织比赛'):
+            organize_text = text[:exclusion.start()].rstrip(' ，,')
+            excluded_names = [n.strip() for n in re.split('[、,，]', exclusion[1])]
+        organizing = re.fullmatch(r'组织比赛(?:\s*(单打|双打|男双|女双|混双))?(?:[\s，,]+(.+))?', organize_text)
         if organizing:
-            return DailyPlanning(self.ctx, self.clock).begin(selection, 'singles' if organizing[1] == '单打' else 'doubles', title=organizing[2], doubles_category={'男双':'mens','女双':'womens','混双':'mixed'}.get(organizing[1],'open'))
+            return DailyPlanning(self.ctx, self.clock).begin(selection, 'singles' if organizing[1] == '单打' else 'doubles', title=organizing[2], doubles_category={'男双':'mens','女双':'womens','混双':'mixed'}.get(organizing[1],'open'), excluded_names=excluded_names)
+        if text.startswith('不参与 '):
+            return DailyPlanning(self.ctx, self.clock).change(venue_id, excluded_names=[n.strip() for n in re.split('[、,，]', text[4:])])
         if text in ('单打', '双打', '男双', '女双', '混双'):
             return DailyPlanning(self.ctx, self.clock).change(venue_id, discipline='singles' if text == '单打' else 'doubles', doubles_category={'男双':'mens','女双':'womens','混双':'mixed'}.get(text,'open'))
         distribution = re.fullmatch(r'分配\s*(随机|种子分布|平均分布|高带低)', text)
@@ -483,18 +526,18 @@ class Commands:
             match = next((m for m in event['matches'] if m['number'] == parsed_score['number']), None)
             if not match:
                 raise ValueError('该赛事没有此场次，请查看对战表')
-            result = tournaments.score(event['id'], parsed_score['number'], parsed_score['scores'],
+            result = tournaments.score(event['id'], parsed_score['number'], parsed_score.get('outcome') or parsed_score['scores'],
                 (expected or {}).get('match_version', match['version']), venue_id, by_number=True)
             return tournaments.describe(result['id'])
-        event_action = re.fullmatch(r'(.+?)[,，]\s*(对战表|比分|积分表|我的赛程|规则|说明|暂停比赛|暂停|继续比赛|恢复比赛|晋级|关闭比赛|关闭|删除比赛)', text)
+        event_action = re.fullmatch(r'(.+?)[,，]\s*(对战表|比分|积分表|我的赛程|规则|说明|暂停比赛|暂停|继续比赛|恢复比赛|晋级|关闭比赛|关闭|删除比赛|取消活动)', text)
         if event_action:
             event = self.event_by_name(event_action[1].strip(), venue_id, selection['day'])
             action = event_action[2]
             if action in ('对战表','比分','积分表','我的赛程','规则','说明'):
                 return tournaments.describe(event['id'], 'rules' if action in ('规则','说明') else 'mine' if action == '我的赛程' else 'results' if action == '积分表' else 'schedule')
-            if action == '删除比赛':
+            if action in ('删除比赛', '取消活动'):
                 tournaments.delete(event['id'], event['version'], venue_id)
-                return self.say('event.deleted', event=event['title'])
+                return self.say('event.activity_cancelled' if action == '取消活动' else 'event.deleted', event=event['title'])
             if action in ('继续比赛','恢复比赛') and event['status'] == 'running':
                 return tournaments.describe(event['id'])
             tournaments.transition(event['id'], {'暂停比赛':'pause','暂停':'pause','继续比赛':'resume','恢复比赛':'resume','晋级':'advance','关闭比赛':'close','关闭':'close'}[action], venue_id)
@@ -557,6 +600,8 @@ class Commands:
         actions = ['query']
         if permissions.get('delete'):
             actions.append('delete')
+        if event.get('format') == 'match_sequence' and status in ('running', 'paused') and (permissions['manage'] or self.ctx.actor in event.get('participant_user_ids', [])):
+            actions.append('withdraw')
         if permissions['score'] and (status == 'running' or status == 'completed' and permissions['correct_score']):
             actions.append('score')
         if status == 'paused' and permissions['manage'] or status == 'running':
@@ -629,8 +674,8 @@ class Commands:
         event_mutation = re.fullmatch(r'(.+?)[,，]\s*(暂停比赛|关闭比赛|删除比赛|晋级|报名(?:\+\d+)?|报名[,，].+|取消报名|取消.+)', text)
         if event_mutation:
             event = self.event_by_name(event_mutation[1], selection['venue_id'], selection['day'])
-            if event_mutation[2] in ('暂停比赛', '关闭比赛', '删除比赛', '晋级'):
-                action = {'暂停比赛':'pause', '关闭比赛':'close', '删除比赛':'delete', '晋级':'advance'}[event_mutation[2]]
+            if event_mutation[2] in ('暂停比赛', '关闭比赛', '删除比赛', '晋级', '取消活动'):
+                action = {'暂停比赛':'pause', '关闭比赛':'close', '删除比赛':'delete', '取消活动':'delete', '晋级':'advance'}[event_mutation[2]]
                 if action not in self.event_ai_actions(event):
                     raise PermissionError('当前没有操作权限，或赛事状态不允许该操作')
             else:
@@ -659,6 +704,11 @@ class Commands:
             command = f"场地{selection['venue_id']} {session['date']} {session['start']} {text}"
             result.update(planning=record, formal=candidates['formal'], substitutes=candidates['substitutes'], session=session)
         score = parse_score(text)
+        withdrawal = re.fullmatch(r'(.+?)[,，]\s*(.+)退出', text)
+        if withdrawal or text == '取消活动':
+            event = self.event_by_name(withdrawal[1], selection['venue_id'], selection['day']) if withdrawal else self.current_daily(selection)
+            result['daily_version'] = event['version']
+            result['event_digest'] = hashlib.sha256(dumps(event).encode()).hexdigest()
         resume = re.fullmatch(r'继续比赛(?:\s+(\d+))?', text)
         if score:
             event = self.event_by_name(score['title'], selection['venue_id'], selection['day']) if score['title'] else self.require_event(self.tournaments().get(score['event_id'], selection['venue_id']))
@@ -757,7 +807,7 @@ class Commands:
         query_text, _ = parse_selection(command)
         valid = {
             'SelfLevel': bool(re.fullmatch(r'自评[1-9]级', query_text)),
-            'EventAction': bool(re.fullmatch(r'.+?[,，]\s*(暂停比赛|关闭比赛|删除比赛|晋级)', query_text)),
+            'EventAction': bool(re.fullmatch(r'.+?[,，]\s*(暂停比赛|关闭比赛|删除比赛|晋级|取消活动|.+退出)', query_text)),
             'EventRegistration': bool(re.fullmatch(r'.+?[,，]\s*(报名(?:\+\d+)?|报名[,，].+|取消报名|取消.+)', query_text)),
             'Register': bool(re.fullmatch(r'报名(?:\+\d+)?(?:\s+接龙)?', query_text) or re.fullmatch(r'报名(?:\s+接龙)?[,，][^\n]+', query_text)),
             'CancelRegistration': query_text == '取消报名' or cancellation_guests(query_text) is not None,
@@ -874,7 +924,7 @@ class Commands:
                 from .ai import StartDailyPlan
                 arguments = StartDailyPlan.model_validate(payload['arguments'])
                 _, selection = parse_selection(payload['command'])
-                result = DailyPlanning(self.ctx,self.clock).begin(selection,arguments.discipline,arguments.assignment_strategy,arguments.title,doubles_category=arguments.doubles_category)
+                result = DailyPlanning(self.ctx,self.clock).begin(selection,arguments.discipline,arguments.assignment_strategy,arguments.title,doubles_category=arguments.doubles_category,excluded_names=arguments.excluded_names)
             else:
                 result = await self.run(LiteralCommand(payload['command']), name, allow_ai=False, expected=payload['snapshot'])
         except BaseException:

@@ -62,6 +62,7 @@ def describe_step(step):
         details = ['只取消代报：'+'、'.join(a['guest_names'])+'；保留本人及其他同行' if a.get('guest_names') else '只取消本人，保留所有同行']
     elif op == 'StartDailyPlan':
         details = [a.get('title') or '每日比赛', '单打' if a['discipline']=='singles' else {'open':'双打','mens':'男双','womens':'女双','mixed':'混双'}[a['doubles_category']], STRATEGY_NAMES[a['assignment_strategy']]]
+        if a.get('excluded_names'): details.append('不参与：'+'、'.join(a['excluded_names']))
     elif op == 'DailyPlan': details = [FORMAT_NAMES[a['format']]]
     elif op == 'UpdateReminders':
         details = [f"{label}：{a[k]}" for k,label in [('open','报名提醒'),('closing','即将结束提醒'),('roster','名单通知')] if k in a]
@@ -87,9 +88,9 @@ def describe_step(step):
         details = [feature['name'] if feature else a['feature_id']]
     elif op in ('ResumeTournament','RecordScore','TournamentQuery','EventAction','EventRegistration'):
         details = [a.get('tournament_name') or '匹配未结束赛事']
-        if op == 'RecordScore': details += [f"第{a['match_id']}场", ' / '.join(f'{x}:{y}' for x,y in a['scores'])]
+        if op == 'RecordScore': details += [f"第{a['match_id']}场", ('甲方胜' if a['outcome']=='a' else '乙方胜') if a.get('outcome') else ' / '.join(f'{x}:{y}' for x,y in a['scores'])]
         if op == 'TournamentQuery': details.append({'schedule':'对战表','results':'积分表','mine':'我的赛程','rules':'规则'}[a['view']])
-        if op == 'EventAction': details.append({'pause':'暂停','close':'关闭','advance':'晋级','delete':'删除'}[a['action']])
+        if op == 'EventAction': details.append(('、'.join(a['names'])+'退出') if a['action']=='withdraw' else {'pause':'暂停','close':'关闭','advance':'晋级','delete':'删除'}[a['action']])
         if op == 'EventRegistration':
             if a['action']=='cancel':
                 details.append('只取消代报：'+'、'.join(a['guest_names'])+'；保留本人及其他同行' if a.get('guest_names') else '只取消本人，保留所有同行')
@@ -160,7 +161,7 @@ async def execute_step(commands, step):
         from .message_parser import LiteralCommand
         return await commands.run(LiteralCommand('场地' + str(venue) + (' 我的统计' if op=='PersonalStats' else ' 统计')), allow_ai=False)
     if op == 'StartDailyPlan':
-        return DailyPlanning(ctx,commands.clock).begin(selection(a), a['discipline'], a['assignment_strategy'], a.get('title'), doubles_category=a['doubles_category'])
+        return DailyPlanning(ctx,commands.clock).begin(selection(a), a['discipline'], a['assignment_strategy'], a.get('title'), doubles_category=a['doubles_category'], excluded_names=a.get('excluded_names'))
     if op == 'DailyPlan':
         planner = DailyPlanning(ctx, commands.clock)
         record = planner.get(venue)
@@ -189,7 +190,7 @@ async def execute_step(commands, step):
         if op == 'RecordScore':
             match = next((m for m in event['matches'] if m['number']==a['match_id']),None)
             if not match: raise ValueError('该赛事没有此对战场次')
-            events.score(event['id'], a['match_id'], a['scores'], match['version'], venue, by_number=True)
+            events.score(event['id'], a['match_id'], a.get('outcome') or a['scores'], match['version'], venue, by_number=True)
         elif op == 'EventRegistration':
             if a['action']=='cancel':
                 if a.get('guest_names'): events.cancel_guests(event['id'],ctx.actor,a['guest_names'],venue)
@@ -199,6 +200,8 @@ async def execute_step(commands, step):
         elif op == 'ResumeTournament':
             if event['status']=='paused': events.transition(event['id'],'resume',venue)
             elif event['status']!='running': raise ValueError('赛事当前不能继续')
+        elif a['action'] == 'withdraw':
+            events.withdraw(event['id'], a['names'], venue, event['version'])
         elif a['action'] == 'delete':
             events.delete(event['id'], event['version'], venue)
             return commands.say('event.deleted', event=event['title'])

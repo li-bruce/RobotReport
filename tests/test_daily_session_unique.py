@@ -156,7 +156,7 @@ class DailySessionUniqueTests(CoreFixture):
         self.assertIn('原比赛已删除', self.send(0, '积分赛'))
         self.assertEqual(self.events[0].list(), [])
         self.assertIn('每日策划', self.send(1, '组织比赛 双打 新比赛'))
-        self.assertIn('VS', self.send(1, '积分赛'))
+        self.assertIn('| 甲方 |', self.send(1, '积分赛'))
 
     def test_delete_scope_and_large_event_protection(self):
         event = self.create()

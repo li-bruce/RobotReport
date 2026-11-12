@@ -337,7 +337,7 @@ class CasualMatches:
             row = dict(source)
             sides = [json.loads(row['side_a'] or 'null'), json.loads(row['side_b'] or 'null')]
             scores = json.loads(row['scores'] or '[]')
-            if not all(sides) or not scores or row['winner'] not in {side['id'] for side in sides}:
+            if not all(sides) or row['winner'] not in {side['id'] for side in sides}:
                 continue
             people = {p['id']: dict(p) for p in db.execute('SELECT * FROM tour_participants WHERE tournament_id=?', (row['tournament_id'],))}
             teams = []

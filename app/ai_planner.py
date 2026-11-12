@@ -463,6 +463,8 @@ def validate_plan(raw: dict[str, Any], trusted: dict[str, Any], text: str = "", 
         if operation in ("Register", "CancelRegistration", "EventRegistration") and any(name not in grounded_text for name in intent.guest_names):
             raise ai._ClarificationRequired("请在需求中提供完整的代报名姓名，不能由AI猜测人员。")
         if operation == "StartDailyPlan":
+            if any(not name or name not in grounded_text for name in intent.excluded_names):
+                raise ai._ClarificationRequired('请提供完整的不参与人员姓名。')
             if intent.discipline == "singles" and intent.doubles_category != "open":
                 raise ValueError("Singles cannot have a doubles category.")
             selected_plan = {"venue_id": values["venue_id"], "status": "proposed"}
@@ -478,6 +480,8 @@ def validate_plan(raw: dict[str, Any], trusted: dict[str, Any], text: str = "", 
                 created.add((values["venue_id"], pending_title))
             selected_plan, pending_title = None, None
         elif isinstance(intent, ai._TournamentIntent):
+            if operation == 'EventAction' and intent.action == 'withdraw' and (not intent.names or any(not n or n not in grounded_text for n in intent.names)):
+                raise ai._ClarificationRequired('请明确退出人员姓名。')
             values = _normalize_event(operation, values, trusted, grounded_text, created)
         normalized.append({"operation": operation, "arguments": values})
     confirmation = any(step["operation"] not in READ_OPERATIONS for step in normalized)

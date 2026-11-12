@@ -652,6 +652,8 @@ class Service:
             promote_today(db, session, self.ctx.scope_id, self.clock(), self.ctx.platform_root)
             if changed:
                 audit(db, self.ctx.actor, 'registration.enroll', {'user_id': user_id, 'session_id': session['id'], 'guests': guests, 'added_guests': guests, 'active_guests': len(active_guests) + guests, 'removed': 0, 'chat_id': self.ctx.scope_id, 'bot_id':self.ctx.id, 'substitute_only':substitute_only})
+                from .daily_sequence import sync_registration
+                sync_registration(db, self, session)
             finish(db,self.ctx,request_id,receipt,self.clock())
         result = self.registrations(session['date'], session['venue_id'], session['id'], registration=True)
         with connect(self.path) as db:
@@ -681,6 +683,8 @@ class Service:
             changed = db.execute("UPDATE registrations SET status='cancelled',updated_at=? WHERE session_id=? AND chat_id=? AND user_id=? AND guest_index=0 AND status='active'", (stamp(self.clock()), session['id'], self.ctx.scope_id, user_id)).rowcount
             if changed:
                 audit(db, self.ctx.actor, 'registration.cancel', {'user_id': user_id, 'session_id': session['id'], 'count': changed, 'chat_id': self.ctx.scope_id})
+                from .daily_sequence import sync_registration
+                sync_registration(db, self, dict(current))
             finish(db,self.ctx,request_id,receipt,self.clock())
         return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': changed}
 
@@ -717,6 +721,8 @@ class Service:
             timestamp = stamp(self.clock())
             db.executemany("UPDATE registrations SET status='cancelled',updated_at=? WHERE id=?", [(timestamp, target) for target in targets])
             audit(db, self.ctx.actor, 'registration.cancel_guests', {'user_id': user_id, 'session_id': session['id'], 'registration_ids': targets, 'count': len(targets), 'chat_id': self.ctx.scope_id})
+            from .daily_sequence import sync_registration
+            sync_registration(db, self, dict(current))
             finish(db,self.ctx,request_id,receipt,self.clock())
         return self.registrations(session['date'], venue_id, session['id'], registration=True) | {'cancelled': len(targets)}
 
@@ -734,6 +740,8 @@ class Service:
                 return {'ok': True}
             db.execute("UPDATE registrations SET status='cancelled',updated_at=? WHERE id=?", (stamp(self.clock()), registration_id))
             audit(db, self.ctx.actor, 'registration.cancel_person', {'registration_id': registration_id, 'user_id': row['user_id'], 'session_id': row['session_id']})
+            from .daily_sequence import sync_registration
+            sync_registration(db, self, dict(session))
         return {'ok': True}
 
     def calendar(self, month, venue_id=1):

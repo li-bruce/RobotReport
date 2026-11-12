@@ -123,6 +123,8 @@ define('event.choose_score', '记分前选择赛事', '每日与大型赛事', '
 define('event.choose_resume', '选择继续哪场比赛', '每日与大型赛事', '找到几场还没结束的比赛，您想继续哪一场？\n\n{choices}')
 define('event.transition', '赛事状态调整', '每日与大型赛事', '**{event}** 已{result}')
 define('event.deleted', '每日比赛已删除', '每日与大型赛事', '**{event}** 已删除，本场次可以重新组织比赛。')
+define('event.activity_cancelled', '取消每日活动', '每日与大型赛事', '**{event}** 已取消，报名名单保留。')
+define('event.sequence_withdrawn', '退出对战序列', '每日与大型赛事', '**{names}** 已退出，后续对局已更新。')
 define('event.organization_saved', '赛事安排已保存', '每日与大型赛事', '**{event}** 的{field}已保存。{detail}')
 define('record.guide', '零散对局示例', '对局记录', '打完一局了吗？可以这样记下来：\n\n{record_example}\n{single_record_example}\n\n请带上双方姓名和比分；本人需要参赛。')
 define('record.saved', '对局已记录', '对局记录', '{content}\n\n已记录并计入您的对战统计！需要修正可发送 {edit_command}。', image=True)

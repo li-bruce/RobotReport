@@ -25,6 +25,13 @@ def parse_score(text):
     text = text.strip()
     if not text:
         return None
+    outcome = re.fullmatch(rf'(?:(.+?)[,，]\s*)?第?\s*({NUMBER})\s*场?\s*[,，]?\s*(甲方?|乙方?|[AaBb])?\s*(胜|负|赢|输)', text)
+    if outcome:
+        side = 'b' if outcome[3] in ('乙', '乙方', 'b', 'B') else 'a'
+        if outcome[4] in ('负', '输'):
+            side = 'a' if side == 'b' else 'b'
+        return {'title': outcome[1].strip() if outcome[1] else None, 'event_id': None,
+                'number': _number(outcome[2]), 'scores': [], 'outcome': side}
     # ISO dates occur in reservations and in default event titles. Only a
     # delimited title followed by a score-shaped body can opt into score parsing.
     prefix = re.match(r'^([^,，]+)[,，]\s*(.*)$', text, re.S)

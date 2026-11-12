@@ -98,7 +98,7 @@ class IntegrationTests(CoreFixture):
         with self.assertRaises(PermissionError):
             asyncio.run(self.commands().run(f"赛事 {event_id} 第 {next_match['number']} 场 21:19"))
 
-    def test_daily_creator_and_admin_only_despite_legacy_leader_configuration(self):
+    def test_daily_members_score_despite_legacy_leader_configuration(self):
         self.s.update_config({'scoring_mode':'leader','leader_user_ids':['leader']})
         for user in ('1001','2'):
             self.s.enroll(user,user)
@@ -112,9 +112,8 @@ class IntegrationTests(CoreFixture):
         with self.assertRaises(PermissionError):
             Tournaments(replace(self.member,actor='leader'),self.clock).score(member_event['id'],member_event['matches'][0]['id'],[[21,19]])
         self.assertTrue(Tournaments(self.member,self.clock).score(member_event['id'],member_event['matches'][0]['id'],[[21,19]])['matches'][0]['scores'])
-        with self.assertRaises(PermissionError):
-            Tournaments(self.member,self.clock).score(admin_event['id'],admin_event['matches'][0]['id'],[[21,19]])
-        self.assertTrue(Tournaments(self.ctx,self.clock).score(admin_event['id'],admin_event['matches'][0]['id'],[[21,19]])['matches'][0]['scores'])
+        self.assertTrue(Tournaments(self.member,self.clock).score(admin_event['id'],admin_event['matches'][0]['id'],[[21,19]])['matches'][0]['scores'])
+        self.assertTrue(Tournaments(self.ctx,self.clock).score(admin_event['id'],admin_event['matches'][0]['id'],[[21,18]],1)['matches'][0]['scores'])
 
     def test_resume_multiple_candidates_and_wrong_venue(self):
         self.daily()
@@ -128,7 +127,7 @@ class IntegrationTests(CoreFixture):
     def test_short_score_only_resolves_one_running_tournament(self):
         event = self.daily()
         reply = asyncio.run(self.commands().run('第1场 21:19'))
-        self.assertIn('（21）', reply)
+        self.assertIn('21 : 19', reply)
         saved = Tournaments(self.ctx, self.clock).get(event['id'])
         self.assertEqual(sum(bool(m['scores']) for m in saved['matches']), 1)
         second = self.daily('single_elimination', session_index=1)

@@ -199,3 +199,5 @@ Maintainers can find the shared inbound contract in [Message parsing](docs/MESSA
 ## License
 
 Project code and documentation use the [MIT License](LICENSE). Bundled fonts and holiday data retain their own notices; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+Daily competitions include a dynamic match sequence: round-robin teams, rotating partners, live participant changes, and score or win/loss recording. [Scheduling rules](docs/formats.md).

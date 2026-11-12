@@ -31,7 +31,7 @@ class WorkflowV2Tests(CoreFixture):
         router=self.commands()
         self.assertIn('每日策划',asyncio.run(router.run('组织比赛 双打 '+title)))
         self.assertEqual(DailyPlanning(self.member,self.clock).get(1)['payload']['title'],title)
-        self.assertIn('VS',asyncio.run(router.run('积分赛')))
+        self.assertIn('| 甲方 |',asyncio.run(router.run('积分赛')))
         event=Tournaments(self.ctx,self.clock).list()[0]
         self.assertEqual(event['title'],title)
         return event
@@ -164,11 +164,11 @@ class WorkflowV2Tests(CoreFixture):
     def test_named_flexible_scoring_creator_corrections_have_versioned_history(self):
         summary=self.organized()
         router=self.commands()
-        self.assertIn('（21）',asyncio.run(router.run('周二双打，一21—19')))
+        self.assertIn('21 : 19',asyncio.run(router.run('周二双打，一21—19')))
         event=Tournaments(self.ctx,self.clock).get(summary['id'])
         first=next(m for m in event['matches'] if m['number']==1)
         self.assertEqual((first['scores'],first['version']),([[21,19]],1))
-        self.assertIn('（17）',asyncio.run(router.run('周二双打，1 21/17')))
+        self.assertIn('21 : 17',asyncio.run(router.run('周二双打，1 21/17')))
         event=Tournaments(self.ctx,self.clock).get(summary['id'])
         first=next(m for m in event['matches'] if m['number']==1)
         self.assertEqual((first['scores'],first['version']),([[21,17]],2))
@@ -179,10 +179,11 @@ class WorkflowV2Tests(CoreFixture):
         self.assertIn('19',corrections[0]['before_json'])
         self.assertIn('17',corrections[0]['after_json'])
 
-    def test_non_creator_cannot_score_pause_resume_or_close(self):
+    def test_participant_can_score_but_cannot_pause_resume_or_close(self):
         summary=self.organized()
         outsider=self.commands(replace(self.member,actor='1'))
-        for command in ('周二双打，第1场21:19','周二双打，暂停比赛','周二双打，关闭比赛'):
+        self.assertIn('21 : 19',asyncio.run(outsider.run('周二双打，第1场21:19')))
+        for command in ('周二双打，暂停比赛','周二双打，关闭比赛'):
             with self.subTest(command=command),self.assertRaises(PermissionError):
                 asyncio.run(outsider.run(command))
         self.assertIn('已暂停',asyncio.run(self.commands().run('周二双打，暂停比赛')))
@@ -195,7 +196,7 @@ class WorkflowV2Tests(CoreFixture):
         event=Tournaments(self.ctx,self.clock).get(summary['id'])
         self.assertEqual(event['status'],'cancelled')
         self.assertTrue(event['matches'])
-        self.assertFalse(any(m['scores'] for m in event['matches']))
+        self.assertEqual(sum(bool(m['scores']) for m in event['matches']),1)
 
     def test_participant_personal_schedule_filters_matches_and_readonly_actions(self):
         summary=self.organized()
