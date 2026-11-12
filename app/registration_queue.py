@@ -52,25 +52,37 @@ def promotion_policies(platform_root):
     if not registry.exists():
         return {}
     with connect(registry) as db:
-        return {row['id']: bool(row['external_auto_promote']) for row in db.execute(
-            "SELECT id,external_auto_promote FROM bots WHERE deleted_at=''")}
+        return {row['id']: (bool(row['external_auto_promote']), row['external_promote_minutes']) for row in db.execute(
+            "SELECT id,external_auto_promote,external_promote_minutes FROM bots WHERE deleted_at=''")}
 
 
 def promote_today(db, session, scope_id, at, platform_root=None):
-    """Admit the oldest reserve into today's vacancies in the caller's transaction.
+    """Admit eligible reserves only after their source robot's pre-start cutoff.
 
     Keep the booking's external origin and completed-day history unchanged.
     Existing formal reservations have priority when the day's queue starts.
-    After that point, a new primary booking cannot jump an older eligible reserve.
+    Before that cutoff, external bookings remain reserves even on the same day.
+    No reminder or roster query can move the cutoff forward.
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from .db import TZ, audit, stamp
     at = at.astimezone(TZ)
-    if session['date'] != at.date().isoformat() or at >= datetime.fromisoformat(session['date'] + 'T' + session['end']).replace(tzinfo=TZ):
+    if session['date'] < at.date().isoformat() or at >= datetime.fromisoformat(session['date'] + 'T' + session['end']).replace(tzinfo=TZ):
         return []
     rows = [dict(row) for row in db.execute(
         "SELECT * FROM registrations WHERE session_id=? AND chat_id=? AND status='active' ORDER BY queue_seq,id",
         (session['id'], scope_id))]
+    start = datetime.fromisoformat(session['date'] + 'T' + session['start']).replace(tzinfo=TZ)
+    policies = promotion_policies(platform_root) if any(row['substitute_only'] for row in rows) else {}
+    def eligible(row):
+        if not row['substitute_only']:
+            return True
+        enabled, minutes = policies.get(row.get('source_bot_id'), (False, 30))
+        return enabled and at >= start - timedelta(minutes=minutes)
+    # Near-midnight activities can reach their cutoff on the preceding day.
+    # Other future reservations retain their original primary/reserve ranking.
+    if session['date'] != at.date().isoformat() and not any(row['substitute_only'] and eligible(row) for row in rows):
+        return []
     timestamp = stamp(at)
     if not session.get('queue_started_at'):
         existing_formal = [row for row in rows if not row['substitute_only']][:session['capacity']]
@@ -85,9 +97,7 @@ def promote_today(db, session, scope_id, at, platform_root=None):
         db.execute("UPDATE registrations SET formal_admitted_at='' WHERE id=?", (row['id'],))
         row['formal_admitted_at'] = ''
     vacancies = max(0, session['capacity'] - min(len(admitted), session['capacity']))
-    policies = promotion_policies(platform_root)
-    promoted = [row for row in rows if not row['formal_admitted_at']
-                and (not row['substitute_only'] or policies.get(row.get('source_bot_id'), False))][:vacancies]
+    promoted = [row for row in rows if not row['formal_admitted_at'] and eligible(row)][:vacancies]
     for row in promoted:
         db.execute('UPDATE registrations SET formal_admitted_at=? WHERE id=?', (timestamp, row['id']))
     if promoted:

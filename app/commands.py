@@ -10,6 +10,7 @@ from .db import connect, dumps, stamp, now
 from .service import Service, day_value, time_value, clean_name
 from .messages import escape, roster, tournament_text, table, mention, registration_table, session_heading, enrollment_summary, enrollment_schedule_note
 from .members import Members
+from .profile_changes import PROFILE_FORM_COMMANDS
 from .planning import DailyPlanning, STRATEGIES
 from .score_parser import parse_score
 from .tournaments import Tournaments
@@ -95,7 +96,7 @@ class Commands:
 
         Event commands are checked after resolving their actual kind.
         """
-        if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:申请|修改|调整)(?:等级|分组)', text):
+        if text in PROFILE_FORM_COMMANDS or text in ('可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:申请|修改|调整)(?:等级|分组)', text):
             require_capability(self.ctx, 'registration')
         if re.match(r'^资料(?:待审核|审核列表|查看|通过|拒绝)', text):
             require_capability(self.ctx, 'management')
@@ -200,6 +201,8 @@ class Commands:
             return entry(self.ctx, member, name=name)
         if text=='补全资料':
             text='修改资料' if member['status']=='approved' else '注册'
+        if text in PROFILE_FORM_COMMANDS and member['status'] != 'approved':
+            text='注册'
         confirmation_name = re.fullmatch(r'注册确认(?:\s+(.+))?',text)
         if text in ('注册','注册申请') or confirmation_name:
             if member['status']=='approved':
@@ -248,7 +251,7 @@ class Commands:
             if member['status'] == 'approved':
                 return self.say('registration.approved',name=member['name'])
             return self.say('registration.submitted',name=member['name'])
-        if text in ('修改资料','申请修改资料','修改个人信息','申请调整资料','可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:(?:申请|修改|调整)(?:等级|分组)|资料(?:待审核|审核列表|查看|通过|拒绝))', text):
+        if text in PROFILE_FORM_COMMANDS or text in ('可选分组','分组列表','我的资料申请','资料申请进度','取消资料申请') or re.match(r'^(?:(?:申请|修改|调整)(?:等级|分组)|资料(?:待审核|审核列表|查看|通过|拒绝))', text):
             from .profile_changes import ProfileChanges
             profile_reply = ProfileChanges(self.ctx, self.clock).handle(text)
             if profile_reply is not None:
@@ -273,7 +276,7 @@ class Commands:
                 result += '\n\n' + (table(['起始日期','截止日期','记录状态'], [[row['start_date'], row['end_date'], '有效记录' if row['status']=='valid' else '已作废'] for row in periods]) if periods else '尚未登记有效期，请联系管理员。')
             if member['status'] == 'approved' and text in ('注册资料','会员状态','我的资料'):
                 result += '\n\n分组：' + ( '、'.join(escape(g['name']) for g in member['groups']) or '未分组')
-                result += '\n' + self.say('profile.next',edit_command=example(self.ctx,'修改资料'),requests_command=example(self.ctx,'我的资料申请'))
+                result += '\n' + self.say('profile.next',edit_command=example(self.ctx,'修改注册信息'),requests_command=example(self.ctx,'我的资料申请'))
             return result
         if text == '身份':
             return mention(self.ctx.actor, member.get('name') or '') + f"\n\n用户ID：{escape(self.ctx.actor)}；场地{venue_id}；" + ('后台管理员 · 正式会员' if self.ctx.is_admin else {'unregistered':'未注册账号','pending':'注册申请待审批','approved':'正式会员','rejected':'注册申请已退回','suspended':'会员已停用'}.get(member['status'],'未注册账号'))

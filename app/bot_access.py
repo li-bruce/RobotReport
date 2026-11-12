@@ -39,6 +39,7 @@ def catalog(ctx):
         field('permissions','管理权限','set',list(PERMISSION_DEFINITIONS)),
         field('name','姓名','text'), field('user_id','用户账号 ID','text'), field('phone','手机号','text',private=True),
         field('requested_level','自评级别','number',min=1,max=9),
+        field('show_level','名单展示等级','bool'),
         field('level_status','等级审核状态','enum',opts([('none','未申请'),('pending','待审批'),('approved','已通过'),('rejected','已退回')])),
         field('name_source','资料来源','text'), field('review_note','会员审核备注','text',private=True),
         field('level_note','等级审核备注','text',private=True),

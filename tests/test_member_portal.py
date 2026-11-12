@@ -153,7 +153,7 @@ class MemberPortalTests(CoreFixture):
         data=self.selection()|{'session_id':rows[1]['id']}
         self.assertEqual(self.post('enrollments',data).status_code,200)
         choices=self.client.get('/member/sessions',params={'day':data['day']}).json()['sessions']
-        self.assertEqual(choices[1]['own'][0]['category'],'正式')
+        self.assertEqual(choices[1]['own'][0]['category'],'替补')
 
     def test_ongoing_session_accepts_enrollment_but_finished_session_does_not(self):
         self.now=self.now.replace(hour=18)

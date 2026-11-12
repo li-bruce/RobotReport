@@ -9,6 +9,7 @@ from .messages import escape, table
 
 
 FIELDS = {'name': '姓名', 'gender': '性别', 'phone': '手机号', 'level': '等级', 'group_ids': '分组'}
+PROFILE_FORM_COMMANDS = frozenset(('修改注册信息', '修改资料', '申请修改资料', '修改个人信息', '申请调整资料'))
 STATUSES = {'pending': '待审核', 'approved': '已通过', 'rejected': '已退回',
             'cancelled': '已撤回', 'superseded': '已更新'}
 
@@ -106,7 +107,7 @@ class ProfileChanges:
                 (self.ctx.scope_id, int(all_users), self.ctx.actor, status, status,user_id,user_id))
             return [self._view(r, db) for r in rows]
 
-    def submit(self, changes, db=None):
+    def submit(self, changes, db=None, *, allow_unchanged=False):
         with self.members._db(db, write=True) as connection:
             member = self.members.require_approved(db=connection, allow_admin=False, bot_access=False)
             changes = self._validate(changes, self.ctx.actor, connection)
@@ -115,6 +116,8 @@ class ProfileChanges:
             combined = self._validate(combined, self.ctx.actor, connection)
             combined = {key: value for key, value in combined.items() if member.get(key) != value}
             if not combined:
+                if allow_unchanged and not old:
+                    return None
                 raise ValueError('申请内容与当前资料一致，无需修改；已有申请可发送 取消资料申请 撤回')
             before = {key: member.get(key) for key in combined}
             if 'level' in combined:
@@ -188,7 +191,7 @@ class ProfileChanges:
         return f"**资料申请{row['id']} · {STATUSES[row['status']]}**\n\n" + table(['项目', '当前资料', '申请调整为'], [[r['label'], r['before'], r['after']] for r in row['items']])
 
     def handle(self, text):
-        if text in ('修改资料', '申请修改资料', '修改个人信息', '申请调整资料'):
+        if text in PROFILE_FORM_COMMANDS:
             member = self.members.require_approved(allow_admin=False, bot_access=False)
             from .registration import create_form
             url = create_form(self.ctx, self.clock, purpose='profile')

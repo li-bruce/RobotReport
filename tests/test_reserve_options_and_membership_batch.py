@@ -43,7 +43,7 @@ class ReserveOptionsTests(CoreFixture):
         self.book('1001', guests=1)
         self.book('1002', True)
         self.assertEqual([r['category'] for r in self.rows()], ['替补','替补','替补'])
-        self.now += timedelta(days=1)
+        self.now = (self.now+timedelta(days=1)).replace(hour=20,minute=0)
         Scheduler(self.platform, clock=self.clock).tick()
         for source in (self.actor('1001'), self.actor('1002', True), self.platform.workspace_context()):
             data = Service(source,self.clock).registrations(self.day,1,self.target['id'],registration=True)

@@ -45,7 +45,7 @@ def test_roster_heading_uses_snapshot_context_and_separate_bold_time():
 
 def test_roster_has_three_columns_no_rank_or_internal_identifier():
     rows = [
-        dict(name='张三', user_id='internal-1', guest_index=0, level=3,
+        dict(name='张三', user_id='internal-1', guest_index=0, level=3, show_level=True,
              gender='male', category='正式', rank=11, status='active', session_id=1),
         dict(name='小王', user_id='internal-1', guest_index=1, sponsor_name='张三',
              gender='unknown', category='substitute', rank=12, status='active', session_id=1),

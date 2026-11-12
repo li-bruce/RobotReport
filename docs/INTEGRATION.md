@@ -174,6 +174,11 @@ Bot create/update accepts `notification_types`. Null preserves legacy capability
 
 ### External reserve promotion and bulk membership terms
 
-`POST /api/bots` and `PATCH /api/bots/{id}` accept `external_auto_promote` (boolean, default true). With external reserve enrollment enabled, current-day vacancies can promote eligible bookings from this robot. Disabling it retains pending external reserves; already admitted seats stay formal. Bookings store their originating robot and shared reads use its current setting.
+`POST /api/bots` and `PATCH /api/bots/{id}` accept `external_auto_promote` (boolean, default true). `external_promote_minutes` (integer 0–1440, default 30) sets the lead time before each session starts. External entries stay reserves until that cutoff, then fill formal vacancies by queue order. This timer works independently of scheduled announcements, including cutoffs on the preceding day for midnight sessions. Disabling it retains pending external reserves; already admitted seats stay formal. Bookings store their originating robot and shared reads use its current setting.
 
 Administrators with member-management permission can preview `POST /api/membership/periods/batch-preview` using `{"user_ids":["member-id"],"period":{"start_date":"2027-01-01","end_date":"2027-12-31"}}`. Send the same payload plus the returned `revision` as `expected_revision` to `POST /api/membership/periods/batch`. Select 1–200 distinct members. Dates and existing periods must not overlap; unreviewed members are rejected. Confirmation is atomic, records changed since preview are rejected, and renewal history is retained. Optional `amount` is a decimal string per member; `note` is text.
+
+
+### Personal profile and roster rating visibility
+
+`修改注册信息` returns an identity-bound `/register` link. Approved members edit their existing profile; other members follow registration. Profile changes still require approval. The optional boolean `show_level` defaults to false for all members. Registration and profile forms can save this personal preference immediately; it only controls rating display in enrollment receipts and rosters, not eligibility or team balancing. Ratings are displayed only after review. `GET /public/registration/{bot_id.token}` includes `profile.show_level`; POST accepts the preference with other profile fields. A preference-only save returns `request_id: null`. The personal token determines the account and group; new links replace old drafts and submitted receipts are idempotent.

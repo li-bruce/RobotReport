@@ -14,16 +14,18 @@ function importSuggestion(result){
   if(result.profile)for(const key of ['name','gender','level']){
     if(Object.prototype.hasOwnProperty.call(result.profile,key))form.elements[key].value=result.profile[key]??'';
   }
+  if(Object.prototype.hasOwnProperty.call(result.profile||{},'show_level'))form.elements.show_level.checked=Boolean(result.profile.show_level);
   suggestedValues=hint?Object.fromEntries(['gender','level'].map(key=>[key,form.elements[key].value])):null;
 }
 function profileForm(result){
   purpose='profile';
   document.title='资料调整申请';
   document.querySelector('.brand').textContent='会员服务 · 个人资料';
-  document.querySelector('h1').textContent='申请调整资料';
-  document.querySelector('h1 + p').textContent='填写需要调整的资料，审核通过后生效。分组按下方完整选择提交。';
+  document.querySelector('h1').textContent='修改注册信息';
+  document.querySelector('h1 + p').textContent='资料变更需审核；名单显示设置保存即生效。';
   submitButton.textContent='提交资料申请';
   for(const name of ['name','gender','level'])form.elements[name].value=result.profile[name]??'';
+  form.elements.show_level.checked=Boolean(result.profile.show_level);
   form.elements.phone.value='';form.elements.phone.placeholder='不修改请留空';
   document.querySelector('#phone-help').textContent='手机号不修改请留空；不需要在群里公开手机号。';
   let fieldset=document.querySelector('#profile-groups');
@@ -50,10 +52,10 @@ function showResult(result,moveFocus=false){
   form.reset();form.hidden=true;
   if(result.purpose==='profile'){
     document.querySelector('#result').hidden=false;
-    document.querySelector('#result-title').textContent='资料申请已提交';
+    document.querySelector('#result-title').textContent=result.request_id?'资料申请已提交':'设置已保存';
     document.querySelector('#summary').textContent=result.name;
     document.querySelector('#result-message').textContent=result.message;
-    document.querySelector('#next-step').textContent='回群发送“我的资料申请”查看审核进度。';
+    document.querySelector('#next-step').textContent=result.request_id?'回群发送“我的资料申请”查看审核进度。':'可以返回群聊继续报名。';
     status.textContent='';if(moveFocus)document.querySelector('#result-title').focus();return;
   }
   const approved=result.member_status==='approved', linked=result.registration_result==='linked';
@@ -98,7 +100,7 @@ form.elements.name.addEventListener('change',async()=>{
 form.addEventListener('submit',async event=>{
   event.preventDefault();if(submitting)return;submitting=true;++lookupVersion;form.setAttribute('aria-busy','true');submitButton.disabled=true;submitButton.textContent='正在提交…';status.textContent='';
   try{
-    const data=new FormData(form),payload={name:data.get('name'),gender:data.get('gender'),level:data.get('level')?Number(data.get('level')):null,phone:data.get('phone')};
+    const data=new FormData(form),payload={name:data.get('name'),gender:data.get('gender'),level:data.get('level')?Number(data.get('level')):null,phone:data.get('phone'),show_level:form.elements.show_level.checked};
     if(!payload.phone.trim())delete payload.phone;
     if(purpose==='profile')payload.group_ids=data.getAll('group_ids').map(Number);
     const result=await call('POST',payload);
@@ -106,4 +108,6 @@ form.addEventListener('submit',async event=>{
   }catch(error){status.textContent=error.message;status.focus();}
   finally{submitting=false;form.removeAttribute('aria-busy');submitButton.disabled=false;submitButton.textContent=purpose==='profile'?'提交资料申请':registrationSubmitLabel;}
 });
+// A second personal link may reuse this browser tab. Re-read its bound identity.
+globalThis.addEventListener?.('hashchange',()=>location.reload());
 initialize();

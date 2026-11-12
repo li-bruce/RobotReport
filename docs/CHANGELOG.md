@@ -1,5 +1,12 @@
 # Changes
 
+## v1.0 · 2026-11-12 · Pre-activity admission and personal profiles
+
+- Keep external registrations in reserve until the source robot’s configurable pre-start cutoff (30 minutes by default), independently of announcements. Preserve admitted seats and history.
+- Hide ratings in enrollment receipts and rosters by default. Members choose visibility in their personal form; eligibility and team balancing retain the reviewed rating.
+- Add `修改注册信息` with an authenticated personal form, reviewed profile updates and immediate display preferences. Reload when a second personal link opens in the same browser tab.
+- Update desktop/mobile controls and illustrated usage guides.
+
 ## v1.0 · 2026-11-12 · Reserve policy and batch membership periods
 
 - Configure same-day external reserve promotion per robot, using the booking origin rather than the querying robot. Preserve admitted seats and historical rosters.

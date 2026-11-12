@@ -57,7 +57,7 @@ def syntax_help(enabled, is_admin=False, permissions=(), category=None):
         if category and form:body+='\n格式：'+form
         rows.append(body)
 
-    add('注册','registration','注册与资料','注册确认',('注册资料','修改资料'),command('注册')+' → 本人表单')
+    add('注册','registration','注册与资料','注册确认',('注册资料','修改注册信息'),command('注册')+' → 本人表单')
     add('报名','enrollment','报名与预约','明天第2场 报名，张三，李四',('报名','手动报名','名单','取消报名','场地占用'),parameter('日期 / 场地 / 场次，可省略')+' '+command('报名')+'，'+parameter('同行姓名，可省略'))
     add('比赛','daily_events','每日趣味赛','组织比赛 混双',('继续比赛',),syntax('组织比赛','单打 / 双打 / 男双 / 女双 / 混双'))
     add('大型赛事','large_events','大型赛事报名','春季联赛报名',(),parameter('赛事关键词')+command('报名'))
@@ -186,7 +186,7 @@ def scoped_help(ctx, member, category=None, clock=None):
             value+='\n\n**还可报名替补**\n'+'\n'.join(labels[:8])
             if len(labels)>8:value+=f'\n另有 {len(labels)-8} 个可选时段。'
             value+='\n例如 '+example(ctx,f"场地{s['venue_id']} 明天 {s['start']} 报名")+'；相同场次可发送 '+command('名单')+'、'+command('取消报名')+'。'
-            value+=('\n活动当天正式有空位时，按报名顺序递补。' if ctx.external_auto_promote else '\n以上场次保持替补席位。')
+            value+=(f'\n活动开始前{ctx.external_promote_minutes}分钟起，按报名顺序递补正式空位。' if ctx.external_auto_promote else '\n以上场次保持替补席位。')
     if category or not set(ctx.capabilities or ()) & {'enrollment','daily_events','large_events','match_records'}:return value
     venues=[v for v in service.venues() if v['active']]
     lines=[]

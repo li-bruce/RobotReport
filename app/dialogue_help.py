@@ -14,7 +14,7 @@ COPY = {
 def category_reply(ctx, category, content):
     from .dialogue import render, command, Markup
     key = COPY[category][0]
-    commands = {'edit_command':'AI 修改意见' if category=='AI' else '修改资料',
+    commands = {'edit_command':'AI 修改意见' if category=='AI' else '修改注册信息',
                 'guests_command':'报名，张三，李四','cancel_self_command':'取消报名',
                 'cancel_guests_command':'取消张三，李四','schedule_example':'春季联赛，我的赛程',
                 'edit_example':'修改记录 12 21:18','void_example':'作废记录 12',

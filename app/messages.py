@@ -98,7 +98,7 @@ def registration_name(row, include_level=True):
             sponsor = '待补姓名'
         return f'{name}（{sponsor}代报名）'
     level = row.get('level')
-    if include_level and isinstance(level, int) and not isinstance(level, bool) and 1 <= level <= 9:
+    if include_level and row.get('show_level') and isinstance(level, int) and not isinstance(level, bool) and 1 <= level <= 9:
         name += f'（{level}级）'
     return name
 

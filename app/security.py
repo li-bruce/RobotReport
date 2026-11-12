@@ -134,6 +134,7 @@ class BotContext:
     allow_external_substitute: bool = False
     external_slot_keys: tuple = ()
     external_auto_promote: bool = True
+    external_promote_minutes: int = 30
     recipient_name: str = ''
     notification_types: tuple | None = None
 
@@ -178,6 +179,8 @@ class Platform:
                 db.execute('ALTER TABLE bots ADD COLUMN allow_external_substitute INTEGER NOT NULL DEFAULT 0')
             if 'external_auto_promote' not in bot_columns:
                 db.execute('ALTER TABLE bots ADD COLUMN external_auto_promote INTEGER NOT NULL DEFAULT 1')
+            if 'external_promote_minutes' not in bot_columns:
+                db.execute('ALTER TABLE bots ADD COLUMN external_promote_minutes INTEGER NOT NULL DEFAULT 30')
             if 'external_slot_keys' not in bot_columns:
                 db.execute("ALTER TABLE bots ADD COLUMN external_slot_keys TEXT NOT NULL DEFAULT '[]'")
             for field, default in (('deleted_at', ''), ('user_policy', 'null'), ('capability_rules','[]'), ('notification_types','null')):
@@ -388,6 +391,7 @@ class Platform:
             'venue_ids': json.loads(bot['venue_ids']), 'slot_keys': json.loads(bot['slot_keys']),
             'allow_external_substitute': bool(bot['allow_external_substitute']),
             'external_auto_promote': bool(bot['external_auto_promote']),
+            'external_promote_minutes': bot['external_promote_minutes'],
             'external_slot_keys': json.loads(bot['external_slot_keys']),
             'capabilities': list(normalize_capabilities(json.loads(bot['capabilities']))),
             'capability_rules': json.loads(bot['capability_rules']),
@@ -456,8 +460,11 @@ class Platform:
                 raise ValueError('替补报名场次须在本机器人的负责范围之外，请调整场次选择')
         promote = data.get('external_auto_promote', bool(old.get('external_auto_promote', True)))
         if type(promote) is not bool:
-            raise ValueError('当天自动递补须为开关')
-        return enabled, keys, promote
+            raise ValueError('活动前自动递补须为开关')
+        minutes = data.get('external_promote_minutes', old.get('external_promote_minutes', 30))
+        if type(minutes) is not int or not 0 <= minutes <= 1440:
+            raise ValueError('提前递补时间须为0至1440分钟的整数')
+        return enabled, keys, promote, minutes
 
     def _channel_data(self, data, old=None):
         allowed = {'name','chat_id','group_id','webhook_url','robot_key','active','default_venue_id','venue_ids','receive_commands','daily_notifications','slot_keys'}
@@ -604,7 +611,7 @@ class Platform:
         record = self._channel_data(channel_data) if chat or data.get('group_id') else None
         scope_data = {k:self._scope_value(k,data[k]) for k in ('venue_ids','slot_keys') if k in data}
         capabilities = normalize_capabilities(data.get('capabilities', DEFAULT_CAPABILITIES))
-        external_enabled, external_keys, external_promote = self._external_registration(data)
+        external_enabled, external_keys, external_promote, external_minutes = self._external_registration(data)
         from .time_rules import normalize_capability_rules
         capability_rules = normalize_capability_rules(data.get('capability_rules'),capabilities)
         from .bot_access import normalize
@@ -623,7 +630,7 @@ class Platform:
             db.execute('INSERT INTO bots(id,name,active,chat_id,webhook_url,robot_key,callback_hash,legacy,created_at,capabilities) VALUES(?,?,1,?,?,?,?,?,?,?)', (bot_id,name,chat,record['webhook_url'] if record else '',record['robot_key'] if record else '',digest(callback),int(bool(data.get('legacy',False))),stamp(),dumps(capabilities)))
             db.execute('UPDATE bots SET notification_types=? WHERE id=?',(dumps(notices),bot_id))
             db.execute('UPDATE bots SET user_policy=? WHERE id=?',(dumps(user_policy),bot_id))
-            db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=?,external_auto_promote=? WHERE id=?', (int(external_enabled),dumps(external_keys),int(external_promote),bot_id))
+            db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=?,external_auto_promote=?,external_promote_minutes=? WHERE id=?', (int(external_enabled),dumps(external_keys),int(external_promote),external_minutes,bot_id))
             db.execute('UPDATE bots SET capability_rules=? WHERE id=?',(dumps(capability_rules),bot_id))
             if record:
                 from .bot_groups import attach
@@ -643,7 +650,7 @@ class Platform:
         old = self.bot(bot_id)
         from .feedback import normalize as normalize_notices
         notices=normalize_notices(data.get('notification_types',json.loads(old['notification_types'])))
-        external_enabled, external_keys, external_promote = self._external_registration(data, old)
+        external_enabled, external_keys, external_promote, external_minutes = self._external_registration(data, old)
         validated_scope = {k:self._scope_value(k,data[k]) for k in ('venue_ids','slot_keys') if k in data}
         capabilities = normalize_capabilities(data['capabilities']) if 'capabilities' in data else None
         from .time_rules import normalize_capability_rules
@@ -655,7 +662,7 @@ class Platform:
         capability_rules=normalize_capability_rules(rules,selected)
         from .bot_access import normalize
         user_policy = normalize(data['user_policy'],self.workspace_context()) if 'user_policy' in data else None
-        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy','capability_rules','allow_external_substitute','external_slot_keys','external_auto_promote','notification_types'}
+        allowed = {'name','active','callback_token','legacy','chat_id','webhook_url','robot_key','admin_user_ids','venue_ids','slot_keys','capabilities','user_policy','capability_rules','allow_external_substitute','external_slot_keys','external_auto_promote','external_promote_minutes','notification_types'}
         if set(data)-allowed:
             raise ValueError('不支持的机器人配置字段')
         if data.get('admin_user_ids'):
@@ -685,7 +692,7 @@ class Platform:
             self._live_record(db,bot_id)
             db.execute('UPDATE bots SET notification_types=? WHERE id=?',(dumps(notices),bot_id))
             db.execute('UPDATE bots SET name=?,active=?,callback_hash=?,legacy=? WHERE id=?',tuple(old[k] for k in ('name','active','callback_hash','legacy','id')))
-            db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=?,external_auto_promote=? WHERE id=?', (int(external_enabled),dumps(external_keys),int(external_promote),bot_id))
+            db.execute('UPDATE bots SET allow_external_substitute=?,external_slot_keys=?,external_auto_promote=?,external_promote_minutes=? WHERE id=?', (int(external_enabled),dumps(external_keys),int(external_promote),external_minutes,bot_id))
             if capabilities is not None:
                 db.execute('UPDATE bots SET capabilities=? WHERE id=?', (dumps(capabilities),bot_id))
             if user_policy is not None:

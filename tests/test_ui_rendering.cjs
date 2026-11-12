@@ -130,9 +130,9 @@ async function registrationPageChecks(){
   const token='a'.repeat(32)+'.'+'b'.repeat(43), flush=()=>new Promise(resolve=>setImmediate(resolve));
   function page(first,hash='#'+token){
     const button={disabled:true,textContent:''}, listeners={},requests=[];
-    const fields={name:'张三',gender:'male',level:'9',phone:'13800000001'};
+    const fields={name:'张三',gender:'male',level:'9',phone:'13800000001',show_level:false};
     const form={hidden:true,attributes:{},setAttribute(name,value){this.attributes[name]=value;},removeAttribute(name){delete this.attributes[name];},reset(){this.resetCount=(this.resetCount||0)+1;},querySelector:()=>button,addEventListener:(name,handler)=>{listeners[name]=handler;}};
-    form.elements=Object.fromEntries(Object.keys(fields).map(key=>[key,{get value(){return fields[key];},set value(value){fields[key]=value;},addEventListener(type,handler){listeners[key+'-'+type]=handler;}}]));
+    form.elements=Object.fromEntries(Object.keys(fields).map(key=>[key,{checked:false,get value(){return fields[key];},set value(value){fields[key]=value;},addEventListener(type,handler){listeners[key+'-'+type]=handler;}}]));
     const focusable=()=>({textContent:'',focus(){this.focused=true;}});
     const elements={'#registration':form,'#phone-help':focusable(),'#status':focusable(),'#result':{hidden:true},'#result-title':focusable(),'#summary':{textContent:''},'#result-message':{textContent:''},'#next-step':{textContent:''},'#retry':{hidden:true,addEventListener:(name,handler)=>{listeners['retry-'+name]=handler;}}};
     const responses=[first];
@@ -145,7 +145,7 @@ async function registrationPageChecks(){
   const invalid=page({},'#not-an-identity');await flush();assert.equal(invalid.requests.length,0);assert.equal(invalid.form.hidden,true);
   const draft=page({status:'draft'});await flush();assert.equal(draft.form.hidden,false);assert.equal(draft.button.disabled,false);
   draft.responses.push(pending);await draft.submit();assert.equal(draft.form.hidden,true);assert.equal(draft.elements['#result'].hidden,false);assert.equal(draft.elements['#result-title'].textContent,'申请已提交');assert.match(draft.elements['#summary'].textContent,/自评 9 级/);
-  assert.deepEqual(JSON.parse(draft.requests[1].options.body),{name:'张三',gender:'male',level:9,phone:'13800000001'});assert.equal(draft.requests[1].options.credentials,'omit');assert.equal(draft.requests[1].options.cache,'no-store');assert.equal(draft.requests[1].options.referrerPolicy,'no-referrer');assert.equal(draft.elements['#result-title'].focused,true);assert.equal(draft.form.attributes['aria-busy'],undefined);
+  assert.deepEqual(JSON.parse(draft.requests[1].options.body),{name:'张三',gender:'male',level:9,phone:'13800000001',show_level:false});assert.equal(draft.requests[1].options.credentials,'omit');assert.equal(draft.requests[1].options.cache,'no-store');assert.equal(draft.requests[1].options.referrerPolicy,'no-referrer');assert.equal(draft.elements['#result-title'].focused,true);assert.equal(draft.form.attributes['aria-busy'],undefined);
   const restored=page(linked);await flush();assert.equal(restored.form.hidden,true);assert.match(restored.elements['#result-title'].textContent,/关联/);assert.match(restored.elements['#summary'].textContent,/等级 9 级/);assert.equal(restored.requests.length,1);
   const registered=page({...linked,registration_result:'already_registered'});await flush();assert.equal(registered.elements['#result-title'].textContent,'你已注册');
   const legacy=page({status:'submitted'});await flush();assert.equal(legacy.form.hidden,false);

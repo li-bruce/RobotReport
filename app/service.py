@@ -457,11 +457,12 @@ class Service:
         return [row | {'external_substitute':not owned(row)} for row in rows if owned(row) or row['slot_key'] in external_keys]
 
     def promote_today(self):
-        """Maintain existing current-day queues even when reminders are disabled."""
+        """Maintain due queues independently of reminders, including midnight slots."""
         from .registration_queue import promote_today
         at = self.clock()
         with connect(self.path, True) as db:
-            for session in db.execute('SELECT * FROM sessions WHERE date=? AND end>?', (at.date().isoformat(), at.strftime('%H:%M'))).fetchall():
+            for session in db.execute('SELECT * FROM sessions WHERE (date=? AND end>?) OR date=?',
+                                      (at.date().isoformat(), at.strftime('%H:%M'), (at.date()+timedelta(days=1)).isoformat())).fetchall():
                 promote_today(db, dict(session), self.ctx.scope_id, at, self.ctx.platform_root)
 
     def save_session_constraints(self, session_id, rules):
@@ -543,7 +544,7 @@ class Service:
         records = []
         with connect(self.path) as db:
             for session in sessions:
-                rows = db.execute('''SELECT r.*,p.name AS member_name,m.status AS member_status,m.level AS member_level,m.gender AS member_gender
+                rows = db.execute('''SELECT r.*,p.name AS member_name,m.status AS member_status,m.level AS member_level,m.gender AS member_gender,m.show_level AS member_show_level
                                      FROM registrations r LEFT JOIN profiles p ON p.chat_id=r.chat_id AND p.user_id=r.user_id
                                      LEFT JOIN member_records m ON m.chat_id=r.chat_id AND m.user_id=r.user_id
                                      WHERE r.session_id=? AND r.chat_id=? ORDER BY r.queue_seq,r.id''', (session['id'], self.ctx.scope_id)).fetchall()
@@ -557,6 +558,7 @@ class Service:
                     item['sponsor_name'] = base_name or '待完善姓名'
                     item['gender'] = (row['member_gender'] or 'unknown') if row['guest_index'] == 0 else 'unknown'
                     item['level'] = row['member_level'] if row['guest_index'] == 0 and row['member_status'] == 'approved' else None
+                    item['show_level'] = bool(row['member_show_level']) and row['guest_index'] == 0
                     item['groups'] = [dict(r) for r in db.execute('''SELECT g.id,g.name FROM member_groups g
                                          JOIN member_group_links l ON l.group_id=g.id AND l.chat_id=g.chat_id
                                          WHERE l.chat_id=? AND l.user_id=? ORDER BY g.id''', (self.ctx.scope_id, row['user_id']))] if row['guest_index'] == 0 and row['member_status'] == 'approved' else []
@@ -566,7 +568,7 @@ class Service:
                         members.assert_eligible(row['user_id'], session, guests=int(row['guest_index'] > 0), db=db)
                     except (PermissionError, ValueError) as exc:
                         item['eligible'], item['eligibility_reason'] = False, str(exc)
-                    for key in ('member_name', 'member_status', 'member_level', 'member_gender'):
+                    for key in ('member_name', 'member_status', 'member_level', 'member_gender', 'member_show_level'):
                         item.pop(key, None)
                     records.append(item)
         return {'sessions': sessions, 'registrations': records}

@@ -36,13 +36,16 @@ class CurrentDayQueueTests(CoreFixture):
     def rows(self):
         return [row for row in self.all.registrations(self.day,1,self.target['id'])['registrations'] if row['status']=='active']
 
-    def test_midnight_fills_vacancies_preserving_existing_formal_and_future_origin(self):
+    def test_cutoff_fills_vacancies_preserving_existing_formal_and_future_origin(self):
         self.book('1001',guests=1)
         self.book('1002',True)
         self.assertEqual([r['user_id'] for r in self.rows() if r['category']=='正式'], ['1002'])
         self.all.update_config({'daily_enabled':False})
         scheduler=Scheduler(self.platform,clock=self.clock)
         self.now=self.now.replace(hour=0,minute=1)+timedelta(days=1)
+        scheduler.tick()
+        self.assertEqual([r['user_id'] for r in self.rows() if r['category']=='正式'], ['1002'])
+        self.now=self.now.replace(hour=20,minute=0)
         scheduler.tick()
         with connect(self.ctx.db_path) as db:
             promoted=db.execute('SELECT user_id,guest_index,substitute_only,formal_admitted_at FROM registrations WHERE session_id=? ORDER BY queue_seq', (self.target['id'],)).fetchall()
@@ -56,11 +59,11 @@ class CurrentDayQueueTests(CoreFixture):
     def test_future_day_stays_reserve_and_past_queue_is_not_rewritten(self):
         self.book('1001',guests=1)
         self.assertEqual([r['category'] for r in self.rows()], ['替补','替补'])
-        self.now+=timedelta(days=1)
+        self.now=(self.now+timedelta(days=1)).replace(hour=20,minute=0)
         self.assertEqual([r['category'] for r in self.rows()], ['正式','正式'])
         with connect(self.ctx.db_path) as db:
             before=[tuple(r) for r in db.execute('SELECT * FROM registrations ORDER BY id')]
-        self.now+=timedelta(days=1)
+        self.now=(self.now+timedelta(days=1)).replace(hour=20,minute=0)
         self.assertEqual([r['category'] for r in self.rows()], ['正式','正式'])
         self.all.promote_today()
         with connect(self.ctx.db_path) as db:
@@ -69,7 +72,7 @@ class CurrentDayQueueTests(CoreFixture):
     def test_cancel_rejoin_and_capacity_changes_keep_oldest_reserve_ahead(self):
         self.book('1001',guests=2)
         self.book('1002',True)
-        self.now+=timedelta(days=1)
+        self.now=(self.now+timedelta(days=1)).replace(hour=20,minute=0)
         self.rows()
         Service(self.actor('1001'),self.clock).cancel('1001',day=self.day,number=2)
         self.book('1001')
@@ -84,7 +87,7 @@ class CurrentDayQueueTests(CoreFixture):
         self.assertEqual(sum(r['category']=='正式' for r in self.rows()),5)
 
     def test_concurrent_bots_share_admission_limit_and_duplicate_receipts(self):
-        self.now+=timedelta(days=1)
+        self.now=(self.now+timedelta(days=1)).replace(hour=20,minute=0)
         users=['1','2','3','4','5','6','9','1001','1002','1003','1004']
         def book(i):
             return self.book(users[i%len(users)],bool(i%2))
@@ -98,7 +101,7 @@ class CurrentDayQueueTests(CoreFixture):
     def test_primary_arrival_cannot_take_an_unprocessed_vacancy_from_older_reserve(self):
         self.book('1001',guests=1)
         self.book('1002',True)
-        self.now+=timedelta(days=1)
+        self.now=(self.now+timedelta(days=1)).replace(hour=20,minute=0)
         self.rows()
         with connect(self.ctx.db_path,True) as db:
             db.execute("UPDATE registrations SET status='cancelled' WHERE user_id='1002'")

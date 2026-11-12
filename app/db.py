@@ -118,6 +118,8 @@ def initialize(path):
         member_columns = {r['name'] for r in db.execute('PRAGMA table_info(member_records)')}
         if 'phone' not in member_columns:
             db.execute("ALTER TABLE member_records ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+        if 'show_level' not in member_columns:
+            db.execute('ALTER TABLE member_records ADD COLUMN show_level INTEGER NOT NULL DEFAULT 0')
         for table in ('member_records', 'membership_applications'):
             if 'gender' not in {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN gender TEXT NOT NULL DEFAULT 'unknown'")

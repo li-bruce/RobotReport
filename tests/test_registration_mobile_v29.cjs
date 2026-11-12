@@ -9,12 +9,12 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function page(responses,hash='#'+reference){
   const nodes={},requests=[];
   let activeElement=null;
-  const node=selector=>nodes[selector]||(nodes[selector]={hidden:['#registration','#result','#retry'].includes(selector),textContent:'',disabled:selector==='button',attributes:{},fields:{name:'李明',gender:'male',level:'9',phone:''},
+  const node=selector=>nodes[selector]||(nodes[selector]={hidden:['#registration','#result','#retry'].includes(selector),textContent:'',disabled:selector==='button',attributes:{},fields:{name:'李明',gender:'male',level:'9',phone:'',show_level:false},
     querySelector:node,setAttribute(key,value){this.attributes[key]=value;},removeAttribute(key){delete this.attributes[key];},
     focus(){activeElement=selector;},reset(){this.didReset=true;},addEventListener(type,handler){this[type]=handler;}});
   const context=vm.createContext({encodeURIComponent,location:{hash},document:{querySelector:node},FormData:class{constructor(form){this.fields=form.fields;}get(key){return this.fields[key]??null;}},
     fetch:async(url,options)=>{requests.push({url,...options});const result=responses.shift();if(result instanceof Error)throw result;if(typeof result==='function')return result();return {ok:result.ok!==false,json:async()=>result.body};}});
-  const form=node('#registration');form.elements=Object.fromEntries(Object.keys(form.fields).map(key=>[key,{get value(){return form.fields[key];},set value(value){form.fields[key]=value;},addEventListener(type,handler){this[type]=handler;}}]));
+  const form=node('#registration');form.elements=Object.fromEntries(Object.keys(form.fields).map(key=>[key,{checked:false,get value(){return form.fields[key];},set value(value){form.fields[key]=value;},addEventListener(type,handler){this[type]=handler;}}]));
   vm.runInContext(source,context);
   return {node,requests,context,get activeElement(){return activeElement;},submit:()=>node('#registration').submit({preventDefault(){}})};
 }
@@ -43,7 +43,7 @@ const result=(extra={})=>({status:'completed',member_status:'pending',name:'李�
   await pending.submit();assert.equal(pending.requests.length,2);
   const sent=pending.requests[1];assert.equal(sent.url,'/public/registration/'+reference);
   assert.equal(sent.credentials,'omit');assert.equal(sent.referrerPolicy,'no-referrer');assert.equal(sent.cache,'no-store');
-  assert.deepEqual(JSON.parse(sent.body),{name:'李明',gender:'male',level:9});
+  assert.deepEqual(JSON.parse(sent.body),{name:'李明',gender:'male',level:9,show_level:false});
   assert.equal(pending.node('#registration').hidden,true);assert.equal(pending.node('#result').hidden,false);
   assert.equal(pending.node('#result-title').textContent,'申请已提交');assert.equal(pending.activeElement,'#result-title');
   assert.match(pending.node('#next-step').textContent,/会员状态/);assert.equal(pending.node('#registration').attributes['aria-busy'],undefined);

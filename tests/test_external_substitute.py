@@ -146,9 +146,9 @@ class ExternalSubstituteTests(CoreFixture):
         from app.activity_operations import ActivityOperations
         day=ActivityOperations(self.workspace,self.clock).day(self.target['date'])
         row=next(s for v in day['venues'] for s in v['sessions'] if s['id']==self.target['id'])
-        self.assertEqual((row['formal_count'],row['substitute_count'],row['waitlist_count']),(2,1,0))
+        self.assertEqual((row['formal_count'],row['substitute_count'],row['waitlist_count']),(1,2,0))
         candidates=Tournaments(self.b,self.clock).planning_candidates(self.target['date'],1,self.target['id'])
-        self.assertEqual((len(candidates['formal']),len(candidates['substitutes'])),(2,1))
+        self.assertEqual((len(candidates['formal']),len(candidates['substitutes'])),(1,2))
         self.enroll(self.b,'1003')
         with patch('app.competitions._now',self.clock):
             event=Tournaments(self.b,self.clock).create({'kind':'daily','format':'round_robin',
@@ -211,4 +211,6 @@ class ExternalSubstituteTests(CoreFixture):
         self.assertEqual(weekend['registrations'][0]['category'],'替补')
         self.all.save_session_constraints(self.target['id'],{'substitute_capacity':0})
         self.enroll()
+        self.assertEqual(self.active()[0]['category'],'候补')
+        self.now=self.now.replace(hour=20,minute=0)
         self.assertEqual(self.active()[0]['category'],'正式')

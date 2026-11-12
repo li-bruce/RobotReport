@@ -146,7 +146,7 @@ def form_status(ctx, token, clock=now):
         changes = ProfileChanges(bound, clock)
         member = members.require_approved(allow_admin=False, bot_access=False)
         pending = changes.list(status='pending')
-        values = {key: member.get(key) for key in ('name','gender','level','group_ids')}
+        values = {key: member.get(key) for key in ('name','gender','level','group_ids','show_level')}
         if pending:
             values.update({key: value for key, value in pending[0]['changes'].items() if key != 'phone'})
         return {'status': row['status'], 'purpose': 'profile', 'profile': values, 'groups': changes.groups()}
@@ -155,12 +155,13 @@ def form_status(ctx, token, clock=now):
     hint = json.loads(row['payload'] or '{}').get('hint_name','')
     suggestion = _import_suggestion(bound, hint or (member or {}).get('name',''))
     if suggestion:
+        suggestion['profile']['show_level'] = bool((member or {}).get('show_level'))
         return {'status':row['status'], **suggestion}
     if not member:
         return {'status':row['status'], **({'profile':{'name':hint,'gender':'','level':None}} if hint else {})}
     values={key:member.get(key) for key in ('name','gender','requested_level')}
     if values.get('name')==bound.actor:values['name']=''
-    return {'status':row['status'],'profile':{'name':values.get('name',''),'gender':values.get('gender',''),'level':values.get('requested_level')}}
+    return {'status':row['status'],'profile':{'name':values.get('name',''),'gender':values.get('gender',''),'level':values.get('requested_level'),'show_level':member['show_level']}}
 
 
 def _import_suggestion(ctx, name):
@@ -206,9 +207,16 @@ def _apply_form(bound, row, data, clock):
         if saved:
             return existing, saved
         if changes:
-            request = changes.submit(data, db=business)
-            result = {'status': 'completed', 'purpose': 'profile', 'request_id': request['id'],
-                      'name': existing['name'], 'message': '资料调整已提交，等待管理员审核。'}
+            if not isinstance(data, dict):
+                raise ValueError('资料格式无效')
+            details = {key: value for key, value in data.items() if key != 'show_level'}
+            request = changes.submit(details, db=business, allow_unchanged='show_level' in data) if details else None
+            if 'show_level' in data:
+                members.set_level_visibility(data['show_level'], db=business)
+            elif not details:
+                raise ValueError('请填写需要调整的资料')
+            result = {'status': 'completed', 'purpose': 'profile', 'request_id': request['id'] if request else None,
+                      'name': existing['name'], 'message': '资料调整已提交，等待管理员审核。' if request else '名单显示设置已保存。'}
             business.execute('INSERT INTO registration_form_receipts VALUES(?,?,?,?,?,?,?)',
                 (bound.id, row['token_hash'], bound.scope_id, row['chat_id'], row['user_id'], dumps(result), stamp(clock())))
             return existing, result
@@ -230,6 +238,8 @@ def _apply_form(bound, row, data, clock):
             from .member_imports import normalize_phone
             phone = normalize_phone(data.get('phone', (existing or {}).get('phone')) or '')
             member = members.apply(name, level, phone, db=business, gender=data.get('gender'))
+            if 'show_level' in data:
+                members.set_level_visibility(data['show_level'], db=business)
         result = _result(member, bound)
         business.execute('INSERT INTO registration_form_receipts VALUES(?,?,?,?,?,?,?)',
             (bound.id, row['token_hash'], bound.scope_id, row['chat_id'], row['user_id'], dumps(result), stamp(clock())))

@@ -47,6 +47,7 @@ class Members:
         if not row:
             return None
         result = dict(row)
+        result['show_level'] = bool(result['show_level'])
         # Never let an old ID-as-name bug escape through a display API.
         if result['name'] == user_id:
             result['name'] = ''
@@ -121,6 +122,19 @@ class Members:
     def _phone(phone):
         from .member_imports import normalize_phone
         return normalize_phone(phone)
+
+    def set_level_visibility(self, visible, db=None):
+        """A personal display preference; never change the reviewed rating."""
+        if type(visible) is not bool:
+            raise ValueError('请选择是否在报名名单中显示等级')
+        with self._db(db, write=True) as connection:
+            member = self._record(connection, self.ctx.actor)
+            if not member or member['status'] in ('unregistered', 'suspended'):
+                raise PermissionError('请先提交本人的注册资料')
+            if member['show_level'] != visible:
+                connection.execute('UPDATE member_records SET show_level=?,updated_at=? WHERE chat_id=? AND user_id=?',
+                                   (int(visible), stamp(self.clock()), self.ctx.scope_id, self.ctx.actor))
+                audit(connection, self.ctx.actor, 'member.level_visibility', {'show_level': visible, 'scope_id': self.ctx.scope_id})
 
     def apply(self, name, level=None, phone=None, db=None, *, user_id=None, source='self', gender=None):
         user_id = self._subject(user_id)

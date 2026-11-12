@@ -120,7 +120,7 @@ class ProfileRequestTests(CoreFixture):
         self.assertIn('待审核', self.run_text('申请分组 提高组'))
         self.assertIn('5级', self.run_text('申请等级 五级'))
         self.assertIn('资料申请', self.run_text('我的资料申请'))
-        self.assertIn('修改资料', self.run_text('帮助 注册'))
+        self.assertIn('修改注册信息', self.run_text('帮助 注册'))
         self.platform.update(self.admin, self.member.id, {'capabilities': ['registration']})
         self.assertIn('撤回', self.run_text('取消资料申请'))
         with self.assertRaises(PermissionError):
