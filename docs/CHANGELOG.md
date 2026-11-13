@@ -1,5 +1,10 @@
 # Changes
 
+## v1.0 · 2026-11-13 · Group-local robot suggestions
+
+- Limit enrollment alternatives to eligible robots in the current conversation group. Past activity in another group no longer makes its robots appear in suggestions.
+- Preserve shared membership, eligibility checks, callback deduplication and direct use in other groups.
+
 ## v1.0 · 2026-11-13 · First appearances in match sequences
 
 - Prioritize members who have not yet played when selecting teams and ordering pending matches after roster changes. Prefer an experienced participant for an odd-roster bye.

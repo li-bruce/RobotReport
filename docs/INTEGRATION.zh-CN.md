@@ -192,3 +192,8 @@ Create a daily event with `format="match_sequence"`; `options.discipline` defaul
 `POST /api/tournaments/{event_id}/scores` accepts numerical `scores` or `outcome: "a" | "b"` for daily events. Supply `match_id` and `expected_version`. Outcome-only records keep an empty score list and a real winner. Every approved daily participant may record new results; corrections require organizer/event administrator permissions. Large-event scoring rules remain unchanged.
 
 `POST /api/tournaments/{event_id}/withdraw` accepts `names` or `participant_ids` plus `expected_version`. It removes people only from the dynamic sequence, preserving activity bookings and completed games. Members can remove themselves; organizers/event administrators can remove other people. The backend uses authenticated identity and never trusts a supplied role. New activity bookings made while the activity is in progress synchronize transactionally across all robots serving that session.
+
+
+### 当前群内的机器人推荐
+
+群内报名受限时，只从可信回调所属 `chat_id` 中启用且接收指令的机器人筛选替代项。跨群会员资格及历史身份观察不扩大推荐范围；用户条件、功能开放时间、场地场次、活动资格和会籍有效期继续校验。本群无合适机器人时保留原有引导。推荐不转发指令、不代用户报名；直接在其他群使用及网页报名沿用原有共享会员规则。

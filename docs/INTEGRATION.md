@@ -193,3 +193,8 @@ Create a daily event with `format="match_sequence"`; `options.discipline` defaul
 `POST /api/tournaments/{event_id}/scores` accepts numerical `scores` or `outcome: "a" | "b"` for daily events. Supply `match_id` and `expected_version`. Outcome-only records keep an empty score list and a real winner. Every approved daily participant may record new results; corrections require organizer/event administrator permissions. Large-event scoring rules remain unchanged.
 
 `POST /api/tournaments/{event_id}/withdraw` accepts `names` or `participant_ids` plus `expected_version`. It removes people only from the dynamic sequence, preserving activity bookings and completed games. Members can remove themselves; organizers/event administrators can remove other people. The backend uses authenticated identity and never trusts a supplied role. New activity bookings made while the activity is in progress synchronize transactionally across all robots serving that session.
+
+
+### Group-local robot suggestions
+
+When an authenticated group command cannot enroll, eligible alternatives are selected only from active command-receiving robots in the same physical `chat_id`. Shared membership and identity observations in other groups do not expand this list. User conditions, capability windows, venue/session scope, activity eligibility and membership validity still apply. If no local robot is eligible, the original guidance remains. Suggestions do not forward commands or enroll the member. Direct use of another group and authenticated web enrollment keep their existing shared-membership behavior.

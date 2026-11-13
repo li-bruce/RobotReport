@@ -1,8 +1,7 @@
-"""Suggest an eligible robot without forwarding or accepting a registration."""
+"""Suggest an eligible robot in the current group without forwarding a booking."""
 import re
 
 from .bot_capabilities import require_capability
-from .db import connect
 from .dialogue import Markup, command, render
 from .input_formats import NUMBER
 from .members import Members
@@ -14,7 +13,7 @@ from .time_rules import bind_clock
 
 
 def recommendation(ctx, content, clock, venue_id=None):
-    if isinstance(content, LiteralCommand) or ctx.source not in ('callback', 'simulator') or not ctx.platform_root:
+    if isinstance(content, LiteralCommand) or ctx.source not in ('callback', 'simulator') or not ctx.platform_root or not ctx.chat_id:
         return None
     message = normalize_message(content, ctx.bot_name)
     text, selection = parse_selection(message.text, venue_id or ctx.default_venue_id, today=clock().date())
@@ -34,12 +33,13 @@ def recommendation(ctx, content, clock, venue_id=None):
     automatic = not explicit_venue and not selection['at'] and not selection['number']
     from .security import Platform
     platform = Platform(ctx.platform_root)
-    with connect(ctx.db_path) as db:
-        observed = {row['chat_id'] for row in db.execute('SELECT chat_id FROM identity_observations WHERE scope_id=? AND user_id=?', (ctx.scope_id, ctx.actor))}
-    channels = sorted(platform.list_channels(active_only=True), key=lambda c: (c['chat_id'] != ctx.chat_id, c['bot_name'], c['id']))
+    # Shared membership and past callbacks are not a reason to advertise robots
+    # in another group. Filter before evaluating any candidate's business access.
+    channels = sorted((c for c in platform.list_channels(active_only=True) if c['chat_id'] == ctx.chat_id),
+                      key=lambda c: (c['bot_name'], c['id']))
     choices, seen = [], set()
     for channel in channels:
-        if channel['bot_id'] == ctx.id or channel['bot_id'] in seen or channel['chat_id'] != ctx.chat_id and channel['chat_id'] not in observed:
+        if channel['bot_id'] == ctx.id or channel['bot_id'] in seen:
             continue
         try:
             candidate = bind_clock(platform.context_for_channel(channel['id'], ctx.actor, False, 'callback'), clock)
