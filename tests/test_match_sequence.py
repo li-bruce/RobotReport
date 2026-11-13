@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.commands import Commands
 from app.db import connect
 from app.formats.match_sequence import build, contest_key, team_key
+from app.formats.common import match, sides
 from app.main import create_app
 from app.score_parser import parse_score
 from app.service import Service
@@ -68,6 +69,78 @@ class SequenceAlgorithmTests(unittest.TestCase):
             self.assertEqual(parsed['outcome'], result)
             self.assertEqual(parsed['scores'], [])
         self.assertIsNone(parse_score('报名胜'))
+
+    def completed_games(self, people, size=2):
+        return [{**match(*sides(people[i:i+size*2], size)), 'status': 'completed'}
+                for i in range(0, len(people), size*2)]
+
+    def assert_unplayed_first(self, plan, history, people):
+        played = Counter(pid for game in history for side in ('side_a', 'side_b')
+                         for pid in game[side]['members'])
+        waiting = {p['id'] for p in people if not played[p['id']]}
+        for game in plan['matches']:
+            members = set(game['side_a']['members']+game['side_b']['members'])
+            if waiting:
+                self.assertTrue(waiting & members, (waiting, members))
+            waiting -= members
+        self.assertFalse(waiting, 'A never-played member was left resting')
+
+    def test_newcomer_never_rests_instead_of_someone_who_has_played(self):
+        history = self.completed_games(self.people(8))
+        for seed in range(24):
+            with self.subTest(seed=seed):
+                plan = build(self.people(9), {}, seed, history)
+                self.assertNotIn('8', plan['sequence']['resting'])
+                first = plan['matches'][0]
+                self.assertIn('8', first['side_a']['members']+first['side_b']['members'])
+                self.assert_unplayed_first(plan, history, self.people(9))
+
+    def test_first_game_packs_unplayed_members_before_pairing_preferences(self):
+        people = self.people(9)
+        history = self.completed_games(people[:4])
+        for seed in range(12):
+            with self.subTest(seed=seed):
+                plan = build(people, {}, seed, history)
+                first = plan['matches'][0]
+                members = set(first['side_a']['members']+first['side_b']['members'])
+                if seed == 0:
+                    self.assertEqual(len(members & set('45678')), 4)
+                teams = plan['sequence']['teams']
+                feasible = max(len(set(a['members']+b['members']) & set('45678'))
+                               for a, b in combinations(teams, 2))
+                self.assertEqual(len(members & set('45678')), feasible)
+                self.assert_unplayed_first(plan, history, people)
+
+    def test_singles_and_strict_mixed_serve_all_unplayed_before_old_only_games(self):
+        for discipline, category, size in (('singles', 'open', 1), ('doubles', 'mixed', 2)):
+            people = self.people(8)
+            history = self.completed_games(people[:4], size)
+            for seed in range(8):
+                with self.subTest(discipline=discipline, seed=seed):
+                    plan = build(people, {'discipline': discipline, 'doubles_category': category}, seed, history)
+                    self.assert_unplayed_first(plan, history, people)
+                    if category == 'mixed':
+                        for game in plan['matches']:
+                            for side in ('side_a', 'side_b'):
+                                self.assertEqual({people[int(pid)]['gender'] for pid in game[side]['members']}, {'male', 'female'})
+
+    def test_pending_games_are_not_first_appearances_and_history_is_not_mutated(self):
+        from copy import deepcopy
+        people = self.people(9)
+        history = self.completed_games(people[:8])
+        history.append({**match(*sides([people[i] for i in (8, 1, 2, 3)], 2)), 'status': 'ready'})
+        before = deepcopy(history)
+        plan = build(people, {}, 3, history)
+        self.assert_unplayed_first(plan, history[:-1], people)
+        self.assertEqual(history, before)
+
+    def test_singles_newcomer_precedes_low_load_veterans_even_with_high_load_opponent(self):
+        people = self.people(3)
+        history = [{**match(*sides(people[1:])), 'status': 'completed'} for _ in range(6)]
+        history += [{**match(*sides([people[0], people[1]])), 'status': 'completed'}]
+        people.append(dict(id='3', name='新成员', gender='female', level=9))
+        plan = build(people, {'discipline': 'singles'}, 2, history)
+        self.assert_unplayed_first(plan, history, people)
 
 
 class DailySequenceTests(CoreFixture):
@@ -177,6 +250,32 @@ class DailySequenceTests(CoreFixture):
             self.send('球友1002退出', '1003')
         self.send('我退出', '1003')
         self.assertEqual(self.events.get(event['id'])['participant_count'], 9)
+
+    def test_live_roster_update_serves_unplayed_members_before_coverage(self):
+        event = self.create()
+        waiting = set(event['participant_user_ids'])
+        while waiting:
+            current = self.events.get(event['id'])
+            game = next(m for m in current['matches'] if m['status'] == 'ready'
+                        and waiting & {p['user_id'] for p in current['participants']
+                                       if p['id'] in m['side_a']['members']+m['side_b']['members']})
+            self.events.score(event['id'], game['id'], 'a', game['version'])
+            waiting -= {p['user_id'] for p in current['participants']
+                        if p['id'] in game['side_a']['members']+game['side_b']['members']}
+        completed = [m for m in self.events.get(event['id'])['matches'] if m['status'] == 'completed']
+        self.now = self.now.replace(hour=18)
+        for user, bot in (('1002', 1), ('1003', 0)):
+            self.send('第一场报名', user, bot)
+        updated = self.events.get(event['id'])
+        self.assertEqual([m for m in updated['matches'] if m['status'] == 'completed'], completed)
+        ready = [m for m in updated['matches'] if m['status'] == 'ready']
+        first_ids = set(ready[0]['side_a']['members']+ready[0]['side_b']['members'])
+        self.assertTrue({'1002:0', '1003:0'} <= first_ids)
+        self.send('球友1退出')
+        updated = self.events.get(event['id'])
+        self.assertEqual([m for m in updated['matches'] if m['status'] == 'completed'], completed)
+        ready = [m for m in updated['matches'] if m['status'] == 'ready']
+        self.assertTrue({'1002:0', '1003:0'} <= set(ready[0]['side_a']['members']+ready[0]['side_b']['members']))
 
     def test_regular_daily_draw_does_not_auto_add(self):
         event = self.create('round_robin')

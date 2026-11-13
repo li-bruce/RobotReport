@@ -1,8 +1,8 @@
 """Incremental social doubles: round-robin teams, then rotate partners.
 
 Circle factorization covers all partnerships for a stable roster. Each factor
-is a complete team round robin. Gender compatibility and approved skill guide
-factor selection and match order; they never create a gender or skill value.
+is a complete team round robin. First appearances take priority over coverage,
+gender compatibility and approved skill; no gender or skill value is invented.
 Completed games are input, not mutable output. No third-party solver is needed.
 """
 from itertools import combinations
@@ -12,7 +12,7 @@ from ..gender import validate_roster
 
 META = {"id": "match_sequence", "name": "对战序列", "min_players": 2, "max_players": 40,
         "description": "单打或双打；固定搭档完成队伍循环后换搭档，支持活动中加入和退出。",
-        "rules": "默认双打，至少4人；单打至少2人。每批固定队伍彼此交手，再换搭档。优先同类双打、接近水平及均衡出场；奇数人数轮休。加入或退出只重排未完成对局，已完成对局保留。"}
+        "rules": "默认双打，至少4人；单打至少2人。优先安排尚未上场的成员，再按固定队伍循环、换搭档，兼顾同类双打、水平和出场次数；奇数人数轮休。加入或退出只重排未完成对局，已完成对局保留。"}
 
 
 def team_key(entry):
@@ -37,6 +37,46 @@ def _factors(players, seed):
     for _ in range(len(ring)-1):
         yield [(ring[i], ring[-i-1]) for i in range(len(ring)//2)]
         ring = [ring[0], ring[-1], *ring[1:-1]]
+
+
+def _order(games, played, people, discipline, first_only=False):
+    """Serve first appearances before any other soft scheduling preference."""
+    remaining, loads = list(games), dict(played)
+    ordered, last = [], set()
+    while remaining:
+        def priority(game):
+            a, b = game['side_a'], game['side_b']
+            ids = a['members']+b['members']
+            kinds = (team_kind(a, people), team_kind(b, people))
+            gender = (0, kinds[0]) if kinds[0] == kinds[1] and kinds[0] != 3 else (1, 3)
+            if discipline == 'singles':
+                gender = (0, 0)
+            return (-sum(loads[p] == 0 for p in ids), max(loads[p] for p in ids),
+                    len(last.intersection(ids)), gender,
+                    abs(a['level_total']-b['level_total']), sum(loads[p] for p in ids))
+        game = min(remaining, key=priority)
+        ids = set(game['side_a']['members']+game['side_b']['members'])
+        if first_only and not any(loads[p] == 0 for p in ids):
+            break
+        remaining.remove(game)
+        ordered.append(game)
+        last = ids
+        for pid in ids:
+            loads[pid] += 1
+    return ordered
+
+
+def _first_appearance_cost(games, played, people, discipline):
+    """Avoid resting unplayed members; pack their first games at the front."""
+    waiting = {pid for pid, count in played.items() if count == 0}
+    if not waiting:
+        return (0, ())
+    profile = []
+    for game in _order(games, played, people, discipline, first_only=True):
+        ids = set(game['side_a']['members']+game['side_b']['members'])
+        profile.append(-len(waiting & ids))
+        waiting -= ids
+    return (len(waiting), tuple(profile))
 
 
 def build(participants, options, seed, history=(), previous=None):
@@ -89,7 +129,8 @@ def build(participants, options, seed, history=(), previous=None):
                        and team_kind(m['side_a'], players) != 3 for m in remaining)
             gap = sum(abs(m['side_a']['level_total']-m['side_b']['level_total']) for m in remaining)
             rest = sum(played[p['id']] for a, b in pairs for p in (a or b,) if not a or not b)
-            candidates.append(((seen, -same/len(remaining), gap/len(remaining), -rest), teams))
+            first = _first_appearance_cost(remaining, played, players, discipline)
+            candidates.append(((first, seen, -same/len(remaining), gap/len(remaining), -rest), teams))
         if not candidates:
             # Strict mixed doubles uses a bipartite factorization instead of
             # relying on arbitrary circle order to happen to pair opposite sexes.
@@ -101,29 +142,14 @@ def build(participants, options, seed, history=(), previous=None):
                     remaining = [match(a, b) for a, b in combinations(teams, 2)
                                  if tuple(sorted((team_key(a), team_key(b)))) not in completed]
                     if remaining:
-                        candidates.append(((sum(team_key(t) in partnered for t in teams), 0, 0, 0), teams))
+                        first = _first_appearance_cost(remaining, played, players, discipline)
+                        candidates.append(((first, sum(team_key(t) in partnered for t in teams), 0, 0, 0), teams))
             if not candidates:
                 return base
         teams = min(candidates, key=lambda candidate: candidate[0])[1]
     remaining = [match(a, b, group_id='A') for a, b in combinations(teams, 2)
                  if tuple(sorted((team_key(a), team_key(b)))) not in completed]
-    ordered, last = [], set()
-    while remaining:
-        def priority(game):
-            a, b = game['side_a'], game['side_b']
-            ids = a['members']+b['members']
-            kinds = (team_kind(a, players), team_kind(b, players))
-            gender = (0, kinds[0]) if kinds[0] == kinds[1] and kinds[0] != 3 else (1, 3)
-            if discipline == 'singles':
-                gender = (0, 0)
-            return (max(played[p] for p in ids), len(last.intersection(ids)), gender,
-                    abs(a['level_total']-b['level_total']), sum(played[p] for p in ids))
-        game = min(remaining, key=priority)
-        remaining.remove(game)
-        ordered.append(game)
-        last = set(game['side_a']['members']+game['side_b']['members'])
-        for pid in last:
-            played[pid] += 1
+    ordered = _order(remaining, played, players, discipline)
     base['matches'] = number_matches(ordered)
     base['sequence'].update(teams=teams, resting=[p for p in players if all(p not in t['members'] for t in teams)])
     return base

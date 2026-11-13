@@ -186,6 +186,8 @@ Administrators with member-management permission can preview `POST /api/membersh
 
 ## Daily match sequence
 
+Sequence replanning counts appearances from completed games only. Serve eligible members with no appearances first, ahead of partner/opponent coverage and other soft preferences; preserve completed rows. Pending games do not count as appearances.
+
 Create a daily event with `format="match_sequence"`; `options.discipline` defaults to `doubles`. Set `options.excluded_participant_ids` to trusted signup identities selected by the UI. `GET /api/formats` accepts the same comma-separated filter for availability previews. The backend rechecks the roster inside the creation transaction.
 
 `POST /api/tournaments/{event_id}/scores` accepts numerical `scores` or `outcome: "a" | "b"` for daily events. Supply `match_id` and `expected_version`. Outcome-only records keep an empty score list and a real winner. Every approved daily participant may record new results; corrections require organizer/event administrator permissions. Large-event scoring rules remain unchanged.

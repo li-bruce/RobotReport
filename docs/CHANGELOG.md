@@ -1,5 +1,11 @@
 # Changes
 
+## v1.0 · 2026-11-13 · First appearances in match sequences
+
+- Prioritize members who have not yet played when selecting teams and ordering pending matches after roster changes. Prefer an experienced participant for an odd-roster bye.
+- Resume partner/opponent coverage after first appearances; retain completed games and the existing eligibility rules.
+- Update member and administrator instructions.
+
 ## v1.0 · 2026-11-12 · Unified robot creation settings
 
 - Keep name and business modules at the top of the creation form; switch notifications, venue/session scope, user conditions and opening hours in the shared settings layout.
